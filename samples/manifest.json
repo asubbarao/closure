@@ -1,0 +1,362 @@
+{
+  "note": "Ground-truth answer key. identities.json is a frozen fakeit fixture (fakeit is not seedable); regenerating it re-rolls all PII.",
+  "files": [
+    {
+      "filename": "incident_report_2024-0117.pdf",
+      "case_no": "24-000117",
+      "pii": {
+        "subject_name": "Yasmine Nienow",
+        "ssn_written": [
+          "280-96-9531"
+        ],
+        "dob": "12/23/1999",
+        "address": "5024 Island Ton, Carissaton, New Mexico 45146",
+        "subject_phone": "(668) 724-5138",
+        "witnesses": [
+          {
+            "name": "Robyn Price",
+            "canonical_name": "Robyn Price",
+            "phone": "(266) 458-3812"
+          },
+          {
+            "name": "Monserrat Auer",
+            "canonical_name": "Monserrat Auer",
+            "phone": "(752) 310-6233"
+          }
+        ]
+      },
+      "fp_bait": {
+        "street": "Nienow Street",
+        "citation": "Nienow v. Ohio, 494 U.S. 541 (1990)",
+        "surname_sharing_officer": "Det. C. Nienow #9418"
+      },
+      "fn_plants": []
+    },
+    {
+      "filename": "supplemental_report_2024-0117A.pdf",
+      "case_no": "24-000117",
+      "pii": {
+        "subject_name": "Yasmine Nienow",
+        "ssn_written": [
+          "280 96 9531"
+        ],
+        "dob": "12/23/1999",
+        "address": "5024 Island Ton, Carissaton, New Mexico 45146",
+        "subject_phone": "(668) 724-5138",
+        "witnesses": [
+          {
+            "name": "Robyn Price",
+            "canonical_name": "Robyn Price",
+            "phone": "(266) 458-3812"
+          },
+          {
+            "name": "Monserrat Auer",
+            "canonical_name": "Monserrat Auer",
+            "phone": "(752) 310-6233"
+          }
+        ]
+      },
+      "fp_bait": {
+        "street": "Nienow Street",
+        "citation": "Nienow v. Ohio, 494 U.S. 541 (1990)",
+        "surname_sharing_officer": "Det. C. Nienow #9418"
+      },
+      "fn_plants": [
+        {
+          "type": "spaced_ssn",
+          "case_no": "24-000117",
+          "written": "280 96 9531",
+          "canonical": "280-96-9531",
+          "why": "SSN written with spaces evades a dash-delimited SSN regex"
+        }
+      ]
+    },
+    {
+      "filename": "interview_transcript_2024-0117C.pdf",
+      "case_no": "24-000117",
+      "pii": {
+        "subject_name": "Yasmine Nienow",
+        "ssn_written": [
+          "280-96-9531"
+        ],
+        "dob": "12/23/1999",
+        "address": "5024 Island Ton, Carissaton, New Mexico 45146",
+        "subject_phone": "(668) 724-5138",
+        "witnesses": [
+          {
+            "name": "Robyn Prce",
+            "canonical_name": "Robyn Price",
+            "phone": "(266) 458-3812"
+          },
+          {
+            "name": "Monserrat Auer",
+            "canonical_name": "Monserrat Auer",
+            "phone": "(752) 310-6233"
+          }
+        ]
+      },
+      "fp_bait": {
+        "street": "Nienow Street",
+        "citation": "Nienow v. Ohio, 494 U.S. 541 (1990)",
+        "surname_sharing_officer": "Det. C. Nienow #9418"
+      },
+      "fn_plants": [
+        {
+          "type": "misspelled_witness",
+          "case_no": "24-000117",
+          "written": "Robyn Prce",
+          "canonical": "Robyn Price",
+          "why": "surname typo never matches the canonical name list"
+        }
+      ]
+    },
+    {
+      "filename": "case_summary_2024-0117.pdf",
+      "case_no": "24-000117",
+      "pii": {
+        "subject_name": "Yasmine Nienow",
+        "ssn_written": [
+          "280-96-9531"
+        ],
+        "dob": "12/23/1999",
+        "address": "5024 Island Ton, Carissaton, New Mexico 45146",
+        "subject_phone": "(668) 724-5138",
+        "witnesses": [
+          {
+            "name": "Robyn Price",
+            "canonical_name": "Robyn Price",
+            "phone": "(266) 458-3812"
+          },
+          {
+            "name": "Monserrat Auer",
+            "canonical_name": "Monserrat Auer",
+            "phone": "(752) 310-6233"
+          }
+        ]
+      },
+      "fp_bait": {
+        "street": "Nienow Street",
+        "citation": "Nienow v. Ohio, 494 U.S. 541 (1990)",
+        "surname_sharing_officer": "Det. C. Nienow #9418"
+      },
+      "fn_plants": []
+    },
+    {
+      "filename": "arrest_report_2024-0233.pdf",
+      "case_no": "24-000233",
+      "pii": {
+        "subject_name": "Reyes Skiles",
+        "ssn_written": [
+          "695-00-9863"
+        ],
+        "dob": "08/01/1998",
+        "address": "22237 Trail Shire, Ortizfurt, Utah 03737",
+        "subject_phone": "(067) 258-5647",
+        "witnesses": [
+          {
+            "name": "Vern Turner",
+            "canonical_name": "Vern Turner",
+            "phone": "(421) 576-4540"
+          },
+          {
+            "name": "Carrie Larson",
+            "canonical_name": "Carrie Larson",
+            "phone": "(484) 786-6645"
+          }
+        ]
+      },
+      "fp_bait": {
+        "street": "Skiles Street",
+        "citation": "Skiles v. Ohio, 494 U.S. 541 (1990)",
+        "surname_sharing_officer": null
+      },
+      "fn_plants": []
+    },
+    {
+      "filename": "witness_statement_2024-0233B.pdf",
+      "case_no": "24-000233",
+      "pii": {
+        "subject_name": "Reyes Skiles",
+        "ssn_written": [
+          "695-00-9863"
+        ],
+        "dob": "08/01/1998",
+        "address": "22237 Trail Shire, Ortizfurt, Utah 03737",
+        "subject_phone": "(067) 258-5647",
+        "witnesses": [
+          {
+            "name": "Vern Turner",
+            "canonical_name": "Vern Turner",
+            "phone": "(421) 576-4540"
+          },
+          {
+            "name": "Carrie Larson",
+            "canonical_name": "Carrie Larson",
+            "phone": "(484) 786-6645"
+          }
+        ]
+      },
+      "fp_bait": {
+        "street": "Skiles Street",
+        "citation": "Skiles v. Ohio, 494 U.S. 541 (1990)",
+        "surname_sharing_officer": null
+      },
+      "fn_plants": []
+    },
+    {
+      "filename": "incident_report_2024-0312.pdf",
+      "case_no": "24-000312",
+      "pii": {
+        "subject_name": "Rosamond Brown",
+        "ssn_written": [
+          "321-05-4497"
+        ],
+        "dob": "11/22/1982",
+        "address": "54551 Creek Town, Tremayneton, Vermont 47630",
+        "subject_phone": "(647) 608-2560",
+        "witnesses": [
+          {
+            "name": "Zakary Schroeder",
+            "canonical_name": "Zakary Schroeder",
+            "phone": "(705) 475-3231"
+          },
+          {
+            "name": "Delbert Balistreri",
+            "canonical_name": "Delbert Balistreri",
+            "phone": "(811) 486-0624"
+          }
+        ]
+      },
+      "fp_bait": {
+        "street": "Brown Street",
+        "citation": "Brown v. Ohio, 494 U.S. 541 (1990)",
+        "surname_sharing_officer": null
+      },
+      "fn_plants": []
+    },
+    {
+      "filename": "evidence_log_2024-0312.pdf",
+      "case_no": "24-000312",
+      "pii": {
+        "subject_name": "Rosamond Brown",
+        "ssn_written": [
+          "321-05-4497"
+        ],
+        "dob": "11/22/1982",
+        "address": "54551 Creek Town, Tremayneton, Vermont 47630",
+        "subject_phone": "(647) 608-2560",
+        "witnesses": [
+          {
+            "name": "Zakary Schroeder",
+            "canonical_name": "Zakary Schroeder",
+            "phone": "(705) 475-3231"
+          },
+          {
+            "name": "Delbert Balistreri",
+            "canonical_name": "Delbert Balistreri",
+            "phone": "(811) 486-0624"
+          }
+        ]
+      },
+      "fp_bait": {
+        "street": "Brown Street",
+        "citation": "Brown v. Ohio, 494 U.S. 541 (1990)",
+        "surname_sharing_officer": null
+      },
+      "fn_plants": []
+    },
+    {
+      "filename": "incident_report_2024-0405.pdf",
+      "case_no": "24-000405",
+      "pii": {
+        "subject_name": "Arvel Stiedemann",
+        "ssn_written": [
+          "507-10-4530"
+        ],
+        "dob": "07/26/1974",
+        "address": "047 Club Borough, Effertzborough, Oklahoma 84822",
+        "subject_phone": "(258) 802-6317",
+        "witnesses": [
+          {
+            "name": "Prince Effertz",
+            "canonical_name": "Prince Effertz",
+            "phone": "(316) 111-6215"
+          },
+          {
+            "name": "Josh Schinner",
+            "canonical_name": "Josh Schinner",
+            "phone": "(362) 810-0014"
+          }
+        ]
+      },
+      "fp_bait": {
+        "street": "Stiedemann Street",
+        "citation": "Stiedemann v. Ohio, 494 U.S. 541 (1990)",
+        "surname_sharing_officer": null
+      },
+      "fn_plants": []
+    },
+    {
+      "filename": "property_receipt_2024-0405.pdf",
+      "case_no": "24-000405",
+      "pii": {
+        "subject_name": "Arvel Stiedemann",
+        "ssn_written": [
+          "507-10-4530"
+        ],
+        "dob": "07/26/1974",
+        "address": "047 Club Borough, Effertzborough, Oklahoma 84822",
+        "subject_phone": "(258) 802-6317",
+        "witnesses": [
+          {
+            "name": "Prince Effertz",
+            "canonical_name": "Prince Effertz",
+            "phone": "(316) 111-6215"
+          },
+          {
+            "name": "Josh Schinner",
+            "canonical_name": "Josh Schinner",
+            "phone": "(362) 810-0014"
+          }
+        ]
+      },
+      "fp_bait": {
+        "street": "Stiedemann Street",
+        "citation": "Stiedemann v. Ohio, 494 U.S. 541 (1990)",
+        "surname_sharing_officer": null
+      },
+      "fn_plants": []
+    },
+    {
+      "filename": "consolidated_case_file_2024-0117.pdf",
+      "case_no": "24-000117",
+      "pii": {
+        "subject_name": "Yasmine Nienow",
+        "ssn_written": [
+          "280-96-9531"
+        ],
+        "dob": "12/23/1999",
+        "address": "5024 Island Ton, Carissaton, New Mexico 45146",
+        "subject_phone": "(668) 724-5138",
+        "witnesses": [
+          {
+            "name": "Robyn Price",
+            "canonical_name": "Robyn Price",
+            "phone": "(266) 458-3812"
+          },
+          {
+            "name": "Monserrat Auer",
+            "canonical_name": "Monserrat Auer",
+            "phone": "(752) 310-6233"
+          }
+        ]
+      },
+      "fp_bait": {
+        "street": "Nienow Street",
+        "citation": "Nienow v. Ohio, 494 U.S. 541 (1990)",
+        "surname_sharing_officer": "Det. C. Nienow #9418"
+      },
+      "fn_plants": []
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+.playwright-mcp/
+*.png
+!design/assets/*.png
+closure.db
+node_modules/
