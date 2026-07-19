@@ -1,5 +1,10 @@
-.playwright-mcp/
-*.png
-!design/assets/*.png
 closure.db
-node_modules/
+closure.db.wal
+exports/*_redacted.pdf
+exports/_test_*.pdf
+exports/audit.db
+exports/audit_sidecar.jsonl
+.DS_Store
+**/.DS_Store
+static/*.html
+exports/export_map.csv

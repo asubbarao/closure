@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Closure — Review · incident_report_2024-0117.pdf</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F4F5F6; --surface:#FFFFFF; --surface-2:#F9FAFB;
+  --ink:#191B1E; --sub:#5A5F66; --mut:#878C93;
+  --line:#E4E6E9; --line-strong:#C9CCD1;
+  --amber-fill:rgba(252,196,25,.32); --amber-fill-strong:rgba(252,196,25,.55);
+  --amber-edge:#D99A06; --amber-text:#8A6A00;
+  --red:#C03221; --red-soft:rgba(192,50,33,.07); --red-mid:rgba(192,50,33,.16);
+  --ok:#2F7D46; --ok-soft:rgba(47,125,70,.10);
+  --cur:#1D63ED; --cur-soft:rgba(29,99,237,.08);
+  --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --r-sm:5px; --r-md:8px; --r-lg:12px;
+  --shadow-page:0 0 0 1px var(--line),0 2px 6px rgba(25,27,30,.07),0 12px 32px rgba(25,27,30,.10);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased;font-feature-settings:"tnum"}
+
+.top{display:flex;align-items:center;gap:14px;height:52px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0}
+.brand{font-weight:700;font-size:15px;flex-shrink:0}.brand span{color:var(--amber-edge)}
+.top-div{width:1px;height:20px;background:var(--line);flex-shrink:0}
+.crumb{display:flex;align-items:baseline;gap:7px;min-width:0}
+.crumb .case{font-family:var(--mono);font-size:11.5px;color:var(--sub)}
+.crumb .sep{color:var(--mut)}
+.crumb .doc{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.pw{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--sub)}
+.meter{width:110px;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+.meter i{display:block;height:100%;width:57%;background:var(--ink)}
+.who{font-size:12.5px;color:var(--sub)}.who b{color:var(--ink);font-weight:600}
+.btn{font:inherit;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);cursor:pointer}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+
+.body-wrap{display:flex;flex:1;min-height:0}
+
+/* Rail */
+.rail{width:230px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column}
+.rail-head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px 8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+.docs-list{overflow-y:auto;flex:1}
+.doc-item{display:flex;align-items:center;gap:9px;padding:9px 14px;cursor:pointer;border-left:3px solid transparent}
+.doc-item:hover{background:var(--bg)}
+.doc-item.active{border-left-color:var(--ink);background:var(--bg)}
+.dname{flex:1;min-width:0}
+.dn{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.doc-item.active .dn{font-weight:700}
+.dm{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
+.dbadge{font-family:var(--mono);font-size:11px;font-weight:700;flex-shrink:0;min-width:26px;text-align:center;padding:2px 6px;border-radius:10px;background:var(--amber-fill-strong);color:var(--amber-text)}
+.dbadge.done{background:transparent;color:var(--ok)}
+.dbadge.flag{background:var(--red-mid);color:var(--red)}
+.rail-foot{margin-top:auto;padding:12px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--sub);line-height:1.6}
+.rail-foot b{font-family:var(--mono);font-size:11.5px;color:var(--ink)}
+
+/* Stage */
+.stage{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;overflow-y:auto;padding:22px 28px 50px;background:var(--bg)}
+.page-nav{display:flex;align-items:center;gap:10px;margin-bottom:14px;font-family:var(--mono);font-size:11.5px;color:var(--sub)}
+.pgbtn{width:26px;height:26px;border-radius:var(--r-sm);border:1px solid var(--line-strong);background:var(--surface);color:var(--sub);cursor:pointer;font-size:13px}
+
+/* PDF page rendered in pure HTML/CSS */
+.pdf-page{
+  position:relative;width:680px;min-height:880px;
+  background:#fff;border-radius:3px;box-shadow:var(--shadow-page);
+  font-family:"Courier New",Courier,monospace;font-size:10.5px;line-height:1.55;color:#111;
+  padding:52px 56px 48px;flex-shrink:0;
+}
+.lh{text-align:center;margin-bottom:18px;border-bottom:2px solid #111;padding-bottom:10px}
+.lh .dept{font-size:10px;font-weight:bold;letter-spacing:.08em;text-transform:uppercase}
+.lh .title{font-size:13px;font-weight:bold;letter-spacing:.04em;margin:3px 0}
+.lh .sub{font-size:9.5px;color:#444}
+.fields{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;margin-bottom:2px}
+.field{border:1px solid #999;padding:4px 7px;margin:-1px 0 0 -1px}
+.field.s2{grid-column:span 2}.field.s3{grid-column:span 3}
+.flabel{font-size:8px;font-weight:bold;letter-spacing:.06em;text-transform:uppercase;color:#555;display:block;margin-bottom:1px}
+.fval{font-size:10.5px}
+.sec{font-size:9px;font-weight:bold;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid #999;margin:14px 0 8px;padding-bottom:2px}
+.narr{font-size:10.5px;line-height:1.65;text-align:justify}
+.narr p{margin-bottom:8px;text-indent:2em}
+.pf{position:absolute;bottom:24px;left:56px;right:56px;display:flex;justify-content:space-between;font-size:8.5px;color:#777;border-top:1px solid #ccc;padding-top:6px}
+
+/* Redaction marks */
+.mark{position:absolute;border-radius:2px;cursor:pointer;z-index:10}
+.mark.pending{background:var(--amber-fill);outline:1.5px solid var(--amber-edge)}
+.mark.flagged{background:rgba(192,50,33,.14);outline:1.5px dashed var(--red)}
+.mark.accepted{background:var(--ink)}
+.mark.rejected{outline:1.5px dashed var(--line-strong)}
+.mark.rejected::after{content:"";position:absolute;inset:50% 0 auto;height:1.5px;background:var(--line-strong)}
+.mark.current{outline:2.5px solid var(--cur);outline-offset:2px}
+.mark-tag{position:absolute;left:0;top:-22px;white-space:nowrap;font-family:var(--mono);font-size:10px;font-weight:700;background:var(--ink);color:#fff;padding:2px 8px;border-radius:4px;z-index:20}
+.mark-tag b{color:#FFD75E}
+
+.hint-bar{margin-top:14px;display:flex;align-items:center;gap:16px;font-size:12.5px;color:var(--sub)}
+kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:4px;padding:1px 6px}
+
+/* Queue */
+.queue{width:348px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--line);display:flex;flex-direction:column}
+.q-head{padding:14px 16px 0;flex-shrink:0}
+.q-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+.q-top h2{font-size:14px;font-weight:700}
+.q-top .pc{font-family:var(--mono);font-size:11.5px;color:var(--amber-text);font-weight:700}
+.bands{display:flex;gap:5px;margin-bottom:6px}
+.band{flex:1;text-align:center;cursor:pointer;padding:7px 2px 6px;border:1px solid var(--line);border-radius:var(--r-md)}
+.band.on{border-color:var(--ink);background:var(--surface-2)}
+.band .bv{font-family:var(--mono);font-size:15px;font-weight:700;display:block;line-height:1.1}
+.band .bl{font-size:9.5px;font-weight:700;letter-spacing:.04em;color:var(--mut);margin-top:2px}
+.band.mid .bv{color:var(--amber-text)}.band.low .bv{color:var(--red)}
+.band-note{font-size:11px;color:var(--sub);margin-bottom:8px;line-height:1.4;padding:0 2px}
+.band-note b{color:var(--ink)}
+.q-list{overflow-y:auto;flex:1;padding:4px 10px 10px}
+.eg{display:flex;align-items:baseline;gap:8px;padding:11px 6px 5px;border-bottom:1px solid var(--line);margin-bottom:3px}
+.eg b{font-size:13px;font-weight:700}
+.eg .ek{font-size:10.5px;color:var(--mut)}
+.eg .bl2{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--cur);cursor:pointer;white-space:nowrap}
+.sugg{display:flex;align-items:center;gap:9px;padding:8px 6px;border-radius:var(--r-md);cursor:pointer;border:1px solid transparent}
+.sugg:hover{background:var(--bg)}
+.sugg.current{border-color:var(--cur);background:var(--cur-soft)}
+.sugg.fr{background:var(--red-soft)}
+.sw{width:7px;height:22px;border-radius:2px;flex-shrink:0}
+.sw.pending{background:var(--amber-edge)}.sw.flagged{background:transparent;border:1.5px dashed var(--red)}
+.sw.accepted{background:var(--ink)}.sw.rejected{background:var(--line-strong)}
+.st{flex:1;min-width:0}
+.val{font-family:var(--mono);font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.val s{color:var(--mut)}
+.ctx{font-size:11.5px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.ctx em{font-style:normal;background:var(--amber-fill);border-radius:2px;padding:0 1px}
+.sm{text-align:right;flex-shrink:0}
+.conf{font-family:var(--mono);font-size:11.5px;font-weight:700}
+.conf.h{color:var(--ink)}.conf.m{color:var(--amber-text)}.conf.l{color:var(--red)}
+.pgr{font-family:var(--mono);font-size:10px;color:var(--mut)}
+.keys{border-top:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:7px 14px;font-size:11.5px;color:var(--sub);flex-shrink:0}
+.keys span{display:inline-flex;gap:5px;align-items:center}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">Closure<span>.</span></div>
+  <div class="top-div"></div>
+  <div class="crumb">
+    <span class="case">CASE 24-000117</span><span class="sep">/</span><span class="doc">incident_report_2024-0117.pdf</span>
+  </div>
+  <div class="top-right">
+    <div class="pw"><span>25 of 44</span><div class="meter"><i></i></div></div>
+    <span class="who">Reviewing as <b>A. Subbarao</b></span>
+    <button class="btn">Audit log</button>
+    <button class="btn primary">Export redacted…</button>
+  </div>
+</header>
+
+<div class="body-wrap">
+
+  <nav class="rail">
+    <div class="rail-head"><span>Documents</span><span>5 in case</span></div>
+    <div class="docs-list">
+      <div class="doc-item active"><div class="dname"><div class="dn">incident_report_2024-0117</div><div class="dm">10 pp · 44 found</div></div><span class="dbadge flag">2 ⚑</span></div>
+      <div class="doc-item"><div class="dname"><div class="dn">consolidated_case_file</div><div class="dm">110 pp · 342 found</div></div><span class="dbadge">99</span></div>
+      <div class="doc-item"><div class="dname"><div class="dn">supplemental_report_A</div><div class="dm">10 pp · 38 found</div></div><span class="dbadge done">✓</span></div>
+      <div class="doc-item"><div class="dname"><div class="dn">interview_transcript_C</div><div class="dm">10 pp · 41 found</div></div><span class="dbadge done">✓</span></div>
+      <div class="doc-item"><div class="dname"><div class="dn">case_summary</div><div class="dm">10 pp · 22 found</div></div><span class="dbadge done">✓</span></div>
+    </div>
+    <div class="rail-foot">Case: <b>487</b> suggestions, <b>25</b> resolved here.<br>Entity decisions propagate to every document.</div>
+  </nav>
+
+  <main class="stage">
+    <div class="page-nav">
+      <button class="pgbtn">‹</button><span>PAGE 3 / 10</span><button class="pgbtn">›</button>
+      <span>·</span><span>6 marks on this page</span>
+    </div>
+
+    <div class="pdf-page">
+      <div class="lh">
+        <div class="dept">Carissaton Police Department</div>
+        <div class="title">INCIDENT REPORT — CASE NO. 24-000117</div>
+        <div class="sub">CONFIDENTIAL — For authorized use only. Redact before public release.</div>
+      </div>
+
+      <div class="fields">
+        <div class="field"><span class="flabel">Report Date</span><span class="fval">01/17/2024</span></div>
+        <div class="field"><span class="flabel">Report Time</span><span class="fval">14:22 hrs</span></div>
+        <div class="field"><span class="flabel">Reporting Officer</span><span class="fval">Det. C. Nienow #9418</span></div>
+        <div class="field s3"><span class="flabel">Subject — Full Legal Name</span><span class="fval">Nienow, Yasmine Danielle</span></div>
+        <div class="field"><span class="flabel">Date of Birth</span><span class="fval">12/23/1999</span></div>
+        <div class="field"><span class="flabel">Social Security No.</span><span class="fval">280-96-9531</span></div>
+        <div class="field s3"><span class="flabel">Residential Address</span><span class="fval">5024 Island Ton, Carissaton, NM 87112</span></div>
+      </div>
+
+      <div class="sec">Narrative</div>
+      <div class="narr">
+        <p>On 01/17/2024 at approximately 09:42 hrs, this officer responded to a call for service at 5024 Island Ton, Carissaton, NM. The caller identified the involved party as Yasmine Nienow, DOB 12/23/1999, who had allegedly violated the terms of a protective order. Officer made contact with the subject upon arrival and confirmed identity via state-issued identification.</p>
+        <p>The subject provided a social security number of 280-96-9531 for purposes of identity verification. Records check returned a match on the NCIC database. The subject was advised of her rights in accordance with Miranda v. Arizona. The subject invoked her right to counsel.</p>
+        <p>Witness 1, Robyn Price, was present on scene at the time of contact and provided a voluntary statement. Ms. Price can be reached by telephone at (266) 458-3812 for any follow-up questions. Her statement is attached as Exhibit A to this report.</p>
+      </div>
+
+      <!-- SSN in header "280-96-9531" — current focus -->
+      <div class="mark pending current" style="left:444px;top:188px;width:84px;height:15px">
+        <span class="mark-tag">SSN · <b>97</b></span>
+      </div>
+      <!-- DOB "12/23/1999" -->
+      <div class="mark pending" style="left:260px;top:188px;width:68px;height:15px"></div>
+      <!-- Subject name "Nienow, Yasmine Danielle" -->
+      <div class="mark pending" style="left:56px;top:165px;width:165px;height:15px"></div>
+      <!-- Address accepted -->
+      <div class="mark accepted" style="left:56px;top:211px;width:230px;height:15px"></div>
+      <!-- Yasmine Nienow in narrative para 1 -->
+      <div class="mark pending" style="left:307px;top:310px;width:90px;height:14px"></div>
+      <!-- SSN in narrative "280-96-9531" -->
+      <div class="mark pending" style="left:165px;top:360px;width:84px;height:14px"></div>
+
+      <div class="pf">
+        <span>Carissaton PD · Form IR-24 · Rev 03/2023</span>
+        <span>PAGE 3 OF 10</span>
+        <span>CASE 24-000117</span>
+      </div>
+    </div>
+
+    <div class="hint-bar">
+      <span><kbd>n</kbd> + drag — mark a missed item</span>
+      <span>·</span>
+      <span>select text + <kbd>⏎</kbd> — mark every match in case</span>
+      <span>·</span>
+      <span><kbd>j</kbd><kbd>k</kbd> — navigate</span>
+    </div>
+  </main>
+
+  <aside class="queue">
+    <div class="q-head">
+      <div class="q-top"><h2>Suggestions</h2><span class="pc">19 pending</span></div>
+      <div class="bands">
+        <div class="band on"><span class="bv">27</span><span class="bl">HIGH ≥90</span></div>
+        <div class="band mid on"><span class="bv">12</span><span class="bl">REVIEW</span></div>
+        <div class="band low on"><span class="bv">5</span><span class="bl">FLAGGED</span></div>
+      </div>
+      <div class="band-note"><b>HIGH</b> items are candidates for bulk-verify. <b>FLAGGED</b> (&lt;60) require individual judgment — context differs from expected pattern.</div>
+    </div>
+
+    <div class="q-list">
+      <div class="eg"><b>280-96-9531</b><span class="ek">SSN · 44 in case</span><span class="bl2">Accept all →</span></div>
+      <div class="sugg current">
+        <span class="sw pending"></span>
+        <div class="st"><div class="val">280-96-9531</div><div class="ctx">…SSN of <em>280-96-9531</em> for identity verification…</div></div>
+        <div class="sm"><div class="conf h">97</div><div class="pgr">p.3</div></div>
+      </div>
+
+      <div class="eg" style="margin-top:8px"><b>Yasmine Nienow</b><span class="ek">PERSON · SUBJECT · 128 in case</span><span class="bl2">Bulk →</span></div>
+      <div class="sugg">
+        <span class="sw pending"></span>
+        <div class="st"><div class="val">Yasmine Nienow</div><div class="ctx">…Full name: <em>Yasmine Nienow</em>. Date of birth…</div></div>
+        <div class="sm"><div class="conf h">95</div><div class="pgr">p.3</div></div>
+      </div>
+      <div class="sugg">
+        <span class="sw accepted"></span>
+        <div class="st"><div class="val">5024 Island Ton, Carissaton</div><div class="ctx">…verified at <em>5024 Island Ton</em>, NM…</div></div>
+        <div class="sm"><div class="conf h">93</div><div class="pgr">p.3</div></div>
+      </div>
+      <div class="sugg">
+        <span class="sw pending"></span>
+        <div class="st"><div class="val">12/23/1999</div><div class="ctx">…Date of birth: <em>12/23/1999</em>. Subject…</div></div>
+        <div class="sm"><div class="conf m">82</div><div class="pgr">p.3</div></div>
+      </div>
+      <div class="sugg">
+        <span class="sw rejected"></span>
+        <div class="st"><div class="val"><s>Nienow Street</s></div><div class="ctx">…intersection of <em>Nienow Street</em> and 9th…</div></div>
+        <div class="sm"><div class="conf m">71</div><div class="pgr">p.4</div></div>
+      </div>
+      <div class="sugg fr">
+        <span class="sw flagged"></span>
+        <div class="st"><div class="val">Nienow v. Ohio</div><div class="ctx">…applicability of <em>Nienow v. Ohio</em>, 494 U.S.…</div></div>
+        <div class="sm"><div class="conf l">58</div><div class="pgr">p.7</div></div>
+      </div>
+      <div class="sugg fr">
+        <span class="sw flagged"></span>
+        <div class="st"><div class="val">Det. C. Nienow</div><div class="ctx">…assigned to <em>Det. C. Nienow</em> #9418 — officer…</div></div>
+        <div class="sm"><div class="conf l">64</div><div class="pgr">p.1</div></div>
+      </div>
+
+      <div class="eg" style="margin-top:8px"><b>Robyn Price</b><span class="ek">PERSON · WITNESS · 31 in case</span><span class="bl2">Accept all →</span></div>
+      <div class="sugg">
+        <span class="sw pending"></span>
+        <div class="st"><div class="val">Robyn Price</div><div class="ctx">…Witness 1 — <em>Robyn Price</em>, telephone…</div></div>
+        <div class="sm"><div class="conf h">94</div><div class="pgr">p.5</div></div>
+      </div>
+      <div class="sugg">
+        <span class="sw pending"></span>
+        <div class="st"><div class="val">(266) 458-3812</div><div class="ctx">…telephone at <em>(266) 458-3812</em> for follow-up…</div></div>
+        <div class="sm"><div class="conf h">96</div><div class="pgr">p.2</div></div>
+      </div>
+    </div>
+
+    <div class="keys">
+      <span><kbd>j</kbd><kbd>k</kbd> next / prev</span>
+      <span><kbd>a</kbd> accept</span>
+      <span><kbd>r</kbd> reject</span>
+      <span><kbd>e</kbd> entity, case-wide</span>
+      <span><kbd>n</kbd> add missed</span>
+      <span><kbd>u</kbd> undo</span>
+    </div>
+  </aside>
+
+</div>
+</body>
+</html>

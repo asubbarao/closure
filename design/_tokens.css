@@ -1,0 +1,21 @@
+/* ————————————————————————————————————————————————————————————
+   CLOSURE — shared design tokens (readability-first).
+   Referenced by every mockup so the system stays consistent.
+   High-contrast neutral surface; Inter for UI, JetBrains Mono for
+   data values. Color is reserved strictly for meaning:
+     amber — pending      ink — accepted (laid redaction bar)
+     gray  — rejected     red — flagged, needs human judgment
+     blue  — current focus
+   ———————————————————————————————————————————————————————————— */
+:root{
+  --bg:#F4F5F6; --surface:#FFFFFF;
+  --ink:#191B1E; --sub:#5A5F66; --mut:#878C93;
+  --line:#E4E6E9; --line-strong:#C9CCD1;
+  --amber-fill:rgba(252,196,25,.38); --amber-edge:#D99A06; --amber-text:#8A6A00;
+  --red:#C03221; --red-soft:rgba(192,50,33,.08);
+  --ok:#2F7D46;
+  --cur:#1D63ED;
+  --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}

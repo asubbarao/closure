@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Closure — Case dashboard · 24-000117</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F4F5F6; --surface:#FFFFFF; --surface-2:#F9FAFB;
+  --ink:#191B1E; --sub:#5A5F66; --mut:#878C93;
+  --line:#E4E6E9; --line-strong:#C9CCD1;
+  --amber-fill:rgba(252,196,25,.32); --amber-fill-strong:rgba(252,196,25,.55);
+  --amber-edge:#D99A06; --amber-text:#8A6A00; --amber-bg:#FFFBEE;
+  --red:#C03221; --red-soft:rgba(192,50,33,.07); --red-mid:rgba(192,50,33,.16); --red-text:#A02A1C;
+  --ok:#2F7D46; --ok-soft:rgba(47,125,70,.10);
+  --cur:#1D63ED; --cur-soft:rgba(29,99,237,.08);
+  --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --r-sm:5px; --r-md:8px; --r-lg:12px;
+  --shadow-panel:0 1px 3px rgba(25,27,30,.08),0 4px 12px rgba(25,27,30,.06);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;font-feature-settings:"tnum";min-height:100vh}
+
+.top{display:flex;align-items:center;gap:16px;height:52px;padding:0 20px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:100}
+.brand{font-weight:700;font-size:15px;flex-shrink:0}.brand span{color:var(--amber-edge)}
+.top-div{width:1px;height:20px;background:var(--line);flex-shrink:0}
+.crumb{font-family:var(--mono);font-size:11.5px;color:var(--sub)}
+.crumb b{color:var(--ink);font-weight:600}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.who{font-size:12.5px;color:var(--sub)}.who b{color:var(--ink);font-weight:600}
+.progress-wrap{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--sub)}
+.meter{width:100px;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--ink)}
+.btn{font:inherit;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--mut)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn[disabled]{opacity:.42;cursor:not-allowed}
+.blocked-tip{font-size:11px;color:var(--red-text);font-weight:600;background:var(--red-mid);border-radius:var(--r-sm);padding:2px 8px}
+
+.wrap{max-width:1200px;margin:0 auto;padding:30px 24px 80px}
+
+.page-head{display:flex;align-items:flex-start;gap:28px;padding-bottom:22px;border-bottom:1px solid var(--line)}
+.ph-left h1{font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.2}
+.ph-left .sub{font-family:var(--mono);font-size:11.5px;color:var(--sub);margin-top:5px}
+.ph-right{margin-left:auto;display:flex;gap:24px;text-align:right;flex-shrink:0}
+.stat .v{font-family:var(--mono);font-size:24px;font-weight:600;display:block;line-height:1.1}
+.stat .v.warn{color:var(--amber-text)}.stat .v.alert{color:var(--red)}
+.stat .l{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin-top:3px}
+
+.case-prog{margin-top:18px}
+.prog-bar{height:9px;border-radius:5px;background:var(--line);display:flex;overflow:hidden}
+.seg-ink{background:var(--ink)}.seg-amb{background:var(--amber-edge)}
+.prog-leg{display:flex;gap:20px;margin-top:8px;font-size:11.5px;color:var(--sub)}
+.prog-leg .k{display:flex;align-items:center;gap:6px}
+.swatch{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.sw-ink{background:var(--ink)}.sw-amb{background:var(--amber-edge)}.sw-line{background:var(--line-strong)}
+
+.blocked-banner{margin-top:18px;display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--red-mid);border:1px solid var(--red);border-radius:var(--r-md);font-size:13px}
+.bb-icon{width:20px;height:20px;border-radius:50%;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.blocked-banner b{color:var(--red-text)}
+.blocked-banner a{color:var(--red-text);font-weight:600;cursor:pointer;margin-left:4px}
+
+.cols{display:grid;grid-template-columns:1fr 360px;gap:28px;margin-top:28px;align-items:start}
+.sec-label{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);margin-bottom:10px}
+
+.doc-table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-panel)}
+.doc-table th{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface-2);text-align:left}
+.doc-table th.r,.doc-table td.r{text-align:right}
+.doc-table td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+.doc-table tr:last-child td{border-bottom:none}
+.doc-table tbody tr{cursor:pointer}
+.doc-table tbody tr:hover td{background:var(--bg)}
+.doc-name{font-weight:600;font-size:13px}
+.doc-meta{font-family:var(--mono);font-size:10.5px;color:var(--mut);margin-top:2px}
+.doc-num{font-family:var(--mono);font-size:12.5px;font-weight:600}
+.conf-bar{width:130px;height:7px;border-radius:4px;background:var(--line);display:inline-flex;overflow:hidden}
+.cb-h{background:var(--ink)}.cb-m{background:var(--amber-edge)}.cb-l{background:var(--red)}.cb-r{background:var(--line-strong)}
+.conf-detail{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:3px;display:flex;gap:6px}
+.cd-h{color:var(--ink)}.cd-m{color:var(--amber-text)}.cd-l{color:var(--red)}
+.doc-status{font-size:11.5px;font-weight:600;white-space:nowrap}
+.st-review{color:var(--amber-text)}.st-done{color:var(--ok)}.st-done::before{content:"✓ "}
+.st-blocked{color:var(--red)}.st-blocked::before{content:"⚠ "}
+
+.audit-card{margin-top:20px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-panel)}
+.audit-head{padding:10px 14px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);background:var(--surface-2);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.audit-head a{font-weight:600;color:var(--cur);font-size:11px;letter-spacing:0;text-transform:none;cursor:pointer}
+.au{display:flex;align-items:baseline;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);font-size:12px}
+.au:last-child{border-bottom:none}
+.au-t{font-family:var(--mono);font-size:10px;color:var(--mut);width:42px;flex-shrink:0}
+.au-a{font-weight:600;font-size:11.5px;flex-shrink:0}
+.au-a.acc{color:var(--ok)}.au-a.rej{color:var(--red)}.au-a.add{color:var(--cur)}
+.au-b{color:var(--sub);flex:1;min-width:0}
+.au-b b{font-family:var(--mono);font-weight:500;color:var(--ink)}
+
+.ents-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-panel)}
+.ent{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.ent:last-of-type{border-bottom:none}.ent:hover{background:var(--bg)}
+.ent-nm{flex:1;min-width:0}
+.ent-val{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ent-val.mono{font-family:var(--mono);font-size:12px}
+.ent-type{font-size:10px;letter-spacing:.03em;color:var(--mut);margin-top:2px;font-weight:600}
+.ent-ct{font-family:var(--mono);font-size:10.5px;color:var(--sub);text-align:right;flex-shrink:0;line-height:1.3}
+.ent-ct b{color:var(--ink);font-weight:600;display:block;font-size:13px}
+.pill{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 9px;border-radius:10px;flex-shrink:0;white-space:nowrap}
+.p-pend{background:var(--amber-fill-strong);color:var(--amber-text)}
+.p-acc{background:var(--ink);color:#fff}
+.p-rej{background:transparent;color:var(--sub);border:1px solid var(--line-strong)}
+.p-flag{background:var(--red-mid);color:var(--red-text);border:1px solid var(--red)}
+.ent-foot{padding:11px 14px;font-size:12px;color:var(--sub);background:var(--surface-2);line-height:1.55;border-top:1px solid var(--line)}
+.ent-foot strong{font-weight:600;color:var(--ink)}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">Closure<span>.</span></div>
+  <div class="top-div"></div>
+  <div class="crumb">CASE <b>24-000117</b> · State v. Nienow — public records release</div>
+  <div class="top-right">
+    <div class="progress-wrap"><span>366 / 487</span><div class="meter"><i style="width:75%"></i></div></div>
+    <span class="who">Reviewing as <b>A. Subbarao</b></span>
+    <button class="btn">📋 Audit log</button>
+    <button class="btn primary" disabled title="5 flagged items unresolved in 2 documents">Export redacted case…</button>
+    <span class="blocked-tip">2 docs blocked</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="page-head">
+    <div class="ph-left">
+      <h1>State v. Nienow — public records release</h1>
+      <div class="sub">5 documents · 150 pages · imported from samples/*.pdf · AI detection completed in 1.4 s</div>
+    </div>
+    <div class="ph-right">
+      <div class="stat"><span class="v">487</span><div class="l">Suggestions</div></div>
+      <div class="stat"><span class="v warn">121</span><div class="l">Pending</div></div>
+      <div class="stat"><span class="v alert">5</span><div class="l">Flagged</div></div>
+      <div class="stat"><span class="v">11</span><div class="l">Entities</div></div>
+      <div class="stat"><span class="v">3 / 5</span><div class="l">Signed off</div></div>
+    </div>
+  </div>
+
+  <div class="case-prog">
+    <div class="prog-bar">
+      <div class="seg-ink" style="width:66%"></div>
+      <div class="seg-amb" style="width:25%"></div>
+    </div>
+    <div class="prog-leg">
+      <div class="k"><span class="swatch sw-ink"></span>320 accepted — ink laid</div>
+      <div class="k"><span class="swatch sw-amb"></span>121 pending review</div>
+      <div class="k"><span class="swatch sw-line"></span>46 rejected / cleared</div>
+    </div>
+  </div>
+
+  <div class="blocked-banner">
+    <div class="bb-icon">!</div>
+    Export blocked: <b>2 documents</b> have <b>5 flagged items</b> that require individual human judgment before export.<a>Jump to flagged items →</a>
+  </div>
+
+  <div class="cols">
+    <div>
+      <div class="sec-label">Documents in this case</div>
+      <table class="doc-table">
+        <thead><tr><th>Document</th><th class="r">Found</th><th class="r">Confidence breakdown</th><th class="r">Status</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><div class="doc-name">consolidated_case_file</div><div class="doc-meta">110 pp · 5.2 MB</div></td>
+            <td class="r"><span class="doc-num">342</span></td>
+            <td class="r">
+              <div class="conf-bar"><div class="cb-h" style="width:52%"></div><div class="cb-m" style="width:28%"></div><div class="cb-l" style="width:8%"></div><div class="cb-r" style="width:12%"></div></div>
+              <div class="conf-detail"><span class="cd-h">178↑90</span><span class="cd-m">96 mid</span><span class="cd-l">27↓60</span></div>
+            </td>
+            <td class="r"><span class="doc-status st-blocked">3 flagged unresolved</span></td>
+          </tr>
+          <tr>
+            <td><div class="doc-name">incident_report_2024-0117</div><div class="doc-meta">10 pp · 512 KB</div></td>
+            <td class="r"><span class="doc-num">44</span></td>
+            <td class="r">
+              <div class="conf-bar"><div class="cb-h" style="width:57%"></div><div class="cb-m" style="width:29%"></div><div class="cb-l" style="width:5%"></div><div class="cb-r" style="width:9%"></div></div>
+              <div class="conf-detail"><span class="cd-h">25↑90</span><span class="cd-m">13 mid</span><span class="cd-l">2↓60</span></div>
+            </td>
+            <td class="r"><span class="doc-status st-blocked">2 flagged unresolved</span></td>
+          </tr>
+          <tr>
+            <td><div class="doc-name">supplemental_report_A</div><div class="doc-meta">10 pp · spaced-SSN variant</div></td>
+            <td class="r"><span class="doc-num">38</span></td>
+            <td class="r">
+              <div class="conf-bar"><div class="cb-h" style="width:73%"></div><div class="cb-m" style="width:14%"></div><div class="cb-r" style="width:13%"></div></div>
+              <div class="conf-detail"><span class="cd-h">28↑90</span><span class="cd-m">5 mid</span><span style="color:var(--mut)">—</span></div>
+            </td>
+            <td class="r"><span class="doc-status st-done">Signed off</span></td>
+          </tr>
+          <tr>
+            <td><div class="doc-name">interview_transcript_C</div><div class="doc-meta">10 pp</div></td>
+            <td class="r"><span class="doc-num">41</span></td>
+            <td class="r">
+              <div class="conf-bar"><div class="cb-h" style="width:70%"></div><div class="cb-m" style="width:18%"></div><div class="cb-r" style="width:12%"></div></div>
+              <div class="conf-detail"><span class="cd-h">29↑90</span><span class="cd-m">7 mid</span><span style="color:var(--mut)">—</span></div>
+            </td>
+            <td class="r"><span class="doc-status st-done">Signed off</span></td>
+          </tr>
+          <tr>
+            <td><div class="doc-name">case_summary</div><div class="doc-meta">10 pp</div></td>
+            <td class="r"><span class="doc-num">22</span></td>
+            <td class="r">
+              <div class="conf-bar"><div class="cb-h" style="width:81%"></div><div class="cb-m" style="width:10%"></div><div class="cb-r" style="width:9%"></div></div>
+              <div class="conf-detail"><span class="cd-h">18↑90</span><span class="cd-m">2 mid</span><span style="color:var(--mut)">—</span></div>
+            </td>
+            <td class="r"><span class="doc-status st-done">Signed off</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="audit-card">
+        <div class="audit-head"><span>Recent audit activity</span><a>View full log →</a></div>
+        <div class="au"><span class="au-t">14:34</span><span class="au-a add">added</span><span class="au-b">missed redaction on <b>incident_report_2024-0117 p.6</b> — <b>"(266) 458-3812"</b> (phone, reviewer-added)</span></div>
+        <div class="au"><span class="au-t">14:32</span><span class="au-a acc">accepted</span><span class="au-b">entity <b>Robyn Price</b> case-wide — 31 instances across 5 documents · A. Subbarao</span></div>
+        <div class="au"><span class="au-t">14:31</span><span class="au-a rej">rejected</span><span class="au-b"><b>"Nienow Street"</b> ×9 — matched PERSON, is a street name · reason: not PII · A. Subbarao</span></div>
+        <div class="au"><span class="au-t">14:28</span><span class="au-a add">added</span><span class="au-b">missed redaction <b>supplemental_report_A p.4</b> — <b>"280 96 9531"</b> (spaced SSN variant)</span></div>
+        <div class="au"><span class="au-t">14:20</span><span class="au-a" style="color:var(--sub)">detected</span><span class="au-b"><b>487</b> suggestions · 11 entities · 5 documents · model v2.4</span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="sec-label">Entities — decide once, propagates case-wide</div>
+      <div class="ents-card">
+        <div class="ent"><div class="ent-nm"><div class="ent-val">Yasmine Nienow</div><div class="ent-type">PERSON · SUBJECT</div></div><div class="ent-ct"><b>128</b>in 5 docs</div><span class="pill p-pend">9 PENDING</span></div>
+        <div class="ent"><div class="ent-nm"><div class="ent-val mono">280-96-9531</div><div class="ent-type">SSN</div></div><div class="ent-ct"><b>44</b>in 5 docs</div><span class="pill p-pend">3 PENDING</span></div>
+        <div class="ent"><div class="ent-nm"><div class="ent-val">Robyn Price</div><div class="ent-type">PERSON · WITNESS</div></div><div class="ent-ct"><b>31</b>in 5 docs</div><span class="pill p-acc">ACCEPTED</span></div>
+        <div class="ent"><div class="ent-nm"><div class="ent-val">5024 Island Ton, Carissaton</div><div class="ent-type">ADDRESS · SUBJECT</div></div><div class="ent-ct"><b>27</b>in 4 docs</div><span class="pill p-acc">ACCEPTED</span></div>
+        <div class="ent"><div class="ent-nm"><div class="ent-val mono">12/23/1999</div><div class="ent-type">DATE OF BIRTH</div></div><div class="ent-ct"><b>22</b>in 5 docs</div><span class="pill p-pend">4 PENDING</span></div>
+        <div class="ent"><div class="ent-nm"><div class="ent-val mono">(266) 458-3812</div><div class="ent-type">PHONE · WITNESS</div></div><div class="ent-ct"><b>16</b>in 5 docs</div><span class="pill p-pend">16 PENDING</span></div>
+        <div class="ent" style="background:var(--red-soft)"><div class="ent-nm"><div class="ent-val">Nienow v. Ohio</div><div class="ent-type">CITATION · NOT PII</div></div><div class="ent-ct"><b>18</b>in 4 docs</div><span class="pill p-flag">HUMAN REQUIRED</span></div>
+        <div class="ent" style="background:var(--red-soft)"><div class="ent-nm"><div class="ent-val">Det. C. Nienow</div><div class="ent-type">OFFICER · NOT SUBJECT PII</div></div><div class="ent-ct"><b>14</b>in 3 docs</div><span class="pill p-flag">HUMAN REQUIRED</span></div>
+        <div class="ent"><div class="ent-nm"><div class="ent-val">Nienow Street</div><div class="ent-type">STREET NAME · NOT PII</div></div><div class="ent-ct"><b>9</b>in 3 docs</div><span class="pill p-rej">REJECTED</span></div>
+        <div class="ent-foot"><strong>Decide once, apply everywhere.</strong> A decision here proposes itself across every document — never silently. Each instance stays visible and individually reversible. Items marked HUMAN REQUIRED cannot be bulk-accepted.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

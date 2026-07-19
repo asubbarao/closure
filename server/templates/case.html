@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Closure — Case dashboard · {{ case.case_no }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F4F5F6; --surface:#FFFFFF; --surface-2:#F9FAFB;
+  --ink:#191B1E; --sub:#5A5F66; --mut:#878C93;
+  --line:#E4E6E9; --line-strong:#C9CCD1;
+  --amber-fill:rgba(252,196,25,.32); --amber-fill-strong:rgba(252,196,25,.55);
+  --amber-edge:#D99A06; --amber-text:#8A6A00; --amber-bg:#FFFBEE;
+  --red:#C03221; --red-soft:rgba(192,50,33,.07); --red-mid:rgba(192,50,33,.16); --red-text:#A02A1C;
+  --ok:#2F7D46; --ok-soft:rgba(47,125,70,.10);
+  --cur:#1D63ED; --cur-soft:rgba(29,99,237,.08);
+  --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --r-sm:5px; --r-md:8px; --r-lg:12px;
+  --shadow-panel:0 1px 3px rgba(25,27,30,.08),0 4px 12px rgba(25,27,30,.06);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;font-feature-settings:"tnum";min-height:100vh}
+
+.top{display:flex;align-items:center;gap:16px;height:52px;padding:0 20px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:100}
+.brand{font-weight:700;font-size:15px;flex-shrink:0}.brand span{color:var(--amber-edge)}
+.top-div{width:1px;height:20px;background:var(--line);flex-shrink:0}
+.crumb{font-family:var(--mono);font-size:11.5px;color:var(--sub)}
+.crumb b{color:var(--ink);font-weight:600}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.who{font-size:12.5px;color:var(--sub)}.who b{color:var(--ink);font-weight:600}
+.progress-wrap{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--sub)}
+.meter{width:100px;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--ink)}
+.btn{font:inherit;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--mut)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn[disabled]{opacity:.42;cursor:not-allowed}
+.blocked-tip{font-size:11px;color:var(--red-text);font-weight:600;background:var(--red-mid);border-radius:var(--r-sm);padding:2px 8px}
+
+.wrap{max-width:1200px;margin:0 auto;padding:30px 24px 80px}
+
+.page-head{display:flex;align-items:flex-start;gap:28px;padding-bottom:22px;border-bottom:1px solid var(--line)}
+.ph-left h1{font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.2}
+.ph-left .sub{font-family:var(--mono);font-size:11.5px;color:var(--sub);margin-top:5px}
+.ph-right{margin-left:auto;display:flex;gap:24px;text-align:right;flex-shrink:0}
+.stat .v{font-family:var(--mono);font-size:24px;font-weight:600;display:block;line-height:1.1}
+.stat .v.warn{color:var(--amber-text)}.stat .v.alert{color:var(--red)}
+.stat .l{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin-top:3px}
+
+.case-prog{margin-top:18px}
+.prog-bar{height:9px;border-radius:5px;background:var(--line);display:flex;overflow:hidden}
+.seg-ink{background:var(--ink)}.seg-amb{background:var(--amber-edge)}
+.prog-leg{display:flex;gap:20px;margin-top:8px;font-size:11.5px;color:var(--sub)}
+.prog-leg .k{display:flex;align-items:center;gap:6px}
+.swatch{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.sw-ink{background:var(--ink)}.sw-amb{background:var(--amber-edge)}.sw-line{background:var(--line-strong)}
+
+.blocked-banner{margin-top:18px;display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--red-mid);border:1px solid var(--red);border-radius:var(--r-md);font-size:13px}
+.bb-icon{width:20px;height:20px;border-radius:50%;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.blocked-banner b{color:var(--red-text)}
+.blocked-banner a{color:var(--red-text);font-weight:600;cursor:pointer;margin-left:4px}
+
+.cols{display:grid;grid-template-columns:1fr 360px;gap:28px;margin-top:28px;align-items:start}
+.sec-label{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);margin-bottom:10px}
+
+.doc-table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-panel)}
+.doc-table th{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface-2);text-align:left}
+.doc-table th.r,.doc-table td.r{text-align:right}
+.doc-table td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+.doc-table tr:last-child td{border-bottom:none}
+.doc-table tbody tr{cursor:pointer}
+.doc-table tbody tr:hover td{background:var(--bg)}
+.doc-name{font-weight:600;font-size:13px}
+.doc-meta{font-family:var(--mono);font-size:10.5px;color:var(--mut);margin-top:2px}
+.doc-num{font-family:var(--mono);font-size:12.5px;font-weight:600}
+.conf-bar{width:130px;height:7px;border-radius:4px;background:var(--line);display:inline-flex;overflow:hidden}
+.cb-h{background:var(--ink)}.cb-m{background:var(--amber-edge)}.cb-l{background:var(--red)}.cb-r{background:var(--line-strong)}
+.conf-detail{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:3px;display:flex;gap:6px}
+.cd-h{color:var(--ink)}.cd-m{color:var(--amber-text)}.cd-l{color:var(--red)}
+.doc-status{font-size:11.5px;font-weight:600;white-space:nowrap}
+.st-review{color:var(--amber-text)}.st-done{color:var(--ok)}.st-done::before{content:"✓ "}
+.st-blocked{color:var(--red)}.st-blocked::before{content:"⚠ "}
+
+.audit-card{margin-top:20px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-panel)}
+.audit-head{padding:10px 14px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);background:var(--surface-2);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.audit-head a{font-weight:600;color:var(--cur);font-size:11px;letter-spacing:0;text-transform:none;cursor:pointer}
+.au{display:flex;align-items:baseline;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);font-size:12px}
+.au:last-child{border-bottom:none}
+.au-t{font-family:var(--mono);font-size:10px;color:var(--mut);width:42px;flex-shrink:0}
+.au-a{font-weight:600;font-size:11.5px;flex-shrink:0}
+.au-a.acc{color:var(--ok)}.au-a.rej{color:var(--red)}.au-a.add{color:var(--cur)}
+.au-b{color:var(--sub);flex:1;min-width:0}
+.au-b b{font-family:var(--mono);font-weight:500;color:var(--ink)}
+
+.ents-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-panel)}
+.ent{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.ent:last-of-type{border-bottom:none}.ent:hover{background:var(--bg)}
+.ent-nm{flex:1;min-width:0}
+.ent-val{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ent-val.mono{font-family:var(--mono);font-size:12px}
+.ent-type{font-size:10px;letter-spacing:.03em;color:var(--mut);margin-top:2px;font-weight:600}
+.ent-ct{font-family:var(--mono);font-size:10.5px;color:var(--sub);text-align:right;flex-shrink:0;line-height:1.3}
+.ent-ct b{color:var(--ink);font-weight:600;display:block;font-size:13px}
+.pill{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 9px;border-radius:10px;flex-shrink:0;white-space:nowrap}
+.p-pend{background:var(--amber-fill-strong);color:var(--amber-text)}
+.p-acc{background:var(--ink);color:#fff}
+.p-rej{background:transparent;color:var(--sub);border:1px solid var(--line-strong)}
+.p-flag{background:var(--red-mid);color:var(--red-text);border:1px solid var(--red)}
+.ent-foot{padding:11px 14px;font-size:12px;color:var(--sub);background:var(--surface-2);line-height:1.55;border-top:1px solid var(--line)}
+.ent-foot strong{font-weight:600;color:var(--ink)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><a href="/" style="color:inherit;text-decoration:none">Closure<span>.</span></a></div>
+  <div class="top-div"></div>
+  <div class="crumb">CASE <b>{{ case.case_no }}</b> · {{ case.title }}</div>
+  <div class="top-right">
+    <div class="progress-wrap"><span>{{ stats.resolved }} / {{ stats.suggestion_count }}</span><div class="meter"><i style="width:{{ stats.progress_pct }}%"></i></div></div>
+    <span class="who">Reviewing as <b>A. Subbarao</b></span>
+    <a class="btn" href="/cases/{{ case.id }}/audit">Audit log</a>
+    <form method="POST" action="/cases/{{ case.id }}/export" style="display:inline">
+      <button class="btn primary" type="submit">Export redacted case…</button>
+    </form>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="page-head">
+    <div class="ph-left">
+      <h1>{{ case.title }}</h1>
+      <div class="sub">{{ stats.doc_count }} documents · {{ stats.page_count }} pages · {{ stats.word_count }} words · imported from samples/*.pdf · suggestions: {{ stats.suggestion_count }} (seed later)</div>
+    </div>
+    <div class="ph-right">
+      <div class="stat"><span class="v">{{ stats.suggestion_count }}</span><div class="l">Suggestions</div></div>
+      <div class="stat"><span class="v warn">{{ stats.pending_count }}</span><div class="l">Pending</div></div>
+      <div class="stat"><span class="v alert">{{ stats.flagged_count }}</span><div class="l">Flagged</div></div>
+      <div class="stat"><span class="v">{{ stats.entity_count }}</span><div class="l">Entities</div></div>
+      <div class="stat"><span class="v">{{ stats.word_count }}</span><div class="l">Words</div></div>
+    </div>
+  </div>
+
+  <div class="case-prog">
+    <div class="prog-bar">
+      <div class="seg-ink" style="width:{{ stats.accepted_pct }}%"></div>
+      <div class="seg-amb" style="width:{{ stats.pending_pct }}%"></div>
+    </div>
+    <div class="prog-leg">
+      <div class="k"><span class="swatch sw-ink"></span>{{ stats.accepted_count }} accepted — ink laid</div>
+      <div class="k"><span class="swatch sw-amb"></span>{{ stats.pending_count }} pending review</div>
+      <div class="k"><span class="swatch sw-line"></span>{{ stats.rejected_count }} rejected / cleared</div>
+    </div>
+  </div>
+
+  {% if stats.suggestion_count == 0 %}
+  <div class="blocked-banner" style="background:var(--amber-bg);border-color:var(--amber-edge)">
+    <div class="bb-icon" style="background:var(--amber-edge)">i</div>
+    Suggestions not seeded yet. Document pages, word boxes, entities, and audit are live from real PDF extraction. Seeding pass will populate the review queue.
+  </div>
+  {% endif %}
+
+  <div class="cols">
+    <div>
+      <div class="sec-label">Documents in this case</div>
+      <table class="doc-table">
+        <thead><tr><th>Document</th><th class="r">Pages</th><th class="r">Words</th><th class="r">Suggestions</th><th class="r">Status</th></tr></thead>
+        <tbody>
+        {% for d in documents %}
+          <tr onclick="location.href='/documents/{{ d.id }}'">
+            <td><div class="doc-name">{{ d.filename }}</div><div class="doc-meta">{{ d.page_count }} pp · {{ d.width_pt }}×{{ d.height_pt }} pt</div></td>
+            <td class="r"><span class="doc-num">{{ d.page_count }}</span></td>
+            <td class="r"><span class="doc-num">{{ d.word_count }}</span></td>
+            <td class="r"><span class="doc-num">{{ d.suggestion_count }}</span></td>
+            <td class="r"><span class="doc-status {% if d.suggestion_count == 0 %}st-review{% elif d.flagged_count > 0 %}st-blocked{% elif d.pending_count == 0 %}st-done{% else %}st-review{% endif %}>{% if d.suggestion_count == 0 %}awaiting seed{% elif d.flagged_count > 0 %}{{ d.flagged_count }} flagged{% elif d.pending_count == 0 %}Signed off{% else %}{{ d.pending_count }} pending{% endif %}</span></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="audit-card">
+        <div class="audit-head"><span>Recent audit activity</span><a href="/cases/{{ case.id }}/audit">View full log →</a></div>
+        {% if audit | length == 0 %}
+        <div class="au"><span class="au-t">—</span><span class="au-a" style="color:var(--sub)">empty</span><span class="au-b">No decisions yet.</span></div>
+        {% endif %}
+        {% for a in audit %}
+        <div class="au"><span class="au-t">{{ a.ts_short }}</span><span class="au-a {% if a.action == 'accepted' %}acc{% elif a.action == 'rejected' %}rej{% elif a.action == 'added' %}add{% endif %}">{{ a.action }}</span><span class="au-b">{{ a.target }} · <b>{{ a.actor }}</b></span></div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div>
+      <div class="sec-label">Entities — PII catalog from identities.json</div>
+      <div class="ents-card">
+        {% for e in entities %}
+        <div class="ent">
+          <div class="ent-nm">
+            <div class="ent-val {% if e.mono %}mono{% endif %}">{{ e.canonical_text }}</div>
+            <div class="ent-type">{{ e.kind }}</div>
+          </div>
+          <div class="ent-ct"><b>{{ e.hit_count }}</b>hits · {{ e.doc_count }} docs</div>
+          <span class="pill p-pend">CATALOG</span>
+        </div>
+        {% endfor %}
+        <div class="ent-foot"><strong>Decide once, apply everywhere.</strong> Entity rows are the answer-key catalog. Hit counts come from real word n-grams in the PDFs — not fabricated suggestions. Once suggestions are seeded, decisions here propagate case-wide.</div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
