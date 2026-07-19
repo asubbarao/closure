@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Closure — Bulk review · Yasmine Nienow</title>
+<title>Closure — Bulk review</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -51,11 +51,11 @@ body{
 .sh-title-row{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
 .sh-title-row h1{font-size:23px;font-weight:700;letter-spacing:-.02em}
 .sh-title-row .ek{font-size:11.5px;letter-spacing:.02em;color:var(--mut)}
-.sh-title-row .close{margin-left:auto;color:var(--mut);font-size:22px;cursor:pointer;line-height:1;font-weight:300}
+.sh-title-row .close{margin-left:auto;color:var(--mut);font-size:22px;cursor:pointer;line-height:1;font-weight:300;border:none;background:transparent;padding:0 4px}
 .sh-title-row .close:hover{color:var(--ink)}
 
 /* Tally row */
-.tally{display:flex;gap:0;margin:10px 0 16px;font-size:13px}
+.tally{display:flex;flex-wrap:wrap;gap:0;margin:10px 0 16px;font-size:13px}
 .tally-item{padding:0 16px 0 0;margin-right:16px;border-right:1px solid var(--line);color:var(--sub)}
 .tally-item:last-child{border-right:none;margin-right:0}
 .tally-item b{font-family:var(--mono);color:var(--ink);font-weight:700}
@@ -65,13 +65,13 @@ body{
 /* ── Confidence band tabs ── */
 .bands-row{display:flex;gap:6px;padding:0 28px;margin-bottom:0;flex-shrink:0;border-bottom:1px solid var(--line)}
 .band-tab{font:inherit;font-size:12.5px;font-weight:600;padding:10px 16px;border:none;background:transparent;color:var(--sub);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color 80ms}
-.band-tab .bcount{font-family:var(--mono);font-size:11px;font-weight:700;margin-left:6px;padding:2px 6px;border-radius:8px}
+.band-tab .bcount{font-family:var(--mono);font-size:11px;font-weight:700;margin-left:6px;padding:2px 6px;border-radius:8px;background:var(--surface-2)}
 .band-tab.active{color:var(--ink);border-bottom-color:var(--ink)}
 .band-tab.mid .bcount{background:var(--amber-bg);color:var(--amber-text)}
 .band-tab.low .bcount{background:var(--red-mid);color:var(--red-text)}
 .band-tab.active .bcount{background:var(--surface-2)}
 
-/* ── Action bar (sticky at top of table) ── */
+/* ── Action bar ── */
 .action-bar{
   display:flex;align-items:center;gap:10px;
   padding:12px 28px;
@@ -94,9 +94,9 @@ body{
 }
 .btn{font:inherit;font-weight:700;font-size:13px;padding:9px 18px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);cursor:pointer;color:var(--ink);white-space:nowrap;transition:background 80ms}
 .btn.accept-btn{background:var(--ink);border-color:var(--ink);color:#fff}
-.btn.accept-btn:hover{background:#000}
+.btn.accept-btn:hover:not([disabled]){background:#000}
 .btn.reject-btn{color:var(--red);border-color:var(--red)}
-.btn.reject-btn:hover{background:var(--red-soft)}
+.btn.reject-btn:hover:not([disabled]){background:var(--red-soft)}
 .btn[disabled]{opacity:.4;cursor:not-allowed}
 
 /* Flagged exclusion callout */
@@ -109,11 +109,16 @@ body{
   color:var(--amber-text);
   flex-shrink:0;
 }
+.flag-callout[hidden]{display:none}
 .flag-callout .fc-icon{width:18px;height:18px;border-radius:50%;background:var(--amber-edge);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
 .flag-callout b{font-family:var(--mono);font-weight:600;color:var(--amber-text)}
 
 /* ── Scrollable body ── */
-.sheet-body{overflow-y:auto;flex:1}
+.sheet-body{overflow-y:auto;flex:1;min-height:120px}
+.sheet-body .empty,.sheet-body .loading,.sheet-body .error{
+  padding:40px 28px;text-align:center;color:var(--sub);font-size:13.5px;
+}
+.sheet-body .error{color:var(--red-text)}
 
 /* Document groups */
 .doc-group{margin-bottom:0;border-bottom:1px solid var(--line)}
@@ -128,7 +133,7 @@ body{
 }
 .dg-filename{font-weight:700;font-size:13.5px}
 .dg-meta{font-family:var(--mono);font-size:11px;color:var(--mut)}
-.dg-select-all{margin-left:auto;font-size:12px;font-weight:600;color:var(--cur);cursor:pointer;white-space:nowrap}
+.dg-select-all{margin-left:auto;font-size:12px;font-weight:600;color:var(--cur);cursor:pointer;white-space:nowrap;border:none;background:transparent;font:inherit;font-size:12px;font-weight:600;color:var(--cur)}
 .dg-select-all:hover{text-decoration:underline}
 
 /* Instance rows */
@@ -143,13 +148,14 @@ body{
 .inst:hover{background:var(--bg)}
 .inst.flagged-exc{background:var(--red-soft)}
 .inst.flagged-exc:hover{background:var(--red-mid)}
+.inst.decided{opacity:.55}
 .inst input[type=checkbox]{accent-color:var(--ink);width:15px;height:15px;flex-shrink:0;cursor:pointer}
+.inst input[type=checkbox]:disabled{cursor:not-allowed}
 .inst-ctx{flex:1;min-width:0;font-size:13px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .inst-ctx em{font-style:normal;background:var(--amber-fill);border-radius:2px;padding:0 2px;font-family:var(--mono);font-size:12px;color:var(--ink);font-weight:500}
 .inst-pg{font-family:var(--mono);font-size:10.5px;color:var(--mut);flex-shrink:0;min-width:28px;text-align:right}
 .inst-conf{font-family:var(--mono);font-size:12px;font-weight:700;flex-shrink:0;width:26px;text-align:right}
 .inst-conf.h{color:var(--ink)}.inst-conf.m{color:var(--amber-text)}.inst-conf.l{color:var(--red)}
-/* Exclusion label */
 .exc-why{
   font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
   color:var(--red-text);
@@ -159,13 +165,15 @@ body{
   flex-shrink:0;
   white-space:nowrap;
 }
-/* Show-more row */
+.exc-why.muted{color:var(--sub);border-color:var(--line-strong)}
 .show-more{
   padding:9px 28px;
   font-size:12.5px;color:var(--cur);font-weight:600;
   cursor:pointer;
   text-align:center;
   border-bottom:1px solid var(--line);
+  border-left:none;border-right:none;border-top:none;
+  background:transparent;width:100%;font:inherit;font-size:12.5px;font-weight:600;color:var(--cur);
 }
 .show-more:hover{background:var(--cur-soft)}
 
@@ -179,232 +187,72 @@ body{
   line-height:1.6;
 }
 .sheet-foot b{font-family:var(--mono);color:var(--ink);font-weight:600}
+
+/* Result toast / status */
+.bulk-status{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  max-width:720px;padding:10px 16px;border-radius:10px;
+  background:var(--ink);color:#fff;font-size:12.5px;font-family:var(--mono);
+  box-shadow:var(--shadow-float);z-index:100;display:none;
+  white-space:pre-wrap;word-break:break-word;
+}
+.bulk-status.show{display:block}
+.bulk-status.err{background:var(--red)}
 </style>
 </head>
 <body>
 
-<div class="sheet">
+<div class="sheet" id="sheet" role="dialog" aria-labelledby="entity-title">
 
-  <!-- Header -->
   <div class="sh-head">
     <div class="sh-eyebrow">Bulk review — entity</div>
     <div class="sh-title-row">
-      <h1>Yasmine Nienow</h1>
-      <span class="ek">PERSON · SUBJECT OF CASE 24-000117</span>
-      <span class="close">✕</span>
+      <h1 id="entity-title">Loading…</h1>
+      <span class="ek" id="entity-kind">—</span>
+      <button type="button" class="close" id="btn-close" aria-label="Close">✕</button>
     </div>
-    <div class="tally">
-      <div class="tally-item"><b>128</b> instances across <b>5</b> documents</div>
-      <div class="tally-item"><b>41</b> selected to accept</div>
-      <div class="tally-item excl"><b>7</b> excluded — different context</div>
-      <div class="tally-item warn"><b>5</b> flagged — individual judgment required</div>
-      <div class="tally-item"><b>75</b> already decided</div>
+    <div class="tally" id="tally" aria-live="polite">
+      <div class="tally-item"><b id="t-n">—</b> instances across <b id="t-d">—</b> documents</div>
+      <div class="tally-item"><b id="t-s">0</b> selected to accept</div>
+      <div class="tally-item excl"><b id="t-x">0</b> excluded — different context</div>
+      <div class="tally-item"><b id="t-r">0</b> already decided</div>
     </div>
   </div>
 
-  <!-- Confidence band tabs -->
-  <div class="bands-row">
-    <button class="band-tab active">All <span class="bcount">128</span></button>
-    <button class="band-tab">HIGH ≥90 <span class="bcount" style="background:var(--surface-2)">98</span></button>
-    <button class="band-tab mid">REVIEW 60–89 <span class="bcount">23</span></button>
-    <button class="band-tab low">FLAGGED &lt;60 <span class="bcount">5</span></button>
-    <button class="band-tab" style="margin-left:auto">Already decided <span class="bcount" style="background:var(--surface-2)">75</span></button>
+  <div class="bands-row" id="bands-row" role="tablist">
+    <button type="button" class="band-tab active" data-band="all">All <span class="bcount" id="bc-all">0</span></button>
+    <button type="button" class="band-tab" data-band="high">HIGH ≥90 <span class="bcount" id="bc-high">0</span></button>
+    <button type="button" class="band-tab mid" data-band="review">REVIEW 60–89 <span class="bcount" id="bc-review">0</span></button>
+    <button type="button" class="band-tab low" data-band="flagged">FLAGGED &lt;60 <span class="bcount" id="bc-flagged">0</span></button>
+    <button type="button" class="band-tab" data-band="decided" style="margin-left:auto">Already decided <span class="bcount" id="bc-decided">0</span></button>
   </div>
 
-  <!-- Flagged exclusion notice -->
-  <div class="flag-callout">
+  <div class="flag-callout" id="flag-callout" hidden>
     <div class="fc-icon">!</div>
-    <div>
-      <b>5 flagged items</b> (confidence &lt;60) are <strong>excluded from bulk-accept by default</strong> —
-      "Nienow v. Ohio" (case citation) and "Det. C. Nienow" (officer name) require individual decisions.
-      Uncheck the filter above to see them. They are shown below with a red background.
-    </div>
+    <div id="flag-callout-text"></div>
   </div>
 
-  <!-- Sticky action bar -->
   <div class="action-bar">
     <div class="sel-info">
-      <b>41 instances selected</b>
-      <span class="propagates">✓ propagates to 5 documents</span>
+      <b id="sel-count">0 instances selected</b>
+      <span class="propagates" id="sel-prop" hidden></span>
     </div>
-    <button class="btn reject-btn">Reject selected</button>
-    <button class="btn accept-btn">Accept 41 — lay the ink</button>
+    <button type="button" class="btn reject-btn" id="btn-reject" disabled>Reject selected</button>
+    <button type="button" class="btn accept-btn" id="btn-accept" disabled>Accept 0 — lay the ink</button>
   </div>
 
-  <!-- Scrollable content -->
-  <div class="sheet-body">
-
-    <!-- Document group 1: consolidated_case_file -->
-    <div class="doc-group">
-      <div class="dg-head">
-        <span class="dg-filename">consolidated_case_file</span>
-        <span class="dg-meta">88 instances · pp. 1–110</span>
-        <span class="dg-select-all">Select all 88 in doc →</span>
-      </div>
-
-      <div class="inst">
-        <input type="checkbox" checked>
-        <span class="inst-ctx">…call for service involving the subject, <em>Yasmine Nienow</em> (DOB 12/23/1999), at 5024 Island Ton…</span>
-        <span class="inst-pg">p.1</span>
-        <span class="inst-conf h">95</span>
-      </div>
-      <div class="inst">
-        <input type="checkbox" checked>
-        <span class="inst-ctx">…The subject, <em>Yasmine Nienow</em>, was cooperative during initial contact and stated…</span>
-        <span class="inst-pg">p.14</span>
-        <span class="inst-conf h">95</span>
-      </div>
-      <div class="inst">
-        <input type="checkbox" checked>
-        <span class="inst-ctx">…statement of <em>Yasmine Nienow</em> taken at 14:22 hrs, transcript certified by court reporter…</span>
-        <span class="inst-pg">p.36</span>
-        <span class="inst-conf h">94</span>
-      </div>
-      <div class="inst">
-        <input type="checkbox" checked>
-        <span class="inst-ctx">…The district attorney's office received the request from <em>Yasmine Nienow</em>'s counsel on…</span>
-        <span class="inst-pg">p.52</span>
-        <span class="inst-conf h">95</span>
-      </div>
-      <div class="inst">
-        <input type="checkbox" checked>
-        <span class="inst-ctx">…Exhibit F contains photographs of <em>Yasmine Nienow</em> taken at booking, dated 01/17/2024…</span>
-        <span class="inst-pg">p.67</span>
-        <span class="inst-conf h">96</span>
-      </div>
-      <div class="show-more">Show 83 more instances in this document →</div>
-    </div>
-
-    <!-- Document group 2: incident_report_2024-0117 — has flagged items -->
-    <div class="doc-group">
-      <div class="dg-head">
-        <span class="dg-filename">incident_report_2024-0117</span>
-        <span class="dg-meta">9 instances · pp. 1–10 · ⚑ 2 flagged</span>
-        <span class="dg-select-all">Select eligible only →</span>
-      </div>
-
-      <!-- FLAGGED: case citation — excluded by default -->
-      <div class="inst flagged-exc">
-        <input type="checkbox" disabled>
-        <span class="inst-ctx">…the applicability of <em>Nienow</em> v. Ohio, 494 U.S. 541 (1990) in the context of…</span>
-        <span class="exc-why">Case citation</span>
-        <span class="inst-pg">p.7</span>
-        <span class="inst-conf l">58</span>
-      </div>
-
-      <!-- FLAGGED: officer name — excluded by default -->
-      <div class="inst flagged-exc">
-        <input type="checkbox" disabled>
-        <span class="inst-ctx">…investigation assigned to <em>Det. C. Nienow</em> #9418 — officer of record, NOT subject PII…</span>
-        <span class="exc-why">Officer name</span>
-        <span class="inst-pg">p.1</span>
-        <span class="inst-conf l">64</span>
-      </div>
-
-      <!-- Rejected: street name — not checkable -->
-      <div class="inst" style="opacity:.55">
-        <input type="checkbox" disabled>
-        <span class="inst-ctx">…near the intersection of <em>Nienow</em> Street and 9th Avenue — location of initial call…</span>
-        <span class="exc-why" style="color:var(--sub);border-color:var(--line-strong)">Street name</span>
-        <span class="inst-pg">p.4</span>
-        <span class="inst-conf m">71</span>
-      </div>
-
-      <div class="inst">
-        <input type="checkbox" checked>
-        <span class="inst-ctx">…Full name: <em>Yasmine Nienow</em>. Date of birth: 12/23/1999. Residential address…</span>
-        <span class="inst-pg">p.3</span>
-        <span class="inst-conf h">95</span>
-      </div>
-      <div class="inst">
-        <input type="checkbox" checked>
-        <span class="inst-ctx">…subject, <em>Yasmine Nienow</em>, was cooperative and made no spontaneous statements…</span>
-        <span class="inst-pg">p.4</span>
-        <span class="inst-conf h">95</span>
-      </div>
-      <div class="inst">
-        <input type="checkbox" checked>
-        <span class="inst-ctx">…a witness reported observing the subject, <em>Yasmine Nienow</em>, at approximately this location…</span>
-        <span class="inst-pg">p.4</span>
-        <span class="inst-conf h">95</span>
-      </div>
-    </div>
-
-    <!-- Document group 3: interview_transcript_C -->
-    <div class="doc-group">
-      <div class="dg-head">
-        <span class="dg-filename">interview_transcript_C</span>
-        <span class="dg-meta">19 instances · pp. 1–10</span>
-        <span class="dg-select-all">Select all 19 in doc →</span>
-      </div>
-      <div class="inst">
-        <input type="checkbox" checked>
-        <span class="inst-ctx">…Q: Can you state your full name for the record? A: My name is <em>Yasmine Nienow</em>…</span>
-        <span class="inst-pg">p.1</span>
-        <span class="inst-conf h">97</span>
-      </div>
-      <div class="inst">
-        <input type="checkbox" checked>
-        <span class="inst-ctx">…Q: Ms. <em>Nienow</em>, can you describe the events of January 17th in your own words?…</span>
-        <span class="inst-pg">p.2</span>
-        <span class="inst-conf m">83</span>
-      </div>
-      <div class="inst">
-        <input type="checkbox" checked>
-        <span class="inst-ctx">…[Signed] <em>Yasmine Danielle Nienow</em> · Date: 01/18/2024 · Certified court reporter…</span>
-        <span class="inst-pg">p.10</span>
-        <span class="inst-conf h">96</span>
-      </div>
-      <div class="show-more">Show 16 more instances in this document →</div>
-    </div>
-
-    <!-- Document group 4: case_summary -->
-    <div class="doc-group">
-      <div class="dg-head">
-        <span class="dg-filename">case_summary</span>
-        <span class="dg-meta">6 instances · pp. 1–10</span>
-        <span class="dg-select-all">Select all 6 in doc →</span>
-      </div>
-      <div class="inst">
-        <input type="checkbox" checked>
-        <span class="inst-ctx">…prepared for the district attorney. Subject <em>Yasmine Nienow</em> (DOB 12/23/1999)…</span>
-        <span class="inst-pg">p.1</span>
-        <span class="inst-conf h">96</span>
-      </div>
-      <div class="inst">
-        <input type="checkbox" checked>
-        <span class="inst-ctx">…charges against <em>Yasmine Nienow</em> are outlined in the attached charging document…</span>
-        <span class="inst-pg">p.3</span>
-        <span class="inst-conf h">95</span>
-      </div>
-      <div class="show-more">Show 4 more instances in this document →</div>
-    </div>
-
-    <!-- Document group 5: supplemental_report_A — already decided -->
-    <div class="doc-group">
-      <div class="dg-head" style="opacity:.65">
-        <span class="dg-filename">supplemental_report_A</span>
-        <span class="dg-meta">6 instances · all decided</span>
-        <span style="margin-left:auto;font-size:12px;font-weight:600;color:var(--ok)">✓ 6 accepted</span>
-      </div>
-      <div class="inst" style="opacity:.5">
-        <input type="checkbox" checked disabled>
-        <span class="inst-ctx">…subject identified as <em>Yasmine Nienow</em>. SSN confirmed as 280-96-9531…</span>
-        <span class="inst-pg">p.1</span>
-        <span class="inst-conf h">95</span>
-      </div>
-      <div class="show-more" style="opacity:.5;cursor:default;color:var(--mut)">5 more — all accepted</div>
-    </div>
-
-  </div><!-- .sheet-body -->
+  <div class="sheet-body" id="sheet-body">
+    <div class="loading">Loading instances…</div>
+  </div>
 
   <div class="sheet-foot">
-    Every bulk action writes one audit event per instance — <b>who</b>, <b>what</b>, <b>when</b>, prior state — so the packet survives legal review.
-    Flagged items (shown in red) are <b>excluded from this operation</b> and will remain in the queue for individual review.
-    Each accepted instance remains individually reversible after this operation.
+    Every bulk action writes one audit event per instance — <b>who</b>, <b>what</b>, <b>when</b>, prior state.
   </div>
 
 </div>
 
+<div class="bulk-status" id="bulk-status" role="status"></div>
+
+<script src="/static/bulk.js"></script>
 </body>
 </html>

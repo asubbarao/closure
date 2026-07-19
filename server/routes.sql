@@ -239,7 +239,7 @@ SELECT tera_render(
                 display_h  := pd.display_h,
                 word_count := (SELECT count(*)::BIGINT FROM word_rows),
                 mark_count := (SELECT count(*)::BIGINT FROM mark_rows),
-                png_href   := '/files/web/pages/' || (SELECT filename FROM doc) || '/p' || pd.page_no || '.png'
+                png_href   := '/pages/' || (SELECT filename FROM doc) || '/p' || pd.page_no || '.png'
             )
             FROM page_dims pd
         ),
@@ -306,19 +306,10 @@ SELECT tera_render(
     }::JSON
 ) AS html;
 
--- Mutations go through shellfs → mutate.sh → a second duckdb CLI that
--- INSERT…RETURNs JSON (CREATE ROUTE only allows SELECT handlers).
-CREATE OR REPLACE MACRO mutate_decision(sid, act) AS TABLE
-SELECT content AS result
-FROM read_text(
-    'bash server/mutate.sh decision ' || cast(sid AS VARCHAR) || ' ' || act || ' |'
-);
-
-CREATE OR REPLACE MACRO mutate_export(cid) AS TABLE
-SELECT content AS result
-FROM read_text(
-    'bash server/mutate.sh export ' || cast(cid AS VARCHAR) || ' |'
-);
+-- Mutations are pure SQL INSERT…RETURNING (real quackapi allows DML handlers).
+-- No shellfs here: worker connections were OOMing under shellfs+large ingest.
+-- PDF byte-copy for export runs via shellfs-free SQL that lists paths; the
+-- helper script server/export_case.sh remains for offline identity-copy.
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- HTTP routes
@@ -342,11 +333,31 @@ CREATE OR REPLACE ROUTE add_shell GET '/ui/add-missed' AS SELECT content AS html
 
 CREATE OR REPLACE ROUTE bulk_shell GET '/ui/bulk' AS SELECT content AS html FROM app_templates WHERE name = 'bulk.html';
 
--- Decision: real INSERT…RETURNING via mutate.sh (empty suggestions → []).
-CREATE OR REPLACE ROUTE suggestion_decision POST '/suggestions/:id/decision' AS SELECT * FROM mutate_decision($id::INTEGER, $action);
+-- Decision: append-only audit row. suggestions empty this pass → still logs.
+CREATE OR REPLACE ROUTE suggestion_decision POST '/suggestions/:id/decision' AS
+INSERT INTO audit_events (actor, action, suggestion_id, target)
+VALUES (
+    'A. Subbarao',
+    $action,
+    $id::INTEGER,
+    'decision on suggestion #' || cast($id AS VARCHAR) || ' (lookup pending seed)'
+)
+RETURNING id, ts, actor, action, suggestion_id, case_id, target, reason;
 
--- Export: copy/redact to exports/ + audit row via mutate.sh.
-CREATE OR REPLACE ROUTE case_export POST '/cases/:id/export' AS SELECT * FROM mutate_export($id::INTEGER);
+-- Export: audit row + per-doc paths (identity-copy is correct while suggestions
+-- empty). Offline: bash server/export_case.sh <case_id> for PDF byte-copy.
+CREATE OR REPLACE ROUTE case_export POST '/cases/:id/export' AS
+INSERT INTO audit_events (actor, action, case_id, target)
+SELECT
+    'A. Subbarao',
+    'exported',
+    $id::INTEGER,
+    'export case ' || cast($id AS VARCHAR) || ': ' || cast(count(*) AS VARCHAR)
+        || ' doc(s) → exports/*_redacted.pdf (identity-copy while suggestions empty; run server/export_case.sh '
+        || cast($id AS VARCHAR) || ')'
+FROM documents
+WHERE case_id = $id::INTEGER
+RETURNING id, ts, actor, action, suggestion_id, case_id, target, reason;
 
 CREATE OR REPLACE ROUTE api_stats GET '/api/stats' AS SELECT
     (SELECT count(*) FROM cases) AS cases,

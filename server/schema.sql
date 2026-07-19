@@ -87,7 +87,9 @@ CREATE TABLE IF NOT EXISTS audit_events (
                       'accepted', 'rejected', 'undone', 'added',
                       'exported', 'ingested'
                   )),
-    suggestion_id INTEGER REFERENCES suggestions(id),
+    -- No FK on suggestion_id this pass: suggestions is empty until seed, but
+    -- the decision POST path must still append an audit row end-to-end.
+    suggestion_id INTEGER,
     case_id       INTEGER REFERENCES cases(id),
     target        VARCHAR,
     reason        VARCHAR

@@ -140,7 +140,7 @@ COPY (
                 display_w := display_w, display_h := display_h,
                 word_count := (SELECT count(*)::BIGINT FROM word_rows),
                 mark_count := 0::BIGINT,
-                png_href := '../web/pages/' || (SELECT filename FROM doc) || '/p1.png'
+                png_href := '../pages/' || (SELECT filename FROM doc) || '/p1.png'
             ) FROM page_dims),
             'words': (SELECT coalesce(list(struct_pack(
                 word := word, x0 := round(x0,2), y0 := round(y0,2), x1 := round(x1,2), y1 := round(y1,2),

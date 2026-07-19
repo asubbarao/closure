@@ -24,20 +24,23 @@
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;font-feature-settings:"tnum";min-height:100vh}
+a{color:inherit}
 
 .top{display:flex;align-items:center;gap:16px;height:52px;padding:0 20px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:100}
 .brand{font-weight:700;font-size:15px;flex-shrink:0}.brand span{color:var(--amber-edge)}
+.brand a{text-decoration:none;color:inherit}
 .top-div{width:1px;height:20px;background:var(--line);flex-shrink:0}
 .crumb{font-family:var(--mono);font-size:11.5px;color:var(--sub)}
 .crumb b{color:var(--ink);font-weight:600}
-.top-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .who{font-size:12.5px;color:var(--sub)}.who b{color:var(--ink);font-weight:600}
 .progress-wrap{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--sub)}
 .meter{width:100px;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
-.meter i{display:block;height:100%;background:var(--ink)}
-.btn{font:inherit;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap}
-.btn:hover{border-color:var(--mut)}
+.meter i{display:block;height:100%;background:var(--ink);width:0%}
+.btn{font:inherit;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center}
+.btn:hover:not([disabled]){border-color:var(--mut)}
 .btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn.primary:hover:not([disabled]){background:#2a2e36;border-color:#2a2e36}
 .btn[disabled]{opacity:.42;cursor:not-allowed}
 .blocked-tip{font-size:11px;color:var(--red-text);font-weight:600;background:var(--red-mid);border-radius:var(--r-sm);padding:2px 8px}
 
@@ -53,18 +56,25 @@ body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--b
 
 .case-prog{margin-top:18px}
 .prog-bar{height:9px;border-radius:5px;background:var(--line);display:flex;overflow:hidden}
-.seg-ink{background:var(--ink)}.seg-amb{background:var(--amber-edge)}
-.prog-leg{display:flex;gap:20px;margin-top:8px;font-size:11.5px;color:var(--sub)}
+.seg-ink{background:var(--ink);width:0%}.seg-amb{background:var(--amber-edge);width:0%}.seg-rej{background:var(--line-strong);width:0%}
+.prog-leg{display:flex;gap:20px;margin-top:8px;font-size:11.5px;color:var(--sub);flex-wrap:wrap}
 .prog-leg .k{display:flex;align-items:center;gap:6px}
 .swatch{width:9px;height:9px;border-radius:2px;flex-shrink:0}
 .sw-ink{background:var(--ink)}.sw-amb{background:var(--amber-edge)}.sw-line{background:var(--line-strong)}
 
 .blocked-banner{margin-top:18px;display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--red-mid);border:1px solid var(--red);border-radius:var(--r-md);font-size:13px}
+.blocked-banner[hidden]{display:none!important}
 .bb-icon{width:20px;height:20px;border-radius:50%;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
 .blocked-banner b{color:var(--red-text)}
-.blocked-banner a{color:var(--red-text);font-weight:600;cursor:pointer;margin-left:4px}
+.blocked-banner a{color:var(--red-text);font-weight:600;cursor:pointer;margin-left:4px;text-decoration:none}
+.blocked-banner a:hover{text-decoration:underline}
+
+.export-result{margin-top:14px;padding:12px 16px;background:var(--ok-soft);border:1px solid var(--ok);border-radius:var(--r-md);font-size:13px;font-family:var(--mono);display:none;white-space:pre-wrap;word-break:break-word}
+.export-result.show{display:block}
+.export-result.err{background:var(--red-soft);border-color:var(--red);color:var(--red-text)}
 
 .cols{display:grid;grid-template-columns:1fr 360px;gap:28px;margin-top:28px;align-items:start}
+@media (max-width:960px){.cols{grid-template-columns:1fr}.ph-right{flex-wrap:wrap;gap:16px}}
 .sec-label{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);margin-bottom:10px}
 
 .doc-table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-panel)}
@@ -74,12 +84,15 @@ body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--b
 .doc-table tr:last-child td{border-bottom:none}
 .doc-table tbody tr{cursor:pointer}
 .doc-table tbody tr:hover td{background:var(--bg)}
+.doc-table tbody tr.flagged-row{background:var(--red-soft)}
+.doc-table tbody tr.flagged-row:hover td{background:rgba(192,50,33,.11)}
 .doc-name{font-weight:600;font-size:13px}
 .doc-meta{font-family:var(--mono);font-size:10.5px;color:var(--mut);margin-top:2px}
 .doc-num{font-family:var(--mono);font-size:12.5px;font-weight:600}
-.conf-bar{width:130px;height:7px;border-radius:4px;background:var(--line);display:inline-flex;overflow:hidden}
+.conf-bar{width:130px;height:7px;border-radius:4px;background:var(--line);display:inline-flex;overflow:hidden;vertical-align:middle}
+.conf-bar > i{display:block;height:100%;min-width:0}
 .cb-h{background:var(--ink)}.cb-m{background:var(--amber-edge)}.cb-l{background:var(--red)}.cb-r{background:var(--line-strong)}
-.conf-detail{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:3px;display:flex;gap:6px}
+.conf-detail{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:3px;display:flex;gap:6px;justify-content:flex-end}
 .cd-h{color:var(--ink)}.cd-m{color:var(--amber-text)}.cd-l{color:var(--red)}
 .doc-status{font-size:11.5px;font-weight:600;white-space:nowrap}
 .st-review{color:var(--amber-text)}.st-done{color:var(--ok)}.st-done::before{content:"✓ "}
@@ -87,7 +100,8 @@ body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--b
 
 .audit-card{margin-top:20px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-panel)}
 .audit-head{padding:10px 14px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);background:var(--surface-2);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
-.audit-head a{font-weight:600;color:var(--cur);font-size:11px;letter-spacing:0;text-transform:none;cursor:pointer}
+.audit-head a{font-weight:600;color:var(--cur);font-size:11px;letter-spacing:0;text-transform:none;cursor:pointer;text-decoration:none}
+.audit-head a:hover{text-decoration:underline}
 .au{display:flex;align-items:baseline;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);font-size:12px}
 .au:last-child{border-bottom:none}
 .au-t{font-family:var(--mono);font-size:10px;color:var(--mut);width:42px;flex-shrink:0}
@@ -97,8 +111,9 @@ body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--b
 .au-b b{font-family:var(--mono);font-weight:500;color:var(--ink)}
 
 .ents-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-panel)}
-.ent{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer}
-.ent:last-of-type{border-bottom:none}.ent:hover{background:var(--bg)}
+.ent{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line);cursor:default}
+.ent:last-of-type{border-bottom:none}
+.ent.human-req{background:var(--red-soft)}
 .ent-nm{flex:1;min-width:0}
 .ent-val{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ent-val.mono{font-family:var(--mono);font-size:12px}
@@ -112,20 +127,42 @@ body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--b
 .p-flag{background:var(--red-mid);color:var(--red-text);border:1px solid var(--red)}
 .ent-foot{padding:11px 14px;font-size:12px;color:var(--sub);background:var(--surface-2);line-height:1.55;border-top:1px solid var(--line)}
 .ent-foot strong{font-weight:600;color:var(--ink)}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(12px);background:var(--ink);color:#fff;padding:10px 16px;border-radius:var(--r-md);font-size:13px;font-weight:500;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:200;max-width:min(520px,92vw);box-shadow:0 8px 24px rgba(25,27,30,.2)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
-<body>
+<body
+  data-case-id="{{ case.id }}"
+  data-suggestion-count="{{ stats.suggestion_count }}"
+  data-pending-count="{{ stats.pending_count }}"
+  data-accepted-count="{{ stats.accepted_count }}"
+  data-rejected-count="{{ stats.rejected_count }}"
+  data-flagged-count="{{ stats.flagged_count }}"
+  data-resolved-count="{{ stats.resolved }}"
+  data-entity-count="{{ stats.entity_count }}"
+  data-doc-count="{{ stats.doc_count }}"
+  data-actor="A. Subbarao"
+>
 <header class="top">
-  <div class="brand"><a href="/" style="color:inherit;text-decoration:none">Closure<span>.</span></a></div>
+  <div class="brand"><a href="/">Closure<span>.</span></a></div>
   <div class="top-div"></div>
   <div class="crumb">CASE <b>{{ case.case_no }}</b> · {{ case.title }}</div>
   <div class="top-right">
-    <div class="progress-wrap"><span>{{ stats.resolved }} / {{ stats.suggestion_count }}</span><div class="meter"><i style="width:{{ stats.progress_pct }}%"></i></div></div>
+    <div class="progress-wrap">
+      <span id="progress-label">{{ stats.resolved }} / {{ stats.suggestion_count }}</span>
+      <div class="meter"><i id="progress-meter"></i></div>
+    </div>
     <span class="who">Reviewing as <b>A. Subbarao</b></span>
     <a class="btn" href="/cases/{{ case.id }}/audit">Audit log</a>
-    <form method="POST" action="/cases/{{ case.id }}/export" style="display:inline">
-      <button class="btn primary" type="submit">Export redacted case…</button>
-    </form>
+    <button
+      type="button"
+      class="btn primary"
+      id="export-btn"
+      data-case-id="{{ case.id }}"
+      {% if stats.flagged_count > 0 %}disabled title="Flagged items require individual judgment before export"{% endif %}
+    >Export redacted case…</button>
+    <span class="blocked-tip" id="blocked-tip" {% if stats.flagged_count == 0 %}hidden{% endif %}>export blocked</span>
   </div>
 </header>
 
@@ -133,82 +170,135 @@ body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--b
   <div class="page-head">
     <div class="ph-left">
       <h1>{{ case.title }}</h1>
-      <div class="sub">{{ stats.doc_count }} documents · {{ stats.page_count }} pages · {{ stats.word_count }} words · imported from samples/*.pdf · suggestions: {{ stats.suggestion_count }} (seed later)</div>
+      <div class="sub">{{ stats.doc_count }} documents · {{ stats.page_count }} pages · {{ stats.word_count }} words · imported from samples/*.pdf · {{ stats.suggestion_count }} suggestions</div>
     </div>
     <div class="ph-right">
-      <div class="stat"><span class="v">{{ stats.suggestion_count }}</span><div class="l">Suggestions</div></div>
-      <div class="stat"><span class="v warn">{{ stats.pending_count }}</span><div class="l">Pending</div></div>
-      <div class="stat"><span class="v alert">{{ stats.flagged_count }}</span><div class="l">Flagged</div></div>
-      <div class="stat"><span class="v">{{ stats.entity_count }}</span><div class="l">Entities</div></div>
-      <div class="stat"><span class="v">{{ stats.word_count }}</span><div class="l">Words</div></div>
+      <div class="stat"><span class="v" id="stat-suggestions">{{ stats.suggestion_count }}</span><div class="l">Suggestions</div></div>
+      <div class="stat"><span class="v warn" id="stat-pending">{{ stats.pending_count }}</span><div class="l">Pending</div></div>
+      <div class="stat"><span class="v alert" id="stat-flagged">{{ stats.flagged_count }}</span><div class="l">Flagged</div></div>
+      <div class="stat"><span class="v" id="stat-entities">{{ stats.entity_count }}</span><div class="l">Entities</div></div>
+      <div class="stat"><span class="v" id="stat-signed-off">—</span><div class="l">Signed off</div></div>
     </div>
   </div>
 
-  <div class="case-prog">
+  <div class="case-prog" id="coverage" aria-label="Case coverage">
     <div class="prog-bar">
-      <div class="seg-ink" style="width:{{ stats.accepted_pct }}%"></div>
-      <div class="seg-amb" style="width:{{ stats.pending_pct }}%"></div>
+      <div class="seg-ink" id="seg-accepted"></div>
+      <div class="seg-amb" id="seg-pending"></div>
+      <div class="seg-rej" id="seg-rejected"></div>
     </div>
     <div class="prog-leg">
-      <div class="k"><span class="swatch sw-ink"></span>{{ stats.accepted_count }} accepted — ink laid</div>
-      <div class="k"><span class="swatch sw-amb"></span>{{ stats.pending_count }} pending review</div>
-      <div class="k"><span class="swatch sw-line"></span>{{ stats.rejected_count }} rejected / cleared</div>
+      <div class="k"><span class="swatch sw-ink"></span><span id="leg-accepted">{{ stats.accepted_count }} accepted — ink laid</span></div>
+      <div class="k"><span class="swatch sw-amb"></span><span id="leg-pending">{{ stats.pending_count }} pending review</span></div>
+      <div class="k"><span class="swatch sw-line"></span><span id="leg-rejected">{{ stats.rejected_count }} rejected / cleared</span></div>
     </div>
   </div>
 
-  {% if stats.suggestion_count == 0 %}
-  <div class="blocked-banner" style="background:var(--amber-bg);border-color:var(--amber-edge)">
-    <div class="bb-icon" style="background:var(--amber-edge)">i</div>
-    Suggestions not seeded yet. Document pages, word boxes, entities, and audit are live from real PDF extraction. Seeding pass will populate the review queue.
+  <div class="blocked-banner" id="export-banner" {% if stats.flagged_count == 0 %}hidden{% endif %}>
+    <div class="bb-icon">!</div>
+    <div>
+      Export blocked: <b id="banner-docs">—</b> have <b id="banner-flagged">{{ stats.flagged_count }} flagged items</b> that require individual judgment before export.
+      <a href="#flagged-docs" id="jump-flagged">Jump to flagged items →</a>
+    </div>
   </div>
-  {% endif %}
+
+  <div class="export-result" id="export-result" role="status"></div>
 
   <div class="cols">
     <div>
-      <div class="sec-label">Documents in this case</div>
-      <table class="doc-table">
-        <thead><tr><th>Document</th><th class="r">Pages</th><th class="r">Words</th><th class="r">Suggestions</th><th class="r">Status</th></tr></thead>
+      <div class="sec-label" id="flagged-docs">Documents in this case</div>
+      <table class="doc-table" id="doc-table">
+        <thead>
+          <tr>
+            <th>Document</th>
+            <th class="r">Found</th>
+            <th class="r">Confidence breakdown</th>
+            <th class="r">Status</th>
+          </tr>
+        </thead>
         <tbody>
         {% for d in documents %}
-          <tr onclick="location.href='/documents/{{ d.id }}'">
-            <td><div class="doc-name">{{ d.filename }}</div><div class="doc-meta">{{ d.page_count }} pp · {{ d.width_pt }}×{{ d.height_pt }} pt</div></td>
-            <td class="r"><span class="doc-num">{{ d.page_count }}</span></td>
-            <td class="r"><span class="doc-num">{{ d.word_count }}</span></td>
+          <tr
+            class="{% if d.flagged_count > 0 %}flagged-row{% endif %}"
+            data-doc-id="{{ d.id }}"
+            data-filename="{{ d.filename }}"
+            data-suggestion-count="{{ d.suggestion_count }}"
+            data-pending-count="{{ d.pending_count }}"
+            data-flagged-count="{{ d.flagged_count }}"
+            onclick="location.href='/documents/{{ d.id }}'"
+          >
+            <td>
+              <div class="doc-name">{{ d.filename }}</div>
+              <div class="doc-meta">{{ d.page_count }} pp · {{ d.width_pt }}×{{ d.height_pt }} pt</div>
+            </td>
             <td class="r"><span class="doc-num">{{ d.suggestion_count }}</span></td>
-            <td class="r"><span class="doc-status {% if d.suggestion_count == 0 %}st-review{% elif d.flagged_count > 0 %}st-blocked{% elif d.pending_count == 0 %}st-done{% else %}st-review{% endif %}>{% if d.suggestion_count == 0 %}awaiting seed{% elif d.flagged_count > 0 %}{{ d.flagged_count }} flagged{% elif d.pending_count == 0 %}Signed off{% else %}{{ d.pending_count }} pending{% endif %}</span></td>
+            <td class="r">
+              <div class="conf-bar" data-role="conf-bar" aria-hidden="true">
+                <i class="cb-h" style="width:0%"></i>
+                <i class="cb-m" style="width:0%"></i>
+                <i class="cb-l" style="width:0%"></i>
+              </div>
+              <div class="conf-detail" data-role="conf-detail">
+                <span class="cd-h">—</span>
+                <span class="cd-m">—</span>
+                <span class="cd-l">—</span>
+              </div>
+            </td>
+            <td class="r">
+              <span class="doc-status {% if d.flagged_count > 0 %}st-blocked{% elif d.suggestion_count == 0 %}st-review{% elif d.pending_count == 0 %}st-done{% else %}st-review{% endif %}" data-role="doc-status">{% if d.flagged_count > 0 %}{{ d.flagged_count }} flagged unresolved{% elif d.suggestion_count == 0 %}awaiting seed{% elif d.pending_count == 0 %}Signed off{% else %}{{ d.pending_count }} pending{% endif %}</span>
+            </td>
           </tr>
         {% endfor %}
         </tbody>
       </table>
 
-      <div class="audit-card">
-        <div class="audit-head"><span>Recent audit activity</span><a href="/cases/{{ case.id }}/audit">View full log →</a></div>
+      <div class="audit-card" id="audit-card">
+        <div class="audit-head">
+          <span>Recent audit activity</span>
+          <a href="/cases/{{ case.id }}/audit">View full log →</a>
+        </div>
+        <div id="audit-list">
         {% if audit | length == 0 %}
-        <div class="au"><span class="au-t">—</span><span class="au-a" style="color:var(--sub)">empty</span><span class="au-b">No decisions yet.</span></div>
+          <div class="au" data-empty="1"><span class="au-t">—</span><span class="au-a" style="color:var(--sub)">empty</span><span class="au-b">No decisions yet.</span></div>
         {% endif %}
         {% for a in audit %}
-        <div class="au"><span class="au-t">{{ a.ts_short }}</span><span class="au-a {% if a.action == 'accepted' %}acc{% elif a.action == 'rejected' %}rej{% elif a.action == 'added' %}add{% endif %}">{{ a.action }}</span><span class="au-b">{{ a.target }} · <b>{{ a.actor }}</b></span></div>
+          <div class="au">
+            <span class="au-t">{{ a.ts_short }}</span>
+            <span class="au-a {% if a.action == 'accepted' %}acc{% elif a.action == 'rejected' %}rej{% elif a.action == 'added' or a.action == 'add' %}add{% endif %}">{{ a.action }}</span>
+            <span class="au-b">{{ a.target }}{% if a.reason %} — {{ a.reason }}{% endif %} · <b>{{ a.actor }}</b></span>
+          </div>
         {% endfor %}
+        </div>
       </div>
     </div>
 
     <div>
-      <div class="sec-label">Entities — PII catalog from identities.json</div>
-      <div class="ents-card">
+      <div class="sec-label">Entities — decide once, propagates case-wide</div>
+      <div class="ents-card" id="ents-card">
         {% for e in entities %}
-        <div class="ent">
+        <div
+          class="ent"
+          data-entity-id="{{ e.id }}"
+          data-kind="{{ e.kind }}"
+          data-hit-count="{{ e.hit_count }}"
+          data-doc-count="{{ e.doc_count }}"
+          data-canonical="{{ e.canonical_text }}"
+        >
           <div class="ent-nm">
-            <div class="ent-val {% if e.mono %}mono{% endif %}">{{ e.canonical_text }}</div>
+            <div class="ent-val{% if e.mono %} mono{% endif %}">{{ e.canonical_text }}</div>
             <div class="ent-type">{{ e.kind }}</div>
           </div>
-          <div class="ent-ct"><b>{{ e.hit_count }}</b>hits · {{ e.doc_count }} docs</div>
-          <span class="pill p-pend">CATALOG</span>
+          <div class="ent-ct"><b>{{ e.hit_count }}</b>in {{ e.doc_count }} docs</div>
+          <span class="pill p-pend" data-role="ent-pill">…</span>
         </div>
         {% endfor %}
-        <div class="ent-foot"><strong>Decide once, apply everywhere.</strong> Entity rows are the answer-key catalog. Hit counts come from real word n-grams in the PDFs — not fabricated suggestions. Once suggestions are seeded, decisions here propagate case-wide.</div>
+        <div class="ent-foot"><strong>Decide once, apply everywhere.</strong> A decision here proposes itself across every document — never silently. Each instance stays visible and individually reversible. Items marked HUMAN REQUIRED cannot be bulk-accepted.</div>
       </div>
     </div>
   </div>
 </div>
+
+<div class="toast" id="toast" role="status"></div>
+<script src="/static/dashboard.js"></script>
 </body>
 </html>

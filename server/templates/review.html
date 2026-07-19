@@ -26,19 +26,20 @@
 html,body{height:100%}
 body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased;font-feature-settings:"tnum"}
 
-.top{display:flex;align-items:center;gap:14px;height:52px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0}
+.top{display:flex;align-items:center;gap:14px;height:52px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0;z-index:30}
 .brand{font-weight:700;font-size:15px;flex-shrink:0}.brand span{color:var(--amber-edge)}
+.brand a{color:inherit;text-decoration:none}
 .top-div{width:1px;height:20px;background:var(--line);flex-shrink:0}
 .crumb{display:flex;align-items:baseline;gap:7px;min-width:0}
-.crumb .case{font-family:var(--mono);font-size:11.5px;color:var(--sub)}
+.crumb .case{font-family:var(--mono);font-size:11.5px;color:var(--sub);text-decoration:none}
 .crumb .sep{color:var(--mut)}
 .crumb .doc{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .top-right{margin-left:auto;display:flex;align-items:center;gap:12px}
 .pw{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--sub)}
 .meter{width:110px;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
-.meter i{display:block;height:100%;width:57%;background:var(--ink)}
+.meter i{display:block;height:100%;width:0%;background:var(--ink);transition:width .18s ease}
 .who{font-size:12.5px;color:var(--sub)}.who b{color:var(--ink);font-weight:600}
-.btn{font:inherit;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);cursor:pointer}
+.btn{font:inherit;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
 .btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
 
 .body-wrap{display:flex;flex:1;min-height:0}
@@ -47,7 +48,7 @@ body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--b
 .rail{width:230px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column}
 .rail-head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px 8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
 .docs-list{overflow-y:auto;flex:1}
-.doc-item{display:flex;align-items:center;gap:9px;padding:9px 14px;cursor:pointer;border-left:3px solid transparent}
+a.doc-item{display:flex;align-items:center;gap:9px;padding:9px 14px;cursor:pointer;border-left:3px solid transparent;color:inherit;text-decoration:none}
 .doc-item:hover{background:var(--bg)}
 .doc-item.active{border-left-color:var(--ink);background:var(--bg)}
 .dname{flex:1;min-width:0}
@@ -63,38 +64,29 @@ body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--b
 /* Stage */
 .stage{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;overflow-y:auto;padding:22px 28px 50px;background:var(--bg)}
 .page-nav{display:flex;align-items:center;gap:10px;margin-bottom:14px;font-family:var(--mono);font-size:11.5px;color:var(--sub)}
-.pgbtn{width:26px;height:26px;border-radius:var(--r-sm);border:1px solid var(--line-strong);background:var(--surface);color:var(--sub);cursor:pointer;font-size:13px}
+a.pgbtn,button.pgbtn{width:26px;height:26px;border-radius:var(--r-sm);border:1px solid var(--line-strong);background:var(--surface);color:var(--sub);cursor:pointer;font-size:13px;display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+a.pgbtn[aria-disabled="true"]{pointer-events:none;opacity:.4}
 
-/* PDF page rendered in pure HTML/CSS */
+/* Real PDF page PNG + overlay marks */
 .pdf-page{
   position:relative;width:680px;min-height:880px;
   background:#fff;border-radius:3px;box-shadow:var(--shadow-page);
-  font-family:"Courier New",Courier,monospace;font-size:10.5px;line-height:1.55;color:#111;
-  padding:52px 56px 48px;flex-shrink:0;
+  flex-shrink:0;overflow:hidden;
 }
-.lh{text-align:center;margin-bottom:18px;border-bottom:2px solid #111;padding-bottom:10px}
-.lh .dept{font-size:10px;font-weight:bold;letter-spacing:.08em;text-transform:uppercase}
-.lh .title{font-size:13px;font-weight:bold;letter-spacing:.04em;margin:3px 0}
-.lh .sub{font-size:9.5px;color:#444}
-.fields{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;margin-bottom:2px}
-.field{border:1px solid #999;padding:4px 7px;margin:-1px 0 0 -1px}
-.field.s2{grid-column:span 2}.field.s3{grid-column:span 3}
-.flabel{font-size:8px;font-weight:bold;letter-spacing:.06em;text-transform:uppercase;color:#555;display:block;margin-bottom:1px}
-.fval{font-size:10.5px}
-.sec{font-size:9px;font-weight:bold;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid #999;margin:14px 0 8px;padding-bottom:2px}
-.narr{font-size:10.5px;line-height:1.65;text-align:justify}
-.narr p{margin-bottom:8px;text-indent:2em}
-.pf{position:absolute;bottom:24px;left:56px;right:56px;display:flex;justify-content:space-between;font-size:8.5px;color:#777;border-top:1px solid #ccc;padding-top:6px}
+.pdf-page.real{padding:0}
+.pdf-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;z-index:0;user-select:none;pointer-events:none}
+.word-layer{position:absolute;inset:0;z-index:1;opacity:0;pointer-events:none}
+.word{position:absolute;font-family:var(--mono);line-height:1;white-space:nowrap;overflow:hidden}
 
-/* Redaction marks */
-.mark{position:absolute;border-radius:2px;cursor:pointer;z-index:10}
+/* Redaction marks — status colors */
+.mark{position:absolute;border-radius:2px;cursor:pointer;z-index:10;transition:outline .1s ease,background .12s ease}
 .mark.pending{background:var(--amber-fill);outline:1.5px solid var(--amber-edge)}
 .mark.flagged{background:rgba(192,50,33,.14);outline:1.5px dashed var(--red)}
-.mark.accepted{background:var(--ink)}
-.mark.rejected{outline:1.5px dashed var(--line-strong)}
+.mark.accepted{background:var(--ink);outline:none}
+.mark.rejected{background:transparent;outline:1.5px dashed var(--line-strong)}
 .mark.rejected::after{content:"";position:absolute;inset:50% 0 auto;height:1.5px;background:var(--line-strong)}
-.mark.current{outline:2.5px solid var(--cur);outline-offset:2px}
-.mark-tag{position:absolute;left:0;top:-22px;white-space:nowrap;font-family:var(--mono);font-size:10px;font-weight:700;background:var(--ink);color:#fff;padding:2px 8px;border-radius:4px;z-index:20}
+.mark.current{outline:2.5px solid var(--cur);outline-offset:2px;z-index:15}
+.mark-tag{position:absolute;left:0;top:-22px;white-space:nowrap;font-family:var(--mono);font-size:10px;font-weight:700;background:var(--ink);color:#fff;padding:2px 8px;border-radius:4px;z-index:20;pointer-events:none}
 .mark-tag b{color:#FFD75E}
 
 .hint-bar{margin-top:14px;display:flex;align-items:center;gap:16px;font-size:12.5px;color:var(--sub)}
@@ -107,8 +99,9 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);back
 .q-top h2{font-size:14px;font-weight:700}
 .q-top .pc{font-family:var(--mono);font-size:11.5px;color:var(--amber-text);font-weight:700}
 .bands{display:flex;gap:5px;margin-bottom:6px}
-.band{flex:1;text-align:center;cursor:pointer;padding:7px 2px 6px;border:1px solid var(--line);border-radius:var(--r-md)}
+.band{flex:1;text-align:center;cursor:pointer;padding:7px 2px 6px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);user-select:none}
 .band.on{border-color:var(--ink);background:var(--surface-2)}
+.band:not(.on){opacity:.45}
 .band .bv{font-family:var(--mono);font-size:15px;font-weight:700;display:block;line-height:1.1}
 .band .bl{font-size:9.5px;font-weight:700;letter-spacing:.04em;color:var(--mut);margin-top:2px}
 .band.mid .bv{color:var(--amber-text)}.band.low .bv{color:var(--red)}
@@ -118,14 +111,18 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);back
 .eg{display:flex;align-items:baseline;gap:8px;padding:11px 6px 5px;border-bottom:1px solid var(--line);margin-bottom:3px}
 .eg b{font-size:13px;font-weight:700}
 .eg .ek{font-size:10.5px;color:var(--mut)}
-.eg .bl2{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--cur);cursor:pointer;white-space:nowrap}
+.eg .bl2{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--cur);cursor:pointer;white-space:nowrap;background:none;border:none;font:inherit;font-size:11.5px;font-weight:600;color:var(--cur);padding:0}
+.eg .bl2:hover{text-decoration:underline}
 .sugg{display:flex;align-items:center;gap:9px;padding:8px 6px;border-radius:var(--r-md);cursor:pointer;border:1px solid transparent}
 .sugg:hover{background:var(--bg)}
 .sugg.current{border-color:var(--cur);background:var(--cur-soft)}
 .sugg.fr{background:var(--red-soft)}
+.sugg.hidden{display:none}
 .sw{width:7px;height:22px;border-radius:2px;flex-shrink:0}
-.sw.pending{background:var(--amber-edge)}.sw.flagged{background:transparent;border:1.5px dashed var(--red)}
-.sw.accepted{background:var(--ink)}.sw.rejected{background:var(--line-strong)}
+.sw.pending{background:var(--amber-edge)}
+.sw.flagged{background:transparent;border:1.5px dashed var(--red)}
+.sw.accepted{background:var(--ink)}
+.sw.rejected{background:var(--line-strong)}
 .st{flex:1;min-width:0}
 .val{font-family:var(--mono);font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .val s{color:var(--mut)}
@@ -137,32 +134,43 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);back
 .pgr{font-family:var(--mono);font-size:10px;color:var(--mut)}
 .keys{border-top:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:7px 14px;font-size:11.5px;color:var(--sub);flex-shrink:0}
 .keys span{display:inline-flex;gap:5px;align-items:center}
-
-.pdf-page.real{padding:0;overflow:hidden;background:#fff}
-.pdf-page.real .word{position:absolute;font-family:var(--mono);line-height:1;white-space:nowrap;color:rgba(25,27,30,.55);overflow:hidden;pointer-events:none}
-.pdf-page.real .word.hit{color:var(--ink);background:var(--amber-fill);outline:1px solid var(--amber-edge)}
-.pdf-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;z-index:0}
-.word-layer{position:absolute;inset:0;z-index:1}
-.mark{z-index:10}
 .empty-q{padding:24px 16px;color:var(--sub);font-size:13px;line-height:1.55}
 .empty-q b{color:var(--ink)}
-.coord-proof{margin-top:10px;font-family:var(--mono);font-size:10.5px;color:var(--mut);max-width:680px}
-a.pgbtn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
-a.doc-item{display:flex}
 
+/* Toast */
+.toast-host{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:100;display:flex;flex-direction:column;gap:8px;pointer-events:none;align-items:center}
+.toast{pointer-events:auto;display:flex;align-items:center;gap:12px;background:var(--ink);color:#fff;padding:10px 14px;border-radius:var(--r-md);font-size:13px;font-weight:500;box-shadow:0 8px 28px rgba(25,27,30,.28);max-width:min(520px,92vw);animation:toast-in .16s ease}
+.toast .t-msg{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toast .t-undo{font-family:var(--mono);font-size:12px;font-weight:700;color:#FFD75E;background:none;border:none;cursor:pointer;padding:2px 4px}
+.toast .t-undo:hover{text-decoration:underline}
+@keyframes toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 </style>
 </head>
-<body>
+<body
+  data-doc-id="{{ doc.id }}"
+  data-case-id="{{ case.id }}"
+  data-page-no="{{ page.page_no }}"
+  data-page-count="{{ doc.page_count }}"
+  data-actor="A. Subbarao"
+  data-scale="{{ page.scale }}"
+  data-display-w="{{ page.display_w }}"
+  data-display-h="{{ page.display_h }}"
+  data-width-pt="{{ page.width_pt }}"
+  data-height-pt="{{ page.height_pt }}"
+>
 <header class="top">
-  <div class="brand"><a href="/" style="color:inherit;text-decoration:none">Closure<span>.</span></a></div>
+  <div class="brand"><a href="/">Closure<span>.</span></a></div>
   <div class="top-div"></div>
   <div class="crumb">
-    <a class="case" href="/cases/{{ case.id }}" style="color:inherit;text-decoration:none">CASE {{ case.case_no }}</a>
+    <a class="case" href="/cases/{{ case.id }}">CASE {{ case.case_no }}</a>
     <span class="sep">/</span>
     <span class="doc">{{ doc.filename }}.pdf</span>
   </div>
   <div class="top-right">
-    <div class="pw"><span>{{ stats.resolved }} of {{ stats.suggestion_count }}</span><div class="meter"><i style="width:{{ stats.progress_pct }}%"></i></div></div>
+    <div class="pw">
+      <span id="progress-label">{{ stats.resolved }} of {{ stats.suggestion_count }} reviewed</span>
+      <div class="meter" title="reviewed / total"><i id="progress-bar" style="width:{{ stats.progress_pct }}%"></i></div>
+    </div>
     <span class="who">Reviewing as <b>A. Subbarao</b></span>
     <a class="btn" href="/cases/{{ case.id }}/audit">Audit log</a>
     <form method="POST" action="/cases/{{ case.id }}/export" style="display:inline">
@@ -174,87 +182,122 @@ a.doc-item{display:flex}
 <div class="body-wrap">
   <nav class="rail">
     <div class="rail-head"><span>Documents</span><span>{{ docs | length }} in case</span></div>
-    <div class="docs-list">
+    <div class="docs-list" id="docs-list">
       {% for d in docs %}
-      <a class="doc-item {% if d.id == doc.id %}active{% endif %}" href="/documents/{{ d.id }}" style="color:inherit;text-decoration:none">
-        <div class="dname"><div class="dn">{{ d.filename }}</div><div class="dm">{{ d.page_count }} pp · {{ d.word_count }} words</div></div>
-        <span class="dbadge {% if d.suggestion_count == 0 %}done{% endif %}">{{ d.suggestion_count }}</span>
+      <a class="doc-item {% if d.id == doc.id %}active{% endif %}" href="/documents/{{ d.id }}" data-doc-id="{{ d.id }}">
+        <div class="dname">
+          <div class="dn">{{ d.filename }}</div>
+          <div class="dm">{{ d.page_count }} pp · {{ d.suggestion_count }} found</div>
+        </div>
+        <span class="dbadge {% if d.suggestion_count == 0 %}done{% endif %}" data-badge-for="{{ d.id }}">
+          {% if d.suggestion_count == 0 %}✓{% else %}{{ d.suggestion_count }}{% endif %}
+        </span>
       </a>
       {% endfor %}
     </div>
-    <div class="rail-foot">Case: <b>{{ stats.suggestion_count }}</b> suggestions, <b>{{ page.word_count }}</b> words on this page.<br>Entity decisions propagate to every document.</div>
+    <div class="rail-foot">Case: <b id="case-sugg-count">{{ stats.suggestion_count }}</b> suggestions, <b id="page-word-count">{{ page.word_count }}</b> words on this page.<br>Entity decisions propagate to every document.</div>
   </nav>
 
-  <main class="stage">
+  <main class="stage" id="stage">
     <div class="page-nav">
-      <a class="pgbtn" href="/documents/{{ doc.id }}/pages/{{ page.prev }}" {% if page.page_no <= 1 %}style="pointer-events:none;opacity:.4"{% endif %}>‹</a>
+      <a class="pgbtn" href="/documents/{{ doc.id }}/pages/{{ page.prev }}" aria-disabled="{% if page.page_no <= 1 %}true{% else %}false{% endif %}">‹</a>
       <span>PAGE {{ page.page_no }} / {{ doc.page_count }}</span>
-      <a class="pgbtn" href="/documents/{{ doc.id }}/pages/{{ page.next }}" {% if page.page_no >= doc.page_count %}style="pointer-events:none;opacity:.4"{% endif %}>›</a>
-      <span>·</span><span>{{ page.word_count }} words · {{ page.mark_count }} marks</span>
+      <a class="pgbtn" href="/documents/{{ doc.id }}/pages/{{ page.next }}" aria-disabled="{% if page.page_no >= doc.page_count %}true{% else %}false{% endif %}">›</a>
+      <span>·</span><span id="page-mark-meta">{{ page.word_count }} words · {{ page.mark_count }} marks</span>
     </div>
 
-    <div class="pdf-page real" style="width:{{ page.display_w }}px;height:{{ page.display_h }}px">
+    <div class="pdf-page real" id="pdf-page"
+         style="width:{{ page.display_w }}px;height:{{ page.display_h }}px"
+         data-page-no="{{ page.page_no }}">
       {% if page.png_href %}
-      <img class="pdf-bg" src="{{ page.png_href }}" alt="page {{ page.page_no }}" />
+      <img class="pdf-bg" src="{{ page.png_href }}" alt="page {{ page.page_no }}" draggable="false" />
       {% endif %}
-      <div class="word-layer">
+      <div class="word-layer" aria-hidden="true">
         {% for w in words %}
         <span class="word {% if w.is_hit %}hit{% endif %}"
               style="left:{{ w.left_px }}px;top:{{ w.top_px }}px;width:{{ w.width }}px;height:{{ w.height }}px;font-size:{{ w.font_px }}px"
               title="pt ({{ w.x0 }},{{ w.y0 }})–({{ w.x1 }},{{ w.y1 }})">{{ w.word }}</span>
         {% endfor %}
       </div>
-      {% for m in marks %}
-      <div class="mark {{ m.status }} {% if m.current %}current{% endif %}"
-           style="left:{{ m.left_px }}px;top:{{ m.top_px }}px;width:{{ m.width }}px;height:{{ m.height }}px"
-           title="{{ m.text }} · conf {{ m.confidence }}">
-        {% if m.current %}<span class="mark-tag">{{ m.kind }} · <b>{{ m.confidence }}</b></span>{% endif %}
+      <div id="marks-layer">
+        {% for m in marks %}
+        <div class="mark {{ m.status }} {% if m.current %}current{% endif %}"
+             style="left:{{ m.left_px }}px;top:{{ m.top_px }}px;width:{{ m.width }}px;height:{{ m.height }}px"
+             data-text="{{ m.text }}"
+             data-conf="{{ m.confidence }}"
+             data-status="{{ m.status }}"
+             data-kind="{{ m.kind }}"
+             title="{{ m.text }} · conf {{ m.confidence }}">
+          {% if m.current %}<span class="mark-tag">{{ m.kind }} · <b>{{ m.confidence }}</b></span>{% endif %}
+        </div>
+        {% endfor %}
       </div>
-      {% endfor %}
     </div>
 
     <div class="hint-bar">
-      <span><kbd>n</kbd> + drag — mark a missed item</span>
+      <span><kbd>n</kbd> add missed</span>
       <span>·</span>
-      <span><kbd>j</kbd><kbd>k</kbd> — navigate</span>
+      <span><kbd>j</kbd><kbd>k</kbd> navigate</span>
+      <span>·</span>
+      <span><kbd>a</kbd> accept · <kbd>r</kbd> reject · <kbd>u</kbd> undo</span>
       <span>·</span>
       <span>scale {{ page.scale }} · page {{ page.width_pt }}×{{ page.height_pt }} pt</span>
-    </div>
-    <div class="coord-proof">
-      Coordinate proof (real read_pdf_words):
-      {% for p in proof %}
-      <div><b>{{ p.word }}</b> page {{ p.page_no }} → x0={{ p.x0 }} y0={{ p.y0 }} x1={{ p.x1 }} y1={{ p.y1 }} → css left={{ p.left_px }}px top={{ p.top_px }}px</div>
-      {% endfor %}
     </div>
   </main>
 
   <aside class="queue">
     <div class="q-head">
-      <div class="q-top"><h2>Suggestions</h2><span class="pc">{{ stats.pending_count }} pending</span></div>
-      <div class="bands">
-        <div class="band on"><span class="bv">{{ stats.high_count }}</span><span class="bl">HIGH ≥90</span></div>
-        <div class="band mid on"><span class="bv">{{ stats.review_count }}</span><span class="bl">REVIEW</span></div>
-        <div class="band low on"><span class="bv">{{ stats.flagged_count }}</span><span class="bl">FLAGGED</span></div>
+      <div class="q-top">
+        <h2>Suggestions</h2>
+        <span class="pc" id="pending-label">{{ stats.pending_count }} pending</span>
+      </div>
+      <div class="bands" id="band-filters" role="group" aria-label="Confidence band filters">
+        <button type="button" class="band on" data-band="high" aria-pressed="true">
+          <span class="bv" id="band-high">{{ stats.high_count }}</span>
+          <span class="bl">HIGH ≥90</span>
+        </button>
+        <button type="button" class="band mid on" data-band="review" aria-pressed="true">
+          <span class="bv" id="band-review">{{ stats.review_count }}</span>
+          <span class="bl">REVIEW</span>
+        </button>
+        <button type="button" class="band low on" data-band="flagged" aria-pressed="true">
+          <span class="bv" id="band-flagged">{{ stats.flagged_count }}</span>
+          <span class="bl">FLAGGED</span>
+        </button>
       </div>
       <div class="band-note"><b>HIGH</b> items are candidates for bulk-verify. <b>FLAGGED</b> (&lt;60) require individual judgment.</div>
     </div>
-    <div class="q-list">
+    <div class="q-list" id="q-list">
       {% if suggestions | length == 0 %}
       <div class="empty-q">
         Queue empty — <b>suggestions not seeded yet</b>.<br><br>
         Word boxes on the page are real extractions from the PDF ({{ page.word_count }} on this page).
-        When the seeding pass runs, AI proposals land here with confidence bands and entity grouping.
       </div>
       {% endif %}
       {% for s in suggestions %}
-      <div class="sugg {% if s.current %}current{% endif %} {% if s.band == 'flagged' %}fr{% endif %}">
-        <span class="sw {{ s.status }}"></span>
-        <div class="st"><div class="val">{{ s.text }}</div><div class="ctx">{{ s.context }}</div></div>
-        <div class="sm"><div class="conf {% if s.band == 'high' %}h{% elif s.band == 'review' %}m{% else %}l{% endif %}">{{ s.confidence }}</div><div class="pgr">p.{{ s.page_no }}</div></div>
+      <div class="sugg {% if s.current %}current{% endif %} {% if s.band == 'flagged' %}fr{% endif %}"
+           data-id="{{ s.id }}"
+           data-status="{{ s.status }}"
+           data-band="{{ s.band }}"
+           data-page="{{ s.page_no }}"
+           data-text="{{ s.text }}"
+           data-conf="{{ s.confidence }}"
+           data-context="{{ s.context }}"
+           role="button"
+           tabindex="-1">
+        <span class="sw {% if s.status == 'pending' and s.band == 'flagged' %}flagged{% else %}{{ s.status }}{% endif %}"></span>
+        <div class="st">
+          <div class="val">{% if s.status == 'rejected' %}<s>{{ s.text }}</s>{% else %}{{ s.text }}{% endif %}</div>
+          <div class="ctx">{{ s.context }}</div>
+        </div>
+        <div class="sm">
+          <div class="conf {% if s.band == 'high' %}h{% elif s.band == 'review' %}m{% else %}l{% endif %}">{{ s.confidence }}</div>
+          <div class="pgr">p.{{ s.page_no }}</div>
+        </div>
       </div>
       {% endfor %}
     </div>
-    <div class="keys">
+    <div class="keys" id="kbd-legend">
       <span><kbd>j</kbd><kbd>k</kbd> next / prev</span>
       <span><kbd>a</kbd> accept</span>
       <span><kbd>r</kbd> reject</span>
@@ -264,5 +307,12 @@ a.doc-item{display:flex}
     </div>
   </aside>
 </div>
+
+<div class="toast-host" id="toast-host" aria-live="polite"></div>
+
+<script type="application/json" id="boot-data">
+{"docId":{{ doc.id }},"caseId":{{ case.id }},"pageNo":{{ page.page_no }},"pageCount":{{ doc.page_count }},"actor":"A. Subbarao","scale":{{ page.scale }},"displayW":{{ page.display_w }},"displayH":{{ page.display_h }},"widthPt":{{ page.width_pt }},"heightPt":{{ page.height_pt }},"stats":{"suggestion_count":{{ stats.suggestion_count }},"pending_count":{{ stats.pending_count }},"resolved":{{ stats.resolved }},"high_count":{{ stats.high_count }},"review_count":{{ stats.review_count }},"flagged_count":{{ stats.flagged_count }}}}
+</script>
+<script src="/static/review.js"></script>
 </body>
 </html>

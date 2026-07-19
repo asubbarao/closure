@@ -3,12 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Closure — Add missed redaction · incident_report_2024-0117.pdf</title>
+<title>Closure — Add missed redaction</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-/* ── CLOSURE design tokens (inlined) ── */
 :root{
   --bg:#F4F5F6; --surface:#FFFFFF; --surface-2:#F9FAFB;
   --ink:#191B1E; --sub:#5A5F66; --mut:#878C93; --ink-inv:#FFFFFF;
@@ -29,83 +28,65 @@
 html,body{height:100%}
 body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased;font-feature-settings:"tnum"}
 
-/* ── Top bar ── */
 .top{display:flex;align-items:center;gap:14px;height:52px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0}
 .brand{font-weight:700;font-size:15px;flex-shrink:0}.brand span{color:var(--amber-edge)}
+.brand a{color:inherit;text-decoration:none}
 .top-div{width:1px;height:20px;background:var(--line);flex-shrink:0}
 .crumb{display:flex;align-items:baseline;gap:7px;min-width:0}
-.crumb .case{font-family:var(--mono);font-size:11.5px;color:var(--sub)}
+.crumb .case{font-family:var(--mono);font-size:11.5px;color:var(--sub);text-decoration:none}
 .crumb .sep{color:var(--mut)}
 .crumb .doc{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .top-right{margin-left:auto;display:flex;align-items:center;gap:12px}
 .progress-wrap{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--sub)}
 .meter{width:110px;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
-.meter i{display:block;height:100%;width:57%;background:var(--ink)}
+.meter i{display:block;height:100%;width:0;background:var(--ink)}
 .who{font-size:12.5px;color:var(--sub)}.who b{color:var(--ink);font-weight:600}
-.btn{font:inherit;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap}
+.btn{font:inherit;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center}
 .btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
 
-/* Mode banner — add-missed mode indicator */
+/* Mode banner — exact copy from design/copy.md */
 .mode-banner{display:flex;align-items:center;gap:10px;padding:8px 16px;background:var(--cur);color:#fff;font-size:12.5px;font-weight:600;flex-shrink:0}
 .mode-banner kbd{font-family:var(--mono);font-size:11px;font-weight:700;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.35);border-radius:4px;padding:1px 7px;color:#fff}
-.mode-banner .dismiss{margin-left:auto;cursor:pointer;opacity:.75;font-weight:400;font-size:12px}
+.mode-banner .dismiss{margin-left:auto;cursor:pointer;opacity:.85;font-weight:400;font-size:12px;background:none;border:none;color:#fff;font:inherit}
 
-/* ── body ── */
 .body-wrap{display:flex;flex:1;min-height:0}
 .stage{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;overflow-y:auto;padding:22px 28px 50px;background:var(--bg)}
 .page-nav{display:flex;align-items:center;gap:10px;margin-bottom:14px;font-family:var(--mono);font-size:11.5px;color:var(--sub)}
-.pgbtn{width:26px;height:26px;border-radius:var(--r-sm);border:1px solid var(--line-strong);background:var(--surface);color:var(--sub);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center}
+.pgbtn{width:26px;height:26px;border-radius:var(--r-sm);border:1px solid var(--line-strong);background:var(--surface);color:var(--sub);cursor:pointer;font-size:13px;display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+.pgbtn[disabled],.pgbtn.is-disabled{opacity:.4;pointer-events:none}
 
-/* ── The PDF page ── */
+/* Real page PNG canvas */
 .pdf-page{
   position:relative;
   width:680px;
-  min-height:880px;
+  min-height:200px;
   background:#fff;
   border-radius:3px;
   box-shadow:var(--shadow-page);
-  font-family:"Courier New",Courier,monospace;
-  font-size:10.5px;
-  line-height:1.55;
-  color:#111;
-  padding:52px 56px 48px;
   flex-shrink:0;
-  /* cursor: crosshair while in add mode */
   cursor:crosshair;
+  user-select:none;
+  overflow:hidden;
+  padding:0;
 }
-.pg-letterhead{text-align:center;margin-bottom:18px;border-bottom:2px solid #111;padding-bottom:10px}
-.pg-letterhead .dept{font-size:10px;font-weight:bold;letter-spacing:.08em;text-transform:uppercase}
-.pg-letterhead .title{font-size:13px;font-weight:bold;letter-spacing:.04em;margin:3px 0}
-.pg-letterhead .sub{font-size:9.5px;color:#444}
-.pg-fields{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;margin-bottom:2px}
-.pg-field{border:1px solid #999;padding:4px 7px;margin:-1px 0 0 -1px}
-.pg-field.span2{grid-column:span 2}
-.pg-field.span3{grid-column:span 3}
-.pg-field-label{font-size:8px;font-weight:bold;letter-spacing:.06em;text-transform:uppercase;color:#555;display:block;margin-bottom:1px}
-.pg-field-val{font-size:10.5px;font-family:"Courier New",monospace}
-.pg-section-head{font-size:9px;font-weight:bold;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid #999;margin:14px 0 8px;padding-bottom:2px}
-.pg-narrative{font-size:10.5px;line-height:1.65;text-align:justify}
-.pg-narrative p{margin-bottom:8px;text-indent:2em}
-.pg-footer{position:absolute;bottom:24px;left:56px;right:56px;display:flex;justify-content:space-between;font-size:8.5px;color:#777;border-top:1px solid #ccc;padding-top:6px}
-
-/* Redaction marks (existing) */
-.mark{position:absolute;border-radius:2px;z-index:10}
+.pdf-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;z-index:0;pointer-events:none}
+.mark{position:absolute;border-radius:2px;z-index:10;pointer-events:none}
 .mark.accepted{background:var(--ink)}
 .mark.pending{background:var(--amber-fill);outline:1.5px solid var(--amber-edge)}
+.mark.flagged{background:rgba(192,50,33,.14);outline:1.5px dashed var(--red)}
+.mark.rejected{outline:1.5px dashed var(--line-strong)}
+.mark.manual{background:var(--ink);outline:2px solid var(--cur);outline-offset:1px}
 
-/* ── The drag-selection in progress ── */
-/* A blue dashed rectangle the user is drawing with "n + drag" */
 .drag-select{
   position:absolute;
   background:rgba(29,99,237,.12);
   outline:2px dashed var(--cur);
   border-radius:2px;
   z-index:20;
-  /* This represents the live drag region over "(266) 458-3812" */
+  pointer-events:none;
+  display:none;
 }
 
-/* ── Add-missed popover ── */
-/* Appears immediately after user releases the drag */
 .add-popover{
   position:absolute;
   width:312px;
@@ -115,342 +96,243 @@ body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--b
   border:1px solid var(--cur);
   z-index:40;
   overflow:hidden;
+  display:none;
 }
+.add-popover.open{display:block}
 .add-popover-header{
   padding:13px 15px 10px;
   background:var(--cur-soft);
   border-bottom:1px solid var(--line);
 }
-.add-popover-header .aph-label{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--cur);margin-bottom:4px}
-.add-popover-header .aph-val{font-family:var(--mono);font-size:13.5px;font-weight:600;color:var(--ink);background:var(--cur-soft);border-radius:4px;padding:2px 8px;display:inline-block}
+.add-popover-header .aph-label{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--cur);margin-bottom:6px}
+.add-popover-header .aph-val{
+  font-family:var(--mono);font-size:13.5px;font-weight:600;color:var(--ink);
+  background:#fff;border:1px solid var(--line-strong);border-radius:4px;
+  padding:6px 8px;width:100%;outline:none;
+}
+.add-popover-header .aph-val:focus{border-color:var(--cur);box-shadow:0 0 0 2px var(--cur-soft)}
 .add-popover-body{padding:12px 15px}
-/* Category picker */
-.cat-label{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin-bottom:7px}
+.cat-label,.scope-label{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin-bottom:7px}
 .cat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:12px}
-.cat-btn{font:inherit;font-size:11.5px;font-weight:600;padding:6px 4px;border-radius:var(--r-md);border:1px solid var(--line);background:var(--surface);color:var(--sub);cursor:pointer;text-align:center;transition:border-color 80ms}
+.cat-btn{font:inherit;font-size:11.5px;font-weight:600;padding:6px 4px;border-radius:var(--r-md);border:1px solid var(--line);background:var(--surface);color:var(--sub);cursor:pointer;text-align:center}
 .cat-btn:hover{border-color:var(--line-strong)}
 .cat-btn.selected{border-color:var(--cur);background:var(--cur-soft);color:var(--cur)}
-/* Scope choice */
 .scope-divider{border:none;border-top:1px solid var(--line);margin:2px 0 12px}
-.scope-label{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin-bottom:8px}
 .scope-options{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
-.scope-row{display:flex;align-items:flex-start;gap:9px;padding:9px 11px;border:1px solid var(--line);border-radius:var(--r-md);cursor:pointer;transition:background 60ms}
+.scope-row{display:flex;align-items:flex-start;gap:9px;padding:9px 11px;border:1px solid var(--line);border-radius:var(--r-md);cursor:pointer}
 .scope-row:hover{background:var(--bg)}
 .scope-row.selected{border-color:var(--cur);background:var(--cur-soft)}
 .scope-row input[type=radio]{accent-color:var(--cur);margin-top:2px;flex-shrink:0}
-.scope-row .sr-text{flex:1}
+.scope-row .sr-text{flex:1;min-width:0}
 .scope-row .sr-main{font-size:13px;font-weight:600;color:var(--ink)}
 .scope-row .sr-sub{font-size:11.5px;color:var(--sub);margin-top:1px}
-.scope-row .sr-count{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--cur);background:var(--cur-soft);padding:2px 8px;border-radius:8px;flex-shrink:0;margin-top:2px}
-/* CTA */
+.scope-row .sr-count{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--cur);background:var(--cur-soft);padding:2px 8px;border-radius:8px;flex-shrink:0;margin-top:2px;white-space:nowrap}
 .add-popover-footer{display:flex;gap:8px;padding:0 15px 13px}
 .btn-add{flex:1;font:inherit;font-weight:700;font-size:13px;padding:9px 0;border-radius:var(--r-md);border:none;background:var(--ink);color:#fff;cursor:pointer}
 .btn-add:hover{background:#000}
+.btn-add:disabled{opacity:.45;cursor:not-allowed}
 .btn-cancel{font:inherit;font-weight:600;font-size:13px;padding:9px 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);color:var(--sub);cursor:pointer}
-/* Manual-add audit note */
 .audit-note{padding:9px 15px;background:var(--surface-2);border-top:1px solid var(--line);font-size:11px;color:var(--sub);line-height:1.5}
 .audit-note b{color:var(--ink);font-family:var(--mono);font-weight:600}
 
-/* Right queue */
+.hint-bar{margin-top:14px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;font-size:12.5px;color:var(--sub);max-width:680px}
+.hint-bar strong{font-family:var(--mono);color:var(--ink);font-weight:600}
+.coord-line{margin-top:8px;font-family:var(--mono);font-size:10.5px;color:var(--mut);max-width:680px}
+.status-toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:var(--ink);color:#fff;padding:10px 16px;border-radius:var(--r-md);
+  font-size:12.5px;font-weight:600;z-index:100;display:none;max-width:min(720px,92vw);
+  box-shadow:var(--shadow-float);font-family:var(--mono);white-space:pre-wrap;word-break:break-word;
+}
+.status-toast.show{display:block}
+.status-toast.err{background:var(--red)}
+.status-toast.ok{background:var(--ok)}
+
 .queue{width:348px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--line);display:flex;flex-direction:column}
 .q-head{padding:14px 16px 0;flex-shrink:0}
 .q-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
 .q-top h2{font-size:14px;font-weight:700}
 .q-top .pend-count{font-family:var(--mono);font-size:11.5px;color:var(--amber-text);font-weight:700}
-
-/* Missed items section — first-class citizens in the queue */
 .missed-section{
-  margin:0 10px 8px;
-  border:1px solid var(--cur);
-  border-radius:var(--r-lg);
-  overflow:hidden;
-  background:var(--cur-soft);
+  margin:0 10px 8px;border:1px solid var(--cur);border-radius:var(--r-lg);
+  overflow:hidden;background:var(--cur-soft);
 }
 .missed-section-head{
-  display:flex;align-items:center;gap:8px;
-  padding:9px 12px;
-  background:var(--cur-soft);
+  display:flex;align-items:center;gap:8px;padding:9px 12px;
   border-bottom:1px solid rgba(29,99,237,.2);
   font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--cur);
 }
+.missed-list{max-height:180px;overflow-y:auto}
 .missed-row{display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid rgba(29,99,237,.12);font-size:12.5px}
 .missed-row:last-child{border-bottom:none}
 .missed-row .mr-sw{width:7px;height:20px;border-radius:2px;background:var(--cur);flex-shrink:0}
+.missed-row .mr-sw.done{background:var(--ink)}
 .missed-row .mr-text{flex:1;min-width:0}
-.missed-row .mr-val{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink)}
+.missed-row .mr-val{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .missed-row .mr-meta{font-size:11px;color:var(--sub)}
 .missed-row .mr-badge{font-size:10px;font-weight:700;color:var(--cur);background:rgba(29,99,237,.1);padding:2px 7px;border-radius:8px;flex-shrink:0;white-space:nowrap}
-
+.missed-row .mr-badge.ok{background:var(--ok-soft);color:var(--ok)}
 .q-divider{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:8px 16px 4px}
 .q-list{overflow-y:auto;flex:1;padding:4px 10px 10px}
-.ent-group{display:flex;align-items:baseline;gap:8px;padding:11px 6px 5px;border-bottom:1px solid var(--line);margin-bottom:3px}
-.ent-group b{font-size:13px;font-weight:700}
-.ent-group .ek{font-size:10.5px;color:var(--mut)}
-.ent-group .bulk-link{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--cur);cursor:pointer;white-space:nowrap}
-.sugg{display:flex;align-items:center;gap:9px;padding:8px 6px;border-radius:var(--r-md);cursor:pointer;border:1px solid transparent;transition:background 60ms}
+.sugg{display:flex;align-items:center;gap:9px;padding:8px 6px;border-radius:var(--r-md)}
 .sugg:hover{background:var(--bg)}
-.sugg.accepted-row{opacity:.65}
-.sw{width:7px;height:22px;border-radius:2px;flex-shrink:0}
-.sw.pending{background:var(--amber-edge)}
-.sw.accepted{background:var(--ink)}
+.sw{width:7px;height:22px;border-radius:2px;flex-shrink:0;background:var(--amber-edge)}
+.sw.accepted{background:var(--ink)}.sw.flagged{background:transparent;border:1.5px dashed var(--red)}
 .sugg-text{flex:1;min-width:0}
 .val{font-family:var(--mono);font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ctx{font-size:11.5px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
-.ctx em{font-style:normal;background:var(--amber-fill);border-radius:2px;padding:0 1px}
 .sugg-meta{text-align:right;flex-shrink:0}
 .conf{font-family:var(--mono);font-size:11.5px;font-weight:700}
-.conf.h{color:var(--ink)}.conf.m{color:var(--amber-text)}
 .pg-ref{font-family:var(--mono);font-size:10px;color:var(--mut)}
-.conf.manual{color:var(--cur)}
-.pg-ref.manual{color:var(--cur)}
-
+.empty-q{padding:16px 8px;color:var(--sub);font-size:12.5px;line-height:1.55}
 .keys{border-top:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:7px 14px;font-size:11.5px;color:var(--sub);flex-shrink:0}
 .keys span{display:inline-flex;gap:5px;align-items:center}
 kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:4px;padding:1px 6px}
+
+.boot-err{padding:40px 24px;max-width:520px;color:var(--sub);line-height:1.6}
+.boot-err b{color:var(--ink)}
 </style>
 </head>
 <body>
 
 <header class="top">
-  <div class="brand"><a href="/" style="color:inherit;text-decoration:none">Closure<span>.</span></a></div>
+  <div class="brand"><a href="/">Closure<span>.</span></a></div>
   <div class="top-div"></div>
   <div class="crumb">
-    <span class="case">CASE 24-000117</span>
+    <a class="case" id="crumb-case" href="#">CASE …</a>
     <span class="sep">/</span>
-    <span class="doc">incident_report_2024-0117.pdf</span>
+    <span class="doc" id="crumb-doc">…</span>
   </div>
   <div class="top-right">
     <div class="progress-wrap">
-      <span>26 of 44</span>
-      <div class="meter"><i style="width:59%"></i></div>
+      <span id="progress-label">—</span>
+      <div class="meter"><i id="progress-meter"></i></div>
     </div>
-    <span class="who">Reviewing as <b>A. Subbarao</b></span>
-    <button class="btn">Audit log</button>
-    <button class="btn primary">Export redacted…</button>
+    <span class="who">Reviewing as <b id="actor-label">A. Subbarao</b></span>
+    <a class="btn" id="audit-link" href="#">Audit log</a>
+    <a class="btn primary" id="exit-review" href="#">Back to review</a>
   </div>
 </header>
 
-<!-- Mode indicator banner while in add-missed mode -->
-<div class="mode-banner">
+<div class="mode-banner" id="mode-banner" role="status">
   <span>ADD MISSED MODE</span>
   <span style="font-weight:400;opacity:.85">—</span>
-  <kbd>n</kbd> + drag to mark any text on the page
+  <span style="font-weight:400">drag to mark any text on the page</span>
   <span style="opacity:.7">·</span>
-  <span style="font-weight:400;opacity:.85">Currently: drag released, confirming selection below</span>
-  <span class="dismiss">Press Esc to exit ✕</span>
+  <span style="font-weight:400;opacity:.85"><kbd>Esc</kbd> to exit</span>
+  <button type="button" class="dismiss" id="exit-btn">Exit ✕</button>
 </div>
 
 <div class="body-wrap">
-
   <main class="stage">
     <div class="page-nav">
-      <button class="pgbtn">‹</button>
-      <span>PAGE 6 / 10</span>
-      <button class="pgbtn">›</button>
+      <a class="pgbtn" id="pg-prev" href="#">‹</a>
+      <span id="page-label">PAGE — / —</span>
+      <a class="pgbtn" id="pg-next" href="#">›</a>
       <span>·</span>
-      <span>2 marks on this page + 1 in progress</span>
+      <span id="marks-label">drag a rectangle over missed PII</span>
     </div>
 
-    <!-- Page 6: witness section, phone number was missed -->
-    <div class="pdf-page">
-      <div class="pg-letterhead">
-        <div class="dept">Carissaton Police Department</div>
-        <div class="title">INCIDENT REPORT — CASE NO. 24-000117</div>
-        <div class="sub">CONFIDENTIAL — For authorized use only. Redact before public release.</div>
-      </div>
-
-      <div class="pg-section-head">Witness Contact Information — Page 6</div>
-      <div class="pg-narrative">
-        <p>Witness 1: Robyn Price. Home address: 1142 Westbrook Lane, Carissaton, NM 87110.
-        Telephone (home): (266) 458-3812. Telephone (work): (266) 512-0044. Email:
-        robynprice@carissaton.net. Witness was cooperative and consented to photograph for
-        identification purposes. Photo ID on file as Exhibit D.</p>
-
-        <p>Witness 2: Marcus Okafor. Home address: 778 Delmar Drive, Carissaton, NM 87110.
-        Telephone: (266) 601-7733. Witness provided corroborating statement and agreed to
-        appear in subsequent proceedings if required. His alias "Okafor-Bello" is noted for
-        cross-referencing purposes in the consolidated case file.</p>
-
-        <p>Both witnesses were informed of their rights and provided voluntary statements without
-        coercion. A copy of their signed consent forms is retained in the case file. No further
-        contact is anticipated at this stage of the investigation.</p>
-      </div>
-
-      <!-- Existing accepted mark: "Robyn Price" -->
-      <div class="mark accepted" style="left:56px;top:152px;width:68px;height:15px"></div>
-
-      <!-- Existing accepted mark: "1142 Westbrook Lane, Carissaton" -->
-      <div class="mark accepted" style="left:226px;top:152px;width:188px;height:15px"></div>
-
-      <!-- DRAG SELECTION in progress: "(266) 458-3812" phone number that AI MISSED -->
-      <!-- The user has just finished dragging over this text -->
-      <div class="drag-select" style="left:131px;top:170px;width:84px;height:16px"></div>
-
-      <!-- The add-missed popover, anchored below the selection -->
-      <div class="add-popover" style="left:56px;top:196px">
+    <div class="pdf-page" id="pdf-page" aria-label="Document page canvas">
+      <img class="pdf-bg" id="pdf-bg" alt="page preview" />
+      <div id="marks-layer"></div>
+      <div class="drag-select" id="drag-select"></div>
+      <div class="add-popover" id="add-popover" role="dialog" aria-label="Add missed redaction">
         <div class="add-popover-header">
           <div class="aph-label">Reviewer-added redaction</div>
-          <div class="aph-val">(266) 458-3812</div>
+          <input class="aph-val" id="text-input" type="text" placeholder="Text under the box" autocomplete="off" spellcheck="false" />
         </div>
         <div class="add-popover-body">
           <div class="cat-label">Category</div>
-          <div class="cat-grid">
-            <button class="cat-btn">PERSON</button>
-            <button class="cat-btn">SSN</button>
-            <button class="cat-btn selected">PHONE</button>
-            <button class="cat-btn">ADDRESS</button>
-            <button class="cat-btn">DOB</button>
-            <button class="cat-btn">OTHER</button>
+          <div class="cat-grid" id="cat-grid">
+            <button type="button" class="cat-btn" data-kind="PERSON">PERSON</button>
+            <button type="button" class="cat-btn" data-kind="SSN">SSN</button>
+            <button type="button" class="cat-btn" data-kind="PHONE">PHONE</button>
+            <button type="button" class="cat-btn" data-kind="ADDRESS">ADDRESS</button>
+            <button type="button" class="cat-btn" data-kind="DOB">DOB</button>
+            <button type="button" class="cat-btn" data-kind="OTHER">OTHER</button>
           </div>
           <hr class="scope-divider">
           <div class="scope-label">Scope</div>
           <div class="scope-options">
-            <div class="scope-row">
-              <input type="radio" name="scope">
+            <label class="scope-row selected" data-scope="one" id="scope-one">
+              <input type="radio" name="scope" value="one" checked>
               <div class="sr-text">
                 <div class="sr-main">This instance only</div>
-                <div class="sr-sub">Redact just this one occurrence on p.6</div>
+                <div class="sr-sub" id="scope-one-sub">Redact just this one occurrence on p.—</div>
               </div>
-            </div>
-            <div class="scope-row selected">
-              <input type="radio" name="scope" checked>
+            </label>
+            <label class="scope-row" data-scope="all" id="scope-all">
+              <input type="radio" name="scope" value="all">
               <div class="sr-text">
                 <div class="sr-main">Find &amp; redact all matches in case</div>
-                <div class="sr-sub">Same number found on 7 other pages across 3 docs</div>
+                <div class="sr-sub" id="scope-all-sub">Type text above to search the case</div>
               </div>
-              <span class="sr-count">7 matches</span>
-            </div>
+              <span class="sr-count" id="scope-count">—</span>
+            </label>
           </div>
         </div>
         <div class="add-popover-footer">
-          <button class="btn-cancel">Cancel</button>
-          <button class="btn-add">Redact all 8 ↵</button>
+          <button type="button" class="btn-cancel" id="btn-cancel">Cancel</button>
+          <button type="button" class="btn-add" id="btn-add" disabled>Add this redaction</button>
         </div>
-        <div class="audit-note">
-          Will log as <b>reviewer-added</b> · <b>A. Subbarao</b> · reason: missed by AI — phone number
+        <div class="audit-note" id="audit-note">
+          Will log as <b>reviewer-added</b> · <b id="audit-actor">A. Subbarao</b> · reason: missed by AI
         </div>
       </div>
-
-      <div class="pg-footer">
-        <span>Carissaton PD · Form IR-24 · Rev 03/2023</span>
-        <span>PAGE 6 OF 10</span>
-        <span>CASE 24-000117</span>
-      </div>
-    </div><!-- .pdf-page -->
-
-    <div style="margin-top:14px;font-size:12.5px;color:var(--sub);display:flex;gap:16px;align-items:center">
-      <span>Selecting: <strong style="font-family:var(--mono);color:var(--ink)">(266) 458-3812</strong></span>
-      <span>·</span>
-      <span>Category: <strong style="color:var(--ink)">PHONE</strong></span>
-      <span>·</span>
-      <span>Will mark 8 instances · confirm above or press <kbd>⏎</kbd></span>
     </div>
+
+    <div class="hint-bar" id="hint-bar">
+      <span>Selecting: <strong id="hint-text">—</strong></span>
+      <span>·</span>
+      <span>Category: <strong id="hint-kind">—</strong></span>
+      <span>·</span>
+      <span id="hint-action">Draw a box, then confirm</span>
+    </div>
+    <div class="coord-line" id="coord-line">scale — · page —×— pt · box pt —</div>
   </main>
 
-  <!-- RIGHT queue -->
   <aside class="queue">
     <div class="q-head">
       <div class="q-top">
         <h2>Suggestions</h2>
-        <span class="pend-count">17 pending</span>
+        <span class="pend-count" id="pend-count">—</span>
       </div>
     </div>
 
-    <!-- Missed items — first-class section at the top -->
     <div class="missed-section">
       <div class="missed-section-head">
-        <span style="font-size:13px">+</span> Reviewer-added (1)
+        <span style="font-size:13px">+</span> Reviewer-added (<span id="manual-count">0</span>)
       </div>
-      <div class="missed-row">
-        <div class="mr-sw"></div>
-        <div class="mr-text">
-          <div class="mr-val">(266) 458-3812</div>
-          <div class="mr-meta">Adding now — PHONE · p.6 + 7 more</div>
+      <div class="missed-list" id="manual-list">
+        <div class="missed-row" id="manual-empty">
+          <div class="mr-text"><div class="mr-meta">Drag on the page to add a missed redaction</div></div>
         </div>
-        <span class="mr-badge">IN PROGRESS</span>
       </div>
     </div>
 
-    <!-- Previously added missed items -->
-    <div style="margin:0 10px 4px;padding:0 6px">
-      <div class="missed-row" style="padding:7px 2px;border-bottom:1px solid var(--line)">
-        <div class="mr-sw" style="background:var(--ink)"></div>
-        <div class="mr-text">
-          <div class="mr-val" style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink)">280 96 9531</div>
-          <div class="mr-meta">Spaced SSN · supplemental_report_A p.4 — added by A. Subbarao 14:28</div>
-        </div>
-        <span class="mr-badge" style="background:var(--ok-soft);color:var(--ok)">ADDED ✓</span>
-      </div>
-    </div>
-
-    <div class="q-divider">AI Suggestions</div>
-
-    <div class="q-list">
-      <div class="ent-group">
-        <b>Yasmine Nienow</b>
-        <span class="ek">PERSON · SUBJECT · 128 in case</span>
-        <span class="bulk-link">Bulk →</span>
-      </div>
-      <div class="sugg">
-        <span class="sw pending"></span>
-        <div class="sugg-text">
-          <div class="val">Yasmine Nienow</div>
-          <div class="ctx">…subject identified as <em>Yasmine Nienow</em>…</div>
-        </div>
-        <div class="sugg-meta"><div class="conf h">95</div><div class="pg-ref">p.6</div></div>
-      </div>
-      <div class="sugg accepted-row">
-        <span class="sw accepted"></span>
-        <div class="sugg-text">
-          <div class="val">Robyn Price</div>
-          <div class="ctx">…Witness 1: <em>Robyn Price</em>. Home address…</div>
-        </div>
-        <div class="sugg-meta"><div class="conf h">94</div><div class="pg-ref">p.6</div></div>
-      </div>
-      <div class="sugg accepted-row">
-        <span class="sw accepted"></span>
-        <div class="sugg-text">
-          <div class="val">1142 Westbrook Lane</div>
-          <div class="ctx">…address: <em>1142 Westbrook Lane</em>, Carissaton…</div>
-        </div>
-        <div class="sugg-meta"><div class="conf h">91</div><div class="pg-ref">p.6</div></div>
-      </div>
-      <div class="sugg">
-        <span class="sw pending"></span>
-        <div class="sugg-text">
-          <div class="val">Marcus Okafor</div>
-          <div class="ctx">…Witness 2: <em>Marcus Okafor</em>. Home address…</div>
-        </div>
-        <div class="sugg-meta"><div class="conf m">87</div><div class="pg-ref">p.6</div></div>
-      </div>
-      <div class="sugg">
-        <span class="sw pending"></span>
-        <div class="sugg-text">
-          <div class="val">778 Delmar Drive</div>
-          <div class="ctx">…address: <em>778 Delmar Drive</em>, Carissaton…</div>
-        </div>
-        <div class="sugg-meta"><div class="conf h">90</div><div class="pg-ref">p.6</div></div>
-      </div>
-      <div class="sugg">
-        <span class="sw pending"></span>
-        <div class="sugg-text">
-          <div class="val">(266) 601-7733</div>
-          <div class="ctx">…Telephone: <em>(266) 601-7733</em>. Witness provided…</div>
-        </div>
-        <div class="sugg-meta"><div class="conf h">96</div><div class="pg-ref">p.6</div></div>
-      </div>
+    <div class="q-divider">AI Suggestions · this page</div>
+    <div class="q-list" id="sugg-list">
+      <div class="empty-q">Loading…</div>
     </div>
 
     <div class="keys">
-      <span><kbd>j</kbd><kbd>k</kbd> next / prev</span>
-      <span><kbd>a</kbd> accept</span>
-      <span><kbd>r</kbd> reject</span>
-      <span><kbd>n</kbd> add missed</span>
+      <span><kbd>drag</kbd> mark</span>
       <span><kbd>⏎</kbd> confirm</span>
-      <span><kbd>Esc</kbd> cancel</span>
+      <span><kbd>Esc</kbd> cancel / exit</span>
     </div>
   </aside>
-
 </div>
+
+<div class="status-toast" id="toast" role="status"></div>
+
+<script>
+  // Bootstrap params from the shell URL: /ui/add-missed?doc=&page=
+  window.CLOSURE_ADD = {
+    actor: 'A. Subbarao',
+    displayW: 680
+  };
+</script>
+<script src="/static/addmissed.js"></script>
 </body>
 </html>
