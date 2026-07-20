@@ -11,14 +11,14 @@
   var PREVIEW_LIMIT = 5;
 
   var params = new URLSearchParams(window.location.search);
-  var entityId = num(params.get('entity'));
-  var caseIdParam = num(params.get('case'));
-  /** Optional document scope from library: ?docs=1,2,3 */
+  var entityId = strId(params.get('entity'));
+  var caseIdParam = strId(params.get('case'));
+  /** Optional document scope from library: ?docs=<id>,<id> (opaque string ids) */
   var docsParam = String(params.get('docs') || '')
     .split(',')
-    .map(function (x) { return num(x); })
+    .map(function (x) { return strId(x); })
     .filter(function (x) { return x != null; });
-  /** @type {Set<number>|null} */
+  /** @type {Set<string>|null} */
   var docScope = docsParam.length ? new Set(docsParam) : null;
   var pageFrom = num(params.get('page_from'));
   var pageTo = num(params.get('page_to'));
@@ -28,7 +28,7 @@
   var allRows = [];
   /** @type {Array<Object>} unscoped raw rows */
   var rawRows = [];
-  /** @type {Map<number, boolean>} suggestionId -> checked */
+  /** @type {Map<string, boolean>} suggestionId -> checked */
   var checked = new Map();
   /** @type {Map<string, boolean>} docKey -> expanded */
   var expanded = new Map();
@@ -38,9 +38,9 @@
   var entityText = '';
   var entityKind = '';
   var busy = false;
-  /** @type {{ ids: number[], priorStatus: string } | null} */
+  /** @type {{ ids: string[], priorStatus: string } | null} */
   var lastUndo = null;
-  /** focused row id for j/k navigation */
+  /** focused row id for j/k navigation (opaque string) */
   var focusId = null;
 
   var el = {
@@ -67,6 +67,13 @@
     bcDecided: document.getElementById('bc-decided'),
     bands: document.getElementById('bands-row'),
   };
+
+  /** Opaque string id (case / entity / document / suggestion). Never coerce to number. */
+  function strId(v) {
+    if (v == null || v === '') return null;
+    var s = String(v).trim();
+    return s === '' ? null : s;
+  }
 
   function num(v) {
     if (v == null || v === '') return null;
@@ -282,7 +289,7 @@
       try {
         var all = await loadCaseSuggestions(cid);
         var filtered = all.filter(function (r) {
-          return Number(r.entity_id) === entityId;
+          return strId(r.entity_id) === entityId;
         });
         if (filtered.length) {
           caseId = cid;
@@ -334,7 +341,7 @@
     var out = rows.slice();
     if (entityId) {
       out = out.filter(function (r) {
-        return Number(r.entity_id) === entityId;
+        return strId(r.entity_id) === entityId;
       });
     }
     return applyScope(out);
@@ -344,7 +351,7 @@
     var out = rows;
     if (docScope && docScope.size) {
       out = out.filter(function (r) {
-        return docScope.has(Number(r.document_id));
+        return docScope.has(strId(r.document_id));
       });
     }
     if (docGlob) {
@@ -437,8 +444,8 @@
     caseNo =
       r0.case_no ||
       r0.case_number ||
-      (caseId === 1 ? '24-000117' : caseId != null ? String(caseId) : '—');
-    if (!entityId && r0.entity_id != null) entityId = Number(r0.entity_id);
+      (caseId != null ? String(caseId) : '—');
+    if (!entityId && r0.entity_id != null) entityId = strId(r0.entity_id);
   }
 
   function initChecks(rows) {
@@ -449,13 +456,13 @@
         return;
       }
       // default: non-flagged pending checked; flagged unchecked
-      checked.set(Number(r.id), isEligibleDefault(r));
+      checked.set(strId(r.id), isEligibleDefault(r));
     });
   }
 
   function selectedRows() {
     return allRows.filter(function (r) {
-      return checked.get(Number(r.id)) === true && !isDecided(r);
+      return checked.get(strId(r.id)) === true && !isDecided(r);
     });
   }
 
@@ -561,7 +568,7 @@
   }
 
   function renderRow(row) {
-    var id = Number(row.id);
+    var id = strId(row.id);
     var decided = isDecided(row);
     var flagged = isFlagged(row);
     var isChecked = !decided && checked.get(id) === true;
@@ -715,9 +722,9 @@
   }
 
   function setCheck(id, value) {
-    id = Number(id);
+    id = strId(id);
     var row = allRows.find(function (r) {
-      return Number(r.id) === id;
+      return strId(r.id) === id;
     });
     if (!row || isDecided(row)) return;
     checked.set(id, !!value);
@@ -745,17 +752,17 @@
       });
       var target = eligibleOnly.length ? eligibleOnly : groupRows;
       var allOn = target.every(function (r) {
-        return checked.get(Number(r.id)) === true;
+        return checked.get(strId(r.id)) === true;
       });
       target.forEach(function (r) {
-        checked.set(Number(r.id), !allOn);
+        checked.set(strId(r.id), !allOn);
       });
       // when selecting eligible, leave flagged unchecked
       if (!allOn) {
         groupRows
           .filter(isFlagged)
           .forEach(function (r) {
-            checked.set(Number(r.id), false);
+            checked.set(strId(r.id), false);
           });
       }
       render();
@@ -810,7 +817,7 @@
 
     var results = [];
     var decidedIds = sel.map(function (r) {
-      return Number(r.id);
+      return strId(r.id);
     });
     try {
       var pendingNonFlagged = allRows.filter(function (r) {
@@ -825,7 +832,7 @@
         }) &&
         pendingNonFlagged.length > 0 &&
         pendingNonFlagged.every(function (r) {
-          return selIds.has(Number(r.id));
+          return selIds.has(strId(r.id));
         }) &&
         sel.length === pendingNonFlagged.length;
 
@@ -884,14 +891,14 @@
   function selectEligible() {
     allRows.forEach(function (r) {
       if (isDecided(r)) return;
-      checked.set(Number(r.id), !isFlagged(r));
+      checked.set(strId(r.id), !isFlagged(r));
     });
     render();
   }
 
   function selectNonePending() {
     allRows.forEach(function (r) {
-      if (!isDecided(r)) checked.set(Number(r.id), false);
+      if (!isDecided(r)) checked.set(strId(r.id), false);
     });
     render();
   }
@@ -899,7 +906,7 @@
   function selectFlaggedExceptions() {
     // Add flagged pending to selection (for reject-all FP path)
     allRows.forEach(function (r) {
-      if (!isDecided(r) && isFlagged(r)) checked.set(Number(r.id), true);
+      if (!isDecided(r) && isFlagged(r)) checked.set(strId(r.id), true);
     });
     bandFilter = 'flagged';
     Array.prototype.forEach.call(el.bands.querySelectorAll('.band-tab'), function (b) {
@@ -923,11 +930,11 @@
     }
     if (!rows.length) return;
     var idx = rows.findIndex(function (r) {
-      return Number(r.id) === Number(focusId);
+      return strId(r.id) === strId(focusId);
     });
     if (idx < 0) idx = 0;
     else idx = Math.max(0, Math.min(rows.length - 1, idx + delta));
-    focusId = Number(rows[idx].id);
+    focusId = strId(rows[idx].id);
     var node = el.body.querySelector('.inst[data-id="' + focusId + '"]');
     if (node) {
       el.body.querySelectorAll('.inst.focus').forEach(function (n) {
@@ -943,7 +950,7 @@
       moveFocus(0);
     }
     if (focusId == null) return;
-    var cur = checked.get(Number(focusId));
+    var cur = checked.get(strId(focusId));
     setCheck(focusId, !cur);
     render();
     // restore focus class after re-render
@@ -1008,7 +1015,9 @@
       var pa = Number(a.page_no) || 0;
       var pb = Number(b.page_no) || 0;
       if (pa !== pb) return pa - pb;
-      return Number(a.id) - Number(b.id);
+      var sa = String(a.id != null ? a.id : '');
+      var sb = String(b.id != null ? b.id : '');
+      return sa < sb ? -1 : sa > sb ? 1 : 0;
     });
   }
 

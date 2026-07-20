@@ -136,10 +136,17 @@ LEFT JOIN entities e ON e.case_id = h.case_id AND e.kind = h.kind
 -- Reads v_src_decisions directly — the ONE decision-log reader (sources.sql);
 -- this fold is the ONE latest-status view (route-bind safe: getenv fold).
 CREATE OR REPLACE VIEW v_latest_decision AS
+-- Cast status/actor/reason through VARCHAR: on a fresh clone the decision
+-- glob is only _sentinel.json (all-null fields), so read_json_auto infers
+-- those columns as JSON. coalesce(json_col, 'pending') then tries to cast
+-- the string literal to JSON and fails ("Malformed JSON … Input: pending"),
+-- which aborts remainder_scan and prevents serve. Casting here keeps the
+-- reader schema-free (no columns:= map) while making the empty-log type
+-- safe for every consumer of this view.
 SELECT cast(suggestion_id AS VARCHAR) AS suggestion_id,
-       arg_max(status, coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS status,
-       arg_max(actor,  coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS actor,
-       arg_max(reason, coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS reason,
+       arg_max(cast(status AS VARCHAR), coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS status,
+       arg_max(cast(actor AS VARCHAR),  coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS actor,
+       arg_max(cast(reason AS VARCHAR), coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS reason,
        max(try_cast(ts AS TIMESTAMP)) AS ts
 FROM v_src_decisions
 WHERE kind = 'decision' AND suggestion_id IS NOT NULL

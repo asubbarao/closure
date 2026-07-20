@@ -11,15 +11,16 @@
   var DISPLAY_W = CFG.displayW || 680;
 
   var params = new URLSearchParams(window.location.search);
-  var docId = parseInt(params.get('doc') || params.get('id') || '1', 10);
+  // Entity ids are opaque strings (uuid document ids, case="24-001001") — never Number()/parseInt.
+  var docId = String(params.get('doc') || params.get('id') || CFG.docId || '').trim();
   var pageNo = parseInt(params.get('page') || '1', 10);
-  if (!isFinite(docId) || docId < 1) docId = 1;
   if (!isFinite(pageNo) || pageNo < 1) pageNo = 1;
+  var bootCaseId = String(params.get('case') || CFG.caseId || '').trim() || null;
 
   var state = {
     docId: docId,
     pageNo: pageNo,
-    caseId: null,
+    caseId: bootCaseId,
     caseNo: '',
     filename: '',
     pageCount: 1,
@@ -173,8 +174,17 @@
     var caseA = doc.querySelector('.crumb .case');
     if (caseA) {
       meta.caseNo = (caseA.textContent || '').replace(/^CASE\s+/i, '').trim();
-      var hm = (caseA.getAttribute('href') || '').match(/\/cases\/(\d+)/);
-      if (hm) meta.caseId = parseInt(hm[1], 10);
+      // Case ids are opaque strings (e.g. "24-001001"), not integers.
+      var hm = (caseA.getAttribute('href') || '').match(/\/cases\/([^/?#]+)/);
+      if (hm) meta.caseId = decodeURIComponent(hm[1]);
+    }
+    // Prefer data-case-id / data-doc-id on body when present (string ids).
+    var body = doc.body;
+    if (body) {
+      var dCase = body.getAttribute('data-case-id');
+      var dDoc = body.getAttribute('data-doc-id');
+      if (dCase) meta.caseId = String(dCase).trim();
+      if (dDoc) meta.docId = String(dDoc).trim();
     }
 
     var docSpan = doc.querySelector('.crumb .doc');
@@ -336,7 +346,12 @@
   }
 
   function applyMeta(meta) {
-    if (meta.caseId) state.caseId = meta.caseId;
+    if (meta.caseId != null && String(meta.caseId).trim() !== '') {
+      state.caseId = String(meta.caseId).trim();
+    }
+    if (meta.docId != null && String(meta.docId).trim() !== '') {
+      state.docId = String(meta.docId).trim();
+    }
     if (meta.caseNo) state.caseNo = meta.caseNo;
     if (meta.filename) state.filename = meta.filename;
     if (meta.pageCount) state.pageCount = meta.pageCount;
@@ -785,10 +800,11 @@
     matches.forEach(function (m) {
       var d = m.document_id != null ? m.document_id : m.documentId;
       var p = m.page_no != null ? m.page_no : m.pageNo;
-      if (d != null) docs[d] = true;
+      if (d != null) docs[String(d)] = true;
       if (p != null) {
         var key = String(d) + ':' + String(p);
-        if (!(+d === state.docId && +p === state.pageNo)) pages[key] = true;
+        // Compare document ids as opaque strings; page_no stays numeric.
+        if (!(String(d) === String(state.docId) && +p === state.pageNo)) pages[key] = true;
       }
     });
     var otherPageN = Object.keys(pages).length;
@@ -873,14 +889,27 @@
       updateConfirmBtn();
       return;
     }
+    if (!state.docId) {
+      toast('ADD failed · missing document id', 'err');
+      updateConfirmBtn();
+      return;
+    }
     var box = state.boxPt;
     // Round to 4dp for stable geometry; server accepts DOUBLE (P0-4).
+    // Must be finite numbers — empty/"undefined" query values → HTTP 422 type_error on x*.
     var x0 = round4(box.x0);
     var y0 = round4(box.y0);
     var x1 = round4(box.x1);
     var y1 = round4(box.y1);
+    if (![x0, y0, x1, y1].every(function (n) { return typeof n === 'number' && isFinite(n); })) {
+      toast('ADD failed · invalid coords (need finite PDF points)', 'err');
+      updateConfirmBtn();
+      return;
+    }
+    var pageInt = parseInt(state.pageNo, 10);
+    if (!isFinite(pageInt) || pageInt < 1) pageInt = 1;
     var qs = new URLSearchParams({
-      page: String(state.pageNo),
+      page: String(pageInt),
       x0: String(x0),
       y0: String(y0),
       x1: String(x1),
@@ -891,7 +920,8 @@
       actor: ACTOR,
       reason: 'missed by AI'
     });
-    var url = '/api/documents/' + state.docId + '/add?' + qs.toString();
+    // Opaque string document id (uuid) — do not Number()-coerce.
+    var url = '/api/documents/' + encodeURIComponent(state.docId) + '/add?' + qs.toString();
     el.btnAdd.disabled = true;
     el.btnAdd.textContent = 'Saving…';
     try {
@@ -913,14 +943,14 @@
       var serverMark = {
         text: text,
         kind: state.kind,
-        page_no: state.pageNo,
+        page_no: pageInt,
         x0: x0, y0: y0, x1: x1, y1: y1,
         scope: state.scope,
         response: r.data,
         http: r.status,
         url: url
       };
-      // Extract suggestion id(s) if server returns them for undo
+      // Extract suggestion id(s) if server returns them for undo — keep as strings (uuid).
       lastAddIds = [];
       try {
         var payload = r.data;
@@ -932,7 +962,9 @@
             : payload.suggestion_id != null
               ? payload.suggestion_id
               : payload.suggestionId);
-        if (sid != null) lastAddIds = [Number(sid)];
+        if (sid != null && String(sid).trim() !== '' && String(sid) !== 'NaN') {
+          lastAddIds = [String(sid)];
+        }
       } catch (e) { /* */ }
 
       var scopeNote =
@@ -961,7 +993,10 @@
             ) && String(s.text) === text;
           });
           if (added.length) {
-            lastAddIds = [Number(added[added.length - 1].id)];
+            var aid = added[added.length - 1].id;
+            if (aid != null && String(aid).trim() !== '' && String(aid) !== 'NaN') {
+              lastAddIds = [String(aid)];
+            }
           }
         }
         renderQueue();
@@ -974,7 +1009,8 @@
   }
 
   function round4(n) {
-    return Math.round(Number(n) * 10000) / 10000;
+    var v = Math.round(Number(n) * 10000) / 10000;
+    return isFinite(v) ? v : NaN;
   }
 
   // ── pointer events ──

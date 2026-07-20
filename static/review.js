@@ -27,8 +27,8 @@
   } catch (_) {
     boot = {};
   }
-  const docId = Number(boot.docId || body.dataset.docId);
-  const caseId = Number(boot.caseId || body.dataset.caseId);
+  const docId = boot.docId || body.dataset.docId;
+  const caseId = boot.caseId || body.dataset.caseId;
   const pageNo = Number(boot.pageNo || body.dataset.pageNo);
   const pageCount = Number(boot.pageCount || body.dataset.pageCount);
   const actor = boot.actor || body.dataset.actor || ACTOR;
@@ -173,13 +173,13 @@
 
   function groupIds(g) {
     if (Array.isArray(g.instances) && g.instances.length) {
-      return g.instances.map((i) => Number(i.id));
+      return g.instances.map((i) => i.id);
     }
     if (g.ids) {
       return String(g.ids)
         .split(",")
-        .map((x) => Number(trimStr(x)))
-        .filter((n) => n > 0);
+        .map((x) => trimStr(x))
+        .filter((id) => id);
     }
     return [];
   }
@@ -223,19 +223,19 @@
           ? (Number(r.y1) - Number(r.y0)) * scale
           : undefined;
     return {
-      id: Number(r.id),
+      id: r.id,
       text: r.text || r.matched_text || "",
       context: r.context || "",
       confidence: conf,
       page_no: Number(r.page_no != null ? r.page_no : r.page),
       status,
       band,
-      entity_id: r.entity_id != null ? Number(r.entity_id) : null,
+      entity_id: r.entity_id != null ? r.entity_id : null,
       entity_text: r.entity_text || r.canonical_text || "",
       kind: r.kind || "",
       flag_tag: r.flag_tag || "",
       reason: r.reason || "",
-      document_id: r.document_id != null ? Number(r.document_id) : docId,
+      document_id: r.document_id != null ? r.document_id : docId,
       x0: r.x0 != null ? Number(r.x0) : undefined,
       y0: r.y0 != null ? Number(r.y0) : undefined,
       x1: r.x1 != null ? Number(r.x1) : undefined,
@@ -275,7 +275,7 @@
       group_key: g.group_key,
       group_label: g.group_label || g.group_key,
       kind: g.kind || "",
-      entity_id: g.entity_id != null ? Number(g.entity_id) : null,
+      entity_id: g.entity_id != null ? g.entity_id : null,
       n: Number(g.n || instances.length || 0),
       doc_count: Number(g.doc_count || 0),
       page_count: Number(g.page_count || 0),
@@ -287,8 +287,8 @@
       ids: g.ids || "",
       group_band: g.group_band || (g.has_flagged ? "flagged" : "review"),
       instances: instances.map((i) => ({
-        id: Number(i.id),
-        document_id: Number(i.document_id),
+        id: i.id,
+        document_id: i.document_id,
         filename: i.filename || "",
         page_no: Number(i.page_no),
         text: i.text || "",
@@ -305,14 +305,14 @@
     const out = [];
     nodes.forEach((n) => {
       out.push({
-        id: Number(n.dataset.id),
+        id: n.dataset.id,
         text: n.dataset.text || "",
         context: n.dataset.context || "",
         confidence: Number(n.dataset.conf),
         page_no: Number(n.dataset.page),
         status: n.dataset.status || "pending",
         band: bandOf(n.dataset.conf, n.dataset.band),
-        entity_id: n.dataset.entityId ? Number(n.dataset.entityId) : null,
+        entity_id: n.dataset.entityId || null,
         entity_text: n.dataset.entityText || "",
         kind: n.dataset.kind || "",
         flag_tag: n.dataset.flagTag || "",
@@ -372,7 +372,7 @@
    */
   function syntheticPendingGroup() {
     const pending = suggestions.filter(
-      (s) => s.status === "pending" && Number(s.document_id || docId) === docId
+      (s) => s.status === "pending" && (s.document_id || docId) === docId
     );
     if (!pending.length) return null;
     const insts = pending.map((s) => ({
@@ -722,7 +722,7 @@
             escapeHtml(inst.text) +
             '</div><div class="ctx">' +
             highlightContext(inst.context, inst.text) +
-            (inst.filename && Number(inst.document_id) !== docId
+            (inst.filename && inst.document_id !== docId
               ? ' <span class="ek">· ' + escapeHtml(inst.filename) + "</span>"
               : "") +
             "</div></div>" +
@@ -768,7 +768,7 @@
     });
     els.qList.querySelectorAll(".sugg[data-id]").forEach((node) => {
       node.addEventListener("click", (e) => {
-        const id = Number(node.dataset.id);
+        const id = node.dataset.id;
         const gi = residualGroups.findIndex(
           (g) => g.group_key === node.dataset.groupKey
         );
@@ -811,16 +811,16 @@
     const inst = currentInstance();
     if (!inst) return;
     // sync page mark if same doc/page
-    if (Number(inst.document_id) === docId && inst.page_no === pageNo) {
+    if (inst.document_id === docId && inst.page_no === pageNo) {
       const s = findById(inst.id);
       if (s) {
         const mark = setMarkCurrent(s);
         if (opts.scrollPage && mark) scrollMarkIntoView(mark);
       }
-    } else if (opts.navigate && Number(inst.document_id) === docId && inst.page_no !== pageNo) {
+    } else if (opts.navigate && inst.document_id === docId && inst.page_no !== pageNo) {
       window.location.href =
         "/documents/" + docId + "/pages/" + inst.page_no + "#s" + inst.id;
-    } else if (opts.navigate && Number(inst.document_id) !== docId) {
+    } else if (opts.navigate && inst.document_id !== docId) {
       window.location.href =
         "/documents/" + inst.document_id + "/pages/" + inst.page_no + "#s" + inst.id;
     }
@@ -1560,7 +1560,7 @@
     els.marks.addEventListener("click", (e) => {
       const el = e.target.closest(".mark");
       if (!el || !el.dataset.id) return;
-      const id = Number(el.dataset.id);
+      const id = el.dataset.id;
       // find in residual groups
       for (let gi = 0; gi < residualGroups.length; gi++) {
         const g = residualGroups[gi];
@@ -1580,9 +1580,10 @@
   }
 
   function focusFromHash() {
-    const m = /^#s(\d+)/.exec(window.location.hash || "");
+    // Opaque string suggestion ids (uuid), not legacy integer ids.
+    const m = /^#s(.+)/.exec(window.location.hash || "");
     if (!m) return;
-    const id = Number(m[1]);
+    const id = m[1];
     for (let gi = 0; gi < residualGroups.length; gi++) {
       const g = residualGroups[gi];
       const ii = g.instances.findIndex((i) => i.id === id);

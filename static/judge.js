@@ -152,7 +152,8 @@
       .sort((a, b) => a.judge_id - b.judge_id);
     const head = rows[0];
     const panel = {
-      suggestion_id: Number(head.suggestion_id),
+      suggestion_id:
+        head.suggestion_id != null ? String(head.suggestion_id) : "",
       panel_confidence: Number(
         head.panel_confidence != null ? head.panel_confidence : head.confidence
       ),
@@ -174,15 +175,20 @@
   }
 
   async function fetchJudges(id) {
-    if (cache.has(id)) return cache.get(id);
+    const sid = id != null ? String(id) : "";
+    if (!sid) return null;
+    if (cache.has(sid)) return cache.get(sid);
     try {
-      const res = await fetch("/api/suggestions/" + id + "/judges", {
-        headers: { Accept: "application/json" },
-      });
+      const res = await fetch(
+        "/api/suggestions/" + encodeURIComponent(sid) + "/judges",
+        {
+          headers: { Accept: "application/json" },
+        }
+      );
       if (!res.ok) return null;
       const data = await res.json();
       const pack = normalizeVotes(extractRows(data));
-      if (pack) cache.set(id, pack);
+      if (pack) cache.set(sid, pack);
       return pack;
     } catch (_) {
       return null;
@@ -332,10 +338,10 @@
 
   function currentSuggestionId() {
     const cur = document.querySelector(".sugg.current[data-id]");
-    if (cur) return Number(cur.dataset.id);
-    // hash #s123
-    const m = (location.hash || "").match(/^#s(\d+)/);
-    if (m) return Number(m[1]);
+    if (cur && cur.dataset.id) return String(cur.dataset.id);
+    // hash #s<opaque-id> (uuid or legacy integer)
+    const m = (location.hash || "").match(/^#s(.+)/);
+    if (m && m[1]) return m[1];
     return null;
   }
 
@@ -355,7 +361,7 @@
         }
         return;
       }
-      const id = Number(row.dataset.id);
+      const id = row.dataset.id ? String(row.dataset.id) : "";
       if (!id) return;
       jobs.push(
         fetchJudges(id).then((pack) => {

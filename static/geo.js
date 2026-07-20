@@ -16,23 +16,25 @@
 
   function bootCaseId(root) {
     if (root && root.dataset && root.dataset.caseId) {
-      const n = Number(root.dataset.caseId);
-      if (Number.isFinite(n) && n > 0) return n;
+      const s = String(root.dataset.caseId).trim();
+      if (s) return s;
     }
     const body = document.body;
     if (body && body.dataset && body.dataset.caseId) {
-      const n = Number(body.dataset.caseId);
-      if (Number.isFinite(n) && n > 0) return n;
+      const s = String(body.dataset.caseId).trim();
+      if (s) return s;
     }
     try {
       const boot = JSON.parse(document.getElementById("boot-data").textContent);
-      if (boot && boot.caseId != null) return Number(boot.caseId);
+      if (boot && boot.caseId != null && String(boot.caseId).trim() !== "")
+        return String(boot.caseId);
     } catch (_) {
       /* */
     }
-    const m = /^\/cases\/(\d+)/.exec(window.location.pathname || "");
-    if (m) return Number(m[1]);
-    return 1;
+    // case id is an opaque natural-key string (e.g. "24-001001")
+    const m = /^\/cases\/([^/]+)/.exec(window.location.pathname || "");
+    if (m) return decodeURIComponent(m[1]);
+    return "1";
   }
 
   function esc(s) {
@@ -80,7 +82,7 @@
 
   /** @type {Array} */
   let points = [];
-  /** @type {number|null} */
+  /** @type {string|null} */
   let activeEntityId = null;
 
   function showErr(msg) {
@@ -126,7 +128,7 @@
       const pt = toSvg(r.map_x, r.map_y);
       const r0 = radiusFor(r.suggestion_count);
       const isStreet = !!r.is_street_fp;
-      const eid = Number(r.entity_id);
+      const eid = String(r.entity_id);
       const on = activeEntityId != null && eid === activeEntityId;
       const dim = activeEntityId != null && eid !== activeEntityId;
       const cls =
@@ -179,8 +181,8 @@
           ev.preventDefault();
           ev.stopPropagation();
         }
-        const eid = Number(el.getAttribute("data-entity-id"));
-        if (!Number.isFinite(eid)) return;
+        const eid = el.getAttribute("data-entity-id");
+        if (!eid) return;
         if (activeEntityId === eid) {
           clearFilter();
         } else {
@@ -208,8 +210,8 @@
     card.classList.add("geo-filtering");
     let hitEl = null;
     ents.forEach((el) => {
-      const eid = Number(el.dataset.entityId);
-      const hit = eid === entityId;
+      const eid = String(el.dataset.entityId || "");
+      const hit = eid === String(entityId);
       el.classList.toggle("geo-hit", hit);
       el.classList.toggle("geo-dim", !hit);
       if (hit) hitEl = el;
@@ -220,9 +222,10 @@
   }
 
   function filterEntity(entityId) {
-    const row = points.find((p) => Number(p.entity_id) === Number(entityId));
+    const eid = String(entityId);
+    const row = points.find((p) => String(p.entity_id) === eid);
     if (!row) return;
-    activeEntityId = Number(entityId);
+    activeEntityId = eid;
     paintDots();
     applyEntityListFilter(activeEntityId);
 
@@ -295,8 +298,8 @@
       }
       if (!Array.isArray(rows)) rows = rows ? [rows] : [];
       points = rows.map((r) => ({
-        entity_id: Number(r.entity_id),
-        case_id: Number(r.case_id),
+        entity_id: r.entity_id != null ? String(r.entity_id) : "",
+        case_id: r.case_id != null ? String(r.case_id) : "",
         kind: r.kind,
         canonical_text: r.canonical_text,
         city: r.city,
@@ -309,7 +312,8 @@
         pending_count: Number(r.pending_count) || 0,
         accepted_count: Number(r.accepted_count) || 0,
         rejected_count: Number(r.rejected_count) || 0,
-        first_document_id: r.first_document_id,
+        first_document_id:
+          r.first_document_id != null ? String(r.first_document_id) : r.first_document_id,
         first_page_no: r.first_page_no,
         is_schematic: true,
       }));

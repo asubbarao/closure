@@ -24,8 +24,9 @@
 
   const boot = bootData();
   const body = document.body;
-  const docId = Number(boot.docId || body.dataset.docId || 0);
-  const caseId = Number(boot.caseId || body.dataset.caseId || 0);
+  // doc/case ids are opaque strings (uuid / natural-key); pageNo stays numeric
+  const docId = String(boot.docId || body.dataset.docId || "").trim();
+  const caseId = String(boot.caseId || body.dataset.caseId || "").trim();
   const pageNo = Number(boot.pageNo || body.dataset.pageNo || 1);
   const actor = boot.actor || body.dataset.actor || ACTOR;
   const standalone = body.dataset.remainderStandalone === "1";
@@ -129,8 +130,8 @@
   }
 
   function apiUrl() {
-    if (docId > 0) return "/api/documents/" + docId + "/missed";
-    if (caseId > 0) return "/api/cases/" + caseId + "/missed";
+    if (docId) return "/api/documents/" + encodeURIComponent(docId) + "/missed";
+    if (caseId) return "/api/cases/" + encodeURIComponent(caseId) + "/missed";
     return null;
   }
 
@@ -187,7 +188,7 @@
     rows.forEach(function (r) {
       if (Number(r.page) !== currentPage) return;
       const div = document.createElement("div");
-      const laid = addedIds.has(Number(r.id));
+      const laid = addedIds.has(String(r.id));
       div.className = "rm-mark" + (laid ? " rm-laid" : "");
       div.style.left = Number(r.x0) * scale + "px";
       div.style.top = Number(r.y0) * scale + "px";
@@ -224,7 +225,7 @@
 
     list.innerHTML = sorted
       .map(function (r) {
-        const id = Number(r.id);
+        const id = String(r.id);
         const done = addedIds.has(id);
         const meta =
           kindLabel(r.kind) +
@@ -236,7 +237,7 @@
           '<div class="rm-row' +
           (done ? " rm-added" : "") +
           '" data-rm-id="' +
-          id +
+          escapeHtml(id) +
           '">' +
           '<span class="rm-sw"></span>' +
           '<div class="rm-body">' +
@@ -256,7 +257,7 @@
           '<button type="button" class="rm-add' +
           (done ? " rm-done" : "") +
           '" data-rm-id="' +
-          id +
+          escapeHtml(id) +
           '"' +
           (done ? " disabled" : "") +
           ">" +
@@ -271,9 +272,9 @@
       btn.addEventListener("click", function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
-        const id = Number(btn.getAttribute("data-rm-id"));
+        const id = btn.getAttribute("data-rm-id");
         const row = items.find(function (x) {
-          return Number(x.id) === id;
+          return String(x.id) === String(id);
         });
         if (row) void addAsRedaction(row, btn);
       });
@@ -283,7 +284,7 @@
   }
 
   async function addAsRedaction(row, btn) {
-    const id = Number(row.id);
+    const id = String(row.id);
     if (!docId || inflight.has(id) || addedIds.has(id)) return;
     inflight.add(id);
     if (btn) {
@@ -304,7 +305,7 @@
       actor: actor,
       reason: "missed by AI · remainder scan"
     });
-    const url = "/api/documents/" + docId + "/add?" + qs.toString();
+    const url = "/api/documents/" + encodeURIComponent(docId) + "/add?" + qs.toString();
 
     try {
       // quackapi POST routes require a JSON body (empty object) — bare POST → 400.
@@ -366,9 +367,11 @@
         // Prefer this document when case-level payload is mixed.
         return row;
       });
-      if (docId > 0) {
+      if (docId) {
         items = items.filter(function (row) {
-          return Number(row.document_id) === docId || row.document_id == null;
+          return (
+            row.document_id == null || String(row.document_id) === docId
+          );
         });
       }
       renderList();

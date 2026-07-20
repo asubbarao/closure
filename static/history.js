@@ -10,17 +10,25 @@
   function bootCaseId() {
     try {
       const boot = JSON.parse(document.getElementById("boot-data").textContent);
-      if (boot && boot.caseId != null) return Number(boot.caseId);
+      if (boot && boot.caseId != null && String(boot.caseId).trim() !== "")
+        return String(boot.caseId);
     } catch (_) {
       /* fall through */
     }
     const body = document.body;
-    if (body && body.dataset && body.dataset.caseId) return Number(body.dataset.caseId);
+    if (body && body.dataset && body.dataset.caseId) {
+      const s = String(body.dataset.caseId).trim();
+      if (s) return s;
+    }
     const el = document.querySelector("[data-case-id]");
-    if (el) return Number(el.getAttribute("data-case-id"));
-    const m = /^\/cases\/(\d+)/.exec(window.location.pathname || "");
-    if (m) return Number(m[1]);
-    return 1;
+    if (el) {
+      const s = String(el.getAttribute("data-case-id") || "").trim();
+      if (s) return s;
+    }
+    // case id is an opaque natural-key string (e.g. "24-001001")
+    const m = /^\/cases\/([^/]+)/.exec(window.location.pathname || "");
+    if (m) return decodeURIComponent(m[1]);
+    return "1";
   }
 
   function bootActor() {
@@ -158,9 +166,12 @@
 
   async function loadHistory() {
     try {
-      const res = await fetch("/api/cases/" + caseId + "/history", {
-        headers: { Accept: "application/json" },
-      });
+      const res = await fetch(
+        "/api/cases/" + encodeURIComponent(String(caseId)) + "/history",
+        {
+          headers: { Accept: "application/json" },
+        }
+      );
       if (!res.ok) {
         els.list.innerHTML =
           '<div class="hist-empty">Could not load history (HTTP ' + res.status + ").</div>";
@@ -198,9 +209,12 @@
       // Peek label for toast
       let label = "latest batch";
       try {
-        const st = await fetch("/api/undo/status?case_id=" + caseId, {
-          headers: { Accept: "application/json" },
-        });
+        const st = await fetch(
+          "/api/undo/status?case_id=" + encodeURIComponent(String(caseId)),
+          {
+            headers: { Accept: "application/json" },
+          }
+        );
         if (st.ok) {
           const j = await st.json();
           const row = Array.isArray(j) ? j[0] : j;
@@ -243,11 +257,14 @@
       const q = new URLSearchParams();
       q.set("batch_id", batchId);
       q.set("actor", actor);
-      const res = await fetch("/api/cases/" + caseId + "/restore?" + q.toString(), {
-        method: "POST",
-        headers: { Accept: "application/json", "Content-Type": "application/json" },
-        body: "{}",
-      });
+      const res = await fetch(
+        "/api/cases/" + encodeURIComponent(String(caseId)) + "/restore?" + q.toString(),
+        {
+          method: "POST",
+          headers: { Accept: "application/json", "Content-Type": "application/json" },
+          body: "{}",
+        }
+      );
       if (!res.ok && res.status !== 200) {
         toast("Restore failed (HTTP " + res.status + ")");
         return;

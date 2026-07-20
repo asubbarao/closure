@@ -14,9 +14,9 @@
   var TOAST_MS = 8000;
 
   var params = new URLSearchParams(window.location.search);
-  var docId = parseInt(params.get("doc") || "1", 10);
+  var docId = params.get("doc") || "1";
   var sugParam = params.get("sug");
-  var sugId = sugParam ? parseInt(sugParam, 10) : null;
+  var sugId = sugParam || null;
 
   var state = {
     doc: {
@@ -221,8 +221,8 @@
     var html = await res.text();
     var title = html.match(/Review ·\s*([^<]+?)\.pdf/i);
     if (title) state.doc.filename = title[1].trim();
-    var caseLink = html.match(/\/cases\/(\d+)/);
-    if (caseLink) state.doc.case_id = parseInt(caseLink[1], 10);
+    var caseLink = html.match(/\/cases\/([^/"'?\s]+)/);
+    if (caseLink) state.doc.case_id = caseLink[1];
     var caseNo = html.match(/CASE\s+([0-9-]+)/i);
     if (caseNo) state.doc.case_no = caseNo[1];
     var pageCount = html.match(/PAGE\s+\d+\s*\/\s*(\d+)/i);
@@ -245,7 +245,7 @@
       last = await fetchJson(paths[i]);
       if (last.ok) {
         state.docSuggestions = normalizeList(last.data).map(function (r) {
-          return Object.assign({}, r, { id: Number(r.id) });
+          return Object.assign({}, r, { id: r.id != null ? String(r.id) : r.id });
         });
         return last;
       }
@@ -268,12 +268,12 @@
         if (!probe.ok) continue;
         var rows = normalizeList(probe.data);
         var hit = rows.some(function (r) {
-          return Number(r.document_id) === docId;
+          return String(r.document_id) === String(docId);
         });
         if (hit) {
-          state.doc.case_id = c;
+          state.doc.case_id = String(c);
           state.caseSuggestions = rows.map(function (r) {
-            return Object.assign({}, r, { id: Number(r.id) });
+            return Object.assign({}, r, { id: r.id != null ? String(r.id) : r.id });
           });
           return probe;
         }
@@ -287,17 +287,18 @@
       return res;
     }
     state.caseSuggestions = normalizeList(res.data).map(function (r) {
-      return Object.assign({}, r, { id: Number(r.id) });
+      return Object.assign({}, r, { id: r.id != null ? String(r.id) : r.id });
     });
     return res;
   }
 
   function byId(id) {
-    id = Number(id);
+    if (id == null) return null;
+    id = String(id);
     var pool = state.caseSuggestions.length ? state.caseSuggestions : state.docSuggestions;
-    for (var i = 0; i < pool.length; i++) if (Number(pool[i].id) === id) return pool[i];
+    for (var i = 0; i < pool.length; i++) if (String(pool[i].id) === id) return pool[i];
     for (var j = 0; j < state.docSuggestions.length; j++) {
-      if (Number(state.docSuggestions[j].id) === id) return state.docSuggestions[j];
+      if (String(state.docSuggestions[j].id) === id) return state.docSuggestions[j];
     }
     return null;
   }
@@ -329,25 +330,25 @@
       return isPending(s) && (s.flag_tag === "false_positive" || bandOf(s) === "flagged");
     });
     if (fp) {
-      state.currentId = Number(fp.id);
+      state.currentId = String(fp.id);
       return;
     }
     var pend = state.docSuggestions.find(isPending);
     if (pend) {
-      state.currentId = Number(pend.id);
+      state.currentId = String(pend.id);
       return;
     }
-    if (state.docSuggestions[0]) state.currentId = Number(state.docSuggestions[0].id);
+    if (state.docSuggestions[0]) state.currentId = String(state.docSuggestions[0].id);
   }
 
   function setStatusLocal(ids, status) {
     var set = {};
     ids.forEach(function (id) {
-      set[Number(id)] = true;
+      set[String(id)] = true;
     });
     function bump(arr) {
       arr.forEach(function (s) {
-        if (set[Number(s.id)]) s.status = status;
+        if (set[String(s.id)]) s.status = status;
       });
     }
     bump(state.docSuggestions);
@@ -467,7 +468,7 @@
     setButtonsBusy(true);
     var reason = auditReasonLabel(s);
     var ids = matches.map(function (m) {
-      return Number(m.id);
+      return String(m.id);
     });
     var responses = [];
     try {
@@ -620,7 +621,7 @@
     });
     el.markLayer.innerHTML = "";
     marks.forEach(function (m) {
-      var isCur = Number(m.id) === Number(state.currentId);
+      var isCur = String(m.id) === String(state.currentId);
       var box = boxPx(m);
       var div = document.createElement("div");
       div.className = "mark " + markClass(m, isCur) + (isCur ? " current" : "");
@@ -632,7 +633,7 @@
       div.dataset.id = m.id;
       div.addEventListener("click", function (ev) {
         ev.stopPropagation();
-        state.currentId = Number(m.id);
+        state.currentId = String(m.id);
         // update URL without reload
         var u = new URL(window.location.href);
         u.searchParams.set("doc", String(docId));
@@ -806,7 +807,7 @@
     var rows = state.docSuggestions.slice().sort(function (a, b) {
       var ap = Number(a.page_no) - Number(b.page_no);
       if (ap) return ap;
-      return Number(a.id) - Number(b.id);
+      return String(a.id).localeCompare(String(b.id));
     });
     if (!rows.length) {
       el.qList.innerHTML = '<div class="empty-q">No suggestions for this document.</div>';
@@ -814,7 +815,7 @@
     }
     el.qList.innerHTML = rows
       .map(function (r) {
-        var isCur = Number(r.id) === Number(state.currentId);
+        var isCur = String(r.id) === String(state.currentId);
         var st = statusOf(r);
         var cls = "sugg";
         if (isCur) cls += " current";
@@ -851,7 +852,7 @@
 
     el.qList.querySelectorAll(".sugg").forEach(function (node) {
       node.addEventListener("click", function () {
-        state.currentId = Number(node.dataset.id);
+        state.currentId = String(node.dataset.id);
         var u = new URL(window.location.href);
         u.searchParams.set("doc", String(docId));
         u.searchParams.set("sug", String(state.currentId));
@@ -872,15 +873,15 @@
     var rows = state.docSuggestions.slice().sort(function (a, b) {
       var ap = Number(a.page_no) - Number(b.page_no);
       if (ap) return ap;
-      return Number(a.id) - Number(b.id);
+      return String(a.id).localeCompare(String(b.id));
     });
     if (!rows.length) return;
     var idx = rows.findIndex(function (r) {
-      return Number(r.id) === Number(state.currentId);
+      return String(r.id) === String(state.currentId);
     });
     if (idx < 0) idx = 0;
     else idx = Math.max(0, Math.min(rows.length - 1, idx + delta));
-    state.currentId = Number(rows[idx].id);
+    state.currentId = String(rows[idx].id);
     var u = new URL(window.location.href);
     u.searchParams.set("sug", String(state.currentId));
     history.replaceState(null, "", u.toString());
@@ -918,7 +919,7 @@
         var m = state.docSuggestions.find(function (s) {
           return Number(s.page_no) === state.pageNo;
         });
-        if (m) state.currentId = Number(m.id);
+        if (m) state.currentId = String(m.id);
         render();
       }
     });
@@ -928,7 +929,7 @@
         var m = state.docSuggestions.find(function (s) {
           return Number(s.page_no) === state.pageNo;
         });
-        if (m) state.currentId = Number(m.id);
+        if (m) state.currentId = String(m.id);
         render();
       }
     });
@@ -970,7 +971,7 @@
       await loadDocSuggestions();
       // Enrich case_id from suggestion rows if present
       if (!state.doc.case_id && state.docSuggestions[0] && state.docSuggestions[0].case_id) {
-        state.doc.case_id = Number(state.docSuggestions[0].case_id);
+        state.doc.case_id = String(state.docSuggestions[0].case_id);
       }
       if (!state.doc.filename && state.docSuggestions[0] && state.docSuggestions[0].filename) {
         state.doc.filename = state.docSuggestions[0].filename.replace(/\.pdf$/i, "");
