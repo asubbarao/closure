@@ -22,12 +22,16 @@ DB="${DB:-closure.db}"
 # Real quackapi binary (v1.5.4) + built extension. System/homebrew duckdb may
 # load the .duckdb_extension table functions but will not activate CREATE ROUTE
 # unless it is the quackapi-built shell (parser extension registration).
-DUCKDB_BIN="${DUCKDB_BIN:-/Users/aloksubbarao/personal/quackapi/build/release/duckdb}"
-QUACKAPI_EXT="${QUACKAPI_EXT:-/Users/aloksubbarao/personal/quackapi/build/release/extension/quackapi/quackapi.duckdb_extension}"
+# Default layout: quackapi checked out as a SIBLING of this repo; override
+# with QUACKAPI_ROOT (or DUCKDB_BIN / QUACKAPI_EXT individually).
+REPO_ROOT="$(pwd)"
+QUACKAPI_ROOT="${QUACKAPI_ROOT:-$(dirname "$REPO_ROOT")/quackapi}"
+DUCKDB_BIN="${DUCKDB_BIN:-$QUACKAPI_ROOT/build/release/duckdb}"
+QUACKAPI_EXT="${QUACKAPI_EXT:-$QUACKAPI_ROOT/build/release/extension/quackapi/quackapi.duckdb_extension}"
 
 if [[ ! -x "$DUCKDB_BIN" ]]; then
   echo "error: duckdb binary not found at $DUCKDB_BIN" >&2
-  echo "  build quackapi (GEN=ninja make release) or set DUCKDB_BIN" >&2
+  echo "  build quackapi (GEN=ninja make release) or set QUACKAPI_ROOT / DUCKDB_BIN" >&2
   exit 1
 fi
 if [[ ! -f "$QUACKAPI_EXT" ]]; then

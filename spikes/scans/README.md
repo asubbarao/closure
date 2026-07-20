@@ -17,10 +17,10 @@ Proves the product rule: image-only pages must either **OCR into `words`**
 From repo root:
 
 ```bash
-/Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned :memory: \
+../quackapi/build/release/duckdb -unsigned :memory: \
   -c ".read spikes/scans/01_ocr_probe.sql" | tee spikes/scans/out/01_probe.log
 
-/Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned :memory: \
+../quackapi/build/release/duckdb -unsigned :memory: \
   -c ".read spikes/scans/02_ingest_scan.sql" | tee spikes/scans/out/02_ingest.log
 ```
 

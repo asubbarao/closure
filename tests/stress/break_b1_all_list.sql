@@ -15,7 +15,7 @@
 INSTALL pdf FROM community;
 LOAD pdf;
 SET memory_limit = '256MB';
-SET temp_directory = '/tmp/closure_spill';
+SET temp_directory = '.tmp/spill';
 SET preserve_insertion_order = false;
 SET threads = 4;
 

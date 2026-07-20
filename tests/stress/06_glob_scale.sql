@@ -4,7 +4,7 @@
 -- Note: read_pdf_words takes VARCHAR path/glob (not VARCHAR[]).
 
 SET memory_limit = '1GB';
-SET temp_directory = '/tmp/closure_spill';
+SET temp_directory = '.tmp/spill';
 SET preserve_insertion_order = false;
 SET threads = 4;
 

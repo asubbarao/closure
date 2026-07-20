@@ -62,7 +62,6 @@ samples/stress/run.err
 # Public-sample pipeline proof renders (regenerate via pdf_to_png)
 samples/public/_renders/
 
-/tmp/closure_spill/
 .tmp/
 .playwright-mcp/
 samples/public/govinfo_usreports_vol5.pdf

@@ -3,7 +3,7 @@ INSTALL pdf FROM community;
 LOAD pdf;
 INSTALL tera FROM community;
 LOAD tera;
-LOAD '/Users/aloksubbarao/personal/quackapi/build/release/extension/quackapi/quackapi.duckdb_extension';
+LOAD '../quackapi/build/release/extension/quackapi/quackapi.duckdb_extension';
 
 .read server/ingest.sql
 .read server/pdf_io.sql

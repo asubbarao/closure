@@ -10,8 +10,8 @@ This directory is **standalone dev tooling** — its own `package.json`,
 ## Prerequisites
 
 - Node 18+ (Node 20/24 fine)
-- App binary: `/Users/aloksubbarao/personal/quackapi/build/release/duckdb`
-- Repo root: `/Users/aloksubbarao/personal/closure`
+- App binary: the quackapi-built duckdb (`$QUACKAPI_ROOT/build/release/duckdb`;
+  default layout is `../quackapi` next to this repo — see `run.sh`)
 
 ## Boot the app (fresh)
 
@@ -29,7 +29,7 @@ mkdir -p exports/decisions
 printf '%s\n' '{"kind":"sentinel"}' > exports/decisions/_sentinel.json
 
 # boot (blocks — leave this terminal open)
-/Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned closure.db -c ".read server/app.sql"
+"${DUCKDB_BIN:-../quackapi/build/release/duckdb}" -unsigned closure.db -c ".read server/app.sql"
 ```
 
 Wait until the home route is healthy:

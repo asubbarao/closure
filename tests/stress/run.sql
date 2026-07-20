@@ -2,7 +2,7 @@
 --
 -- From repo root (DuckDB ≥ 1.5.4 required for full pdf API):
 --
---   mkdir -p samples/stress samples/stress/fail samples/stress/glob /tmp/closure_spill
+--   mkdir -p samples/stress samples/stress/fail samples/stress/glob .tmp/spill
 --   duckdb154 -unsigned 2>samples/stress/run.err <<'SQL'
 --   .read tests/stress/run.sql
 --   SQL

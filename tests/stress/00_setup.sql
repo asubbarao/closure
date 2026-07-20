@@ -1,7 +1,7 @@
 -- 00_setup.sql — extensions, budgets, metrics sink, helpers.
 -- Requires DuckDB ≥ 1.5.4 (community pdf: pdf_info, pdf_encrypt, pdf_redact, …).
 -- Run from repo root with:
---   mkdir -p samples/stress samples/stress/fail samples/stress/glob /tmp/closure_spill
+--   mkdir -p samples/stress samples/stress/fail samples/stress/glob .tmp/spill
 --   duckdb154 -unsigned -c ".read tests/stress/run.sql"
 --
 -- Constraint: pure DuckDB SQL + community `pdf` only (no Python).
@@ -12,7 +12,7 @@ LOAD pdf;
 -- Default tight budget for extraction / break probes.
 -- Generators raise this temporarily then re-apply.
 SET memory_limit = '512MB';
-SET temp_directory = '/tmp/closure_spill';
+SET temp_directory = '.tmp/spill';
 SET preserve_insertion_order = false;
 SET threads = 4;
 

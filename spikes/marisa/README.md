@@ -25,7 +25,7 @@ osx_arm64 community builds:
 
 ## Run
 
-From **repo root** (`/Users/aloksubbarao/personal/closure`):
+From **repo root**:
 
 ```bash
 bash spikes/marisa/run_bench.sh

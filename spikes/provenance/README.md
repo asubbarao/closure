@@ -12,7 +12,7 @@ INSTALL pdf FROM community; LOAD pdf;
 Python 3 + pypdf (only to rebuild multi-rev fixtures)
 ```
 
-From **repo root** (`/Users/aloksubbarao/personal/closure`):
+From **repo root**:
 
 ```bash
 # Rebuild incremental-update fixtures (optional; committed fixtures exist)

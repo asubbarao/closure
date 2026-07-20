@@ -3,7 +3,7 @@
 -- Question under test: does the pipeline stream+spill or OOM?
 
 SET memory_limit = '512MB';
-SET temp_directory = '/tmp/closure_spill';
+SET temp_directory = '.tmp/spill';
 SET preserve_insertion_order = false;
 SET threads = 4;
 

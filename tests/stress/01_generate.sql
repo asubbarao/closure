@@ -4,7 +4,7 @@
 -- Artifact: samples/stress/monster.pdf
 
 SET memory_limit = '2GB';
-SET temp_directory = '/tmp/closure_spill';
+SET temp_directory = '.tmp/spill';
 SET preserve_insertion_order = false;
 SET threads = 4;
 

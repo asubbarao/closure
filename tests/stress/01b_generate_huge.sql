@@ -7,7 +7,7 @@
 --             -c ".read tests/stress/01b_generate_huge.sql"
 
 SET memory_limit = '4GB';
-SET temp_directory = '/tmp/closure_spill';
+SET temp_directory = '.tmp/spill';
 SET preserve_insertion_order = false;
 SET threads = 4;
 

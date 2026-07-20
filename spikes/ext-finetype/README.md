@@ -21,7 +21,7 @@ on local v1.5.3 osx_arm64.
 
 ## Run
 
-From **repo root** (`/Users/aloksubbarao/personal/closure`):
+From **repo root**:
 
 ```bash
 duckdb -unsigned -markdown < spikes/ext-finetype/00_setup.sql

@@ -4,68 +4,63 @@
 -- single declarative surface. Each row obeys one env-override rule:
 -- CLOSURE_<KEY> wins when set and non-empty, else the committed default.
 --
--- Two consumption shapes (both derive from the same cfg_* macros — no drift):
+-- NO MACROS. Two consumption shapes:
 --   * plain SQL (messages, template stamping) → scalar subquery on app_config
---   * table-function args / quackapi_serve()  → cfg_* macro. The getenv() CASE
---     folds to a constant at bind; scalar subqueries are rejected there
---     ("Binder Error: Table function cannot contain subqueries").
--- The macros are the wall-crossers for literal-only argument positions; each
--- default is written exactly once, in its macro. Loaded FIRST by app.sql.
+--   * table-function args / quackapi_serve()  → those positions reject
+--     subqueries at bind ("Table function cannot contain subqueries"), so each
+--     such call site inlines the same bare CASE getenv('CLOSURE_<KEY>') … END,
+--     which folds to a constant. The default literal is therefore committed
+--     twice — once here (the record) and once at the fold-only call site (the
+--     wire); grep CLOSURE_ to see every pair.
 
--- NULL-retaining override rule: unset/empty env keeps the default; defaults
--- are never NULL, so config values are always concrete.
-CREATE OR REPLACE MACRO cfg_env(env_name, dflt) AS
-    CASE
-        WHEN getenv(env_name) IS NOT NULL AND length(getenv(env_name)) > 0
-        THEN getenv(env_name)
-        ELSE dflt
-    END;
-
-CREATE OR REPLACE MACRO cfg_port()        AS cfg_env('CLOSURE_PORT', '8117');
-CREATE OR REPLACE MACRO cfg_static_dir()  AS cfg_env('CLOSURE_STATIC_DIR', '.');
-CREATE OR REPLACE MACRO cfg_samples_dir() AS cfg_env('CLOSURE_SAMPLES_DIR', 'samples');
-CREATE OR REPLACE MACRO cfg_exports_dir() AS cfg_env('CLOSURE_EXPORTS_DIR', 'exports');
-
--- Read-side glob for the append-only decision log. COPY TO write targets are
--- grammar literals (no expressions) and stay on the default layout; overriding
--- this redirects READS only (e.g. replaying a copied log).
-CREATE OR REPLACE MACRO cfg_decisions_glob() AS
-    cfg_env('CLOSURE_DECISIONS_GLOB', cfg_exports_dir() || '/decisions/*.json');
-
--- Documented default for the boot wrapper only: LOAD accepts a string literal,
--- and the quackapi-built duckdb binary carries the extension statically —
--- app.sql never LOADs a hardcoded path (it asserts presence instead).
-CREATE OR REPLACE MACRO cfg_quackapi_ext() AS
-    cfg_env('CLOSURE_QUACKAPI_EXT',
-            '/Users/aloksubbarao/personal/quackapi/build/release/extension/quackapi/quackapi.duckdb_extension');
-
--- 'Reviewing as' identity: stamped into templates at load (see app.sql mount).
-CREATE OR REPLACE MACRO cfg_actor() AS cfg_env('CLOSURE_ACTOR', 'A. Subbarao');
-
--- The relation. Values call the macros above (single source of defaults);
--- source records which side of the override rule fired, per row.
 CREATE OR REPLACE TABLE app_config AS
-WITH resolved AS (
+WITH defaults AS (
     SELECT unnest([
-        {'key': 'port',           'value': cfg_port()},
-        {'key': 'static_dir',     'value': cfg_static_dir()},
-        {'key': 'samples_dir',    'value': cfg_samples_dir()},
-        {'key': 'exports_dir',    'value': cfg_exports_dir()},
-        {'key': 'decisions_glob', 'value': cfg_decisions_glob()},
-        {'key': 'quackapi_ext',   'value': cfg_quackapi_ext()},
-        {'key': 'actor',          'value': cfg_actor()}
+        {'key': 'port',        'dflt': '8117'},
+        {'key': 'static_dir',  'dflt': '.'},
+        {'key': 'samples_dir', 'dflt': 'samples'},
+        {'key': 'exports_dir', 'dflt': 'exports'},
+        -- Read-side glob for the append-only decision log. COPY TO write
+        -- targets are grammar literals (no expressions) and stay on the
+        -- default layout; this follows an overridden exports_dir unless
+        -- overridden itself.
+        {'key': 'decisions_glob',
+         'dflt': CASE WHEN getenv('CLOSURE_EXPORTS_DIR') IS NOT NULL
+                       AND length(getenv('CLOSURE_EXPORTS_DIR')) > 0
+                      THEN getenv('CLOSURE_EXPORTS_DIR') || '/decisions/*.json'
+                      ELSE 'exports/decisions/*.json'
+                 END},
+        -- Documented default for the boot wrapper only: the quackapi-built
+        -- duckdb binary carries the extension statically; app.sql asserts
+        -- presence instead of LOADing a hardcoded path. Default assumes the
+        -- sibling-checkout layout (../quackapi next to this repo); run.sh
+        -- resolves and exports the absolute path via CLOSURE_QUACKAPI_EXT.
+        {'key': 'quackapi_ext',
+         'dflt': '../quackapi/build/release/extension/quackapi/quackapi.duckdb_extension'},
+        -- 'Reviewing as' identity, stamped into templates at load (app.sql
+        -- mount replaces __ACTOR__ / __ACTOR_INITIALS__). No user login —
+        -- the OS user is the reviewer unless CLOSURE_ACTOR says otherwise.
+        {'key': 'actor',
+         'dflt': CASE WHEN getenv('USER') IS NOT NULL
+                       AND length(getenv('USER')) > 0
+                      THEN getenv('USER')
+                      ELSE 'reviewer'
+                 END}
     ], recursive := true)
 )
 SELECT
     key,
-    value,
-    CASE
-        WHEN getenv('CLOSURE_' || upper(key)) IS NOT NULL
-         AND length(getenv('CLOSURE_' || upper(key))) > 0
-        THEN 'env'
-        ELSE 'default'
+    CASE WHEN getenv('CLOSURE_' || upper(key)) IS NOT NULL
+          AND length(getenv('CLOSURE_' || upper(key))) > 0
+         THEN getenv('CLOSURE_' || upper(key))
+         ELSE dflt
+    END AS value,
+    CASE WHEN getenv('CLOSURE_' || upper(key)) IS NOT NULL
+          AND length(getenv('CLOSURE_' || upper(key))) > 0
+         THEN 'env'
+         ELSE 'default'
     END AS source
-FROM resolved;
+FROM defaults;
 
 SELECT 'app config' AS phase, key, value, source
 FROM app_config

@@ -15,7 +15,7 @@ osx_arm64 signed community builds (CDN HTTP 200 for v1.5.3 and v1.5.4):
 
 ## Run
 
-From **repo root** (`/Users/aloksubbarao/personal/closure`):
+From **repo root**:
 
 ```bash
 # Fit 1 — multi-format HTML/XML → words-shaped tokens + PII n-gram hits
