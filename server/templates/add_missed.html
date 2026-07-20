@@ -6,32 +6,48 @@
 <title>Closure — Add missed redaction</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#F4F5F6; --surface:#FFFFFF; --surface-2:#F9FAFB;
-  --ink:#191B1E; --sub:#5A5F66; --mut:#878C93; --ink-inv:#FFFFFF;
-  --line:#E4E6E9; --line-strong:#C9CCD1;
-  --amber-fill:rgba(252,196,25,.32); --amber-fill-strong:rgba(252,196,25,.55);
-  --amber-edge:#D99A06; --amber-text:#8A6A00; --amber-bg:#FFFBEE;
-  --red:#C03221; --red-soft:rgba(192,50,33,.07); --red-mid:rgba(192,50,33,.16); --red-text:#A02A1C;
-  --ok:#2F7D46; --ok-soft:rgba(47,125,70,.10);
-  --cur:#1D63ED; --cur-soft:rgba(29,99,237,.08);
-  --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,monospace;
-  --r-sm:5px; --r-md:8px; --r-lg:12px;
-  --shadow-panel:0 1px 3px rgba(25,27,30,.08),0 4px 12px rgba(25,27,30,.06);
-  --shadow-page:0 0 0 1px var(--line),0 2px 6px rgba(25,27,30,.07),0 12px 32px rgba(25,27,30,.10);
-  --shadow-float:0 8px 28px rgba(25,27,30,.22),0 0 0 1px var(--line-strong);
+  --ws:#E9ECF0; --panel:#FFFFFF; --line:#D6DCE3; --line2:#E4E8EE;
+  --ink:#1A2230; --ink2:#5A6577; --ink3:#8A94A6;
+  --black:#0B0E14;
+  --pend:#B45309; --pendbg:#FDF3E3; --pendline:#EBCB9A;
+  --acc:#1D4ED8; --accbg:#EBF0FE;
+  --rej:#B42318; --rejbg:#FDECEA;
+  --ok:#087443; --okbg:#E7F5EE;
+  --r:6px;
+  --sans:'IBM Plex Sans',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --shadow:0 1px 3px rgba(26,34,48,.08),0 4px 14px rgba(26,34,48,.06);
+  --shadow-float:0 8px 28px rgba(26,34,48,.22),0 0 0 1px var(--line);
+  /* legacy aliases so existing class rules keep working */
+  --bg:var(--ws); --surface:var(--panel); --surface-2:#F7F9FB;
+  --sub:var(--ink2); --mut:var(--ink3); --ink-inv:#FFFFFF;
+  --line-strong:var(--line);
+  --amber-fill:rgba(180,83,9,.18); --amber-fill-strong:rgba(180,83,9,.28);
+  --amber-edge:var(--pend); --amber-text:var(--pend); --amber-bg:var(--pendbg);
+  --red:var(--rej); --red-soft:var(--rejbg); --red-mid:rgba(180,35,24,.14); --red-text:var(--rej);
+  --ok-soft:var(--okbg);
+  --cur:var(--acc); --cur-soft:var(--accbg);
+  --r-sm:5px; --r-md:6px; --r-lg:8px;
+  --shadow-panel:var(--shadow);
+  --shadow-page:0 0 0 1px var(--line2),0 2px 6px rgba(26,34,48,.07),0 12px 32px rgba(26,34,48,.10);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased;font-feature-settings:"tnum"}
 
-.top{display:flex;align-items:center;gap:14px;height:52px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0}
-.brand{font-weight:700;font-size:15px;flex-shrink:0}.brand span{color:var(--amber-edge)}
+.top{display:flex;align-items:center;gap:14px;height:52px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line);flex-shrink:0}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;letter-spacing:-.01em;text-decoration:none;color:inherit;flex-shrink:0}
+.logo .bar{width:22px;height:12px;background:var(--black);border-radius:2px;position:relative}
+.logo .bar::after{content:"";position:absolute;right:-5px;top:3px;width:3px;height:6px;background:var(--pend);border-radius:1px}
+.brand{font-weight:700;font-size:15px;flex-shrink:0}.brand span{color:var(--pend)}
 .brand a{color:inherit;text-decoration:none}
 .top-div{width:1px;height:20px;background:var(--line);flex-shrink:0}
+.btn:focus-visible,.cat-btn:focus-visible,.btn-add:focus-visible,.btn-cancel:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.cat-btn:hover{border-color:var(--ink3)}
+.scope-row:focus-within{border-color:var(--acc)}
 .crumb{display:flex;align-items:baseline;gap:7px;min-width:0}
 .crumb .case{font-family:var(--mono);font-size:11.5px;color:var(--sub);text-decoration:none}
 .crumb .sep{color:var(--mut)}
@@ -140,13 +156,19 @@ body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--b
 .coord-line{margin-top:8px;font-family:var(--mono);font-size:10.5px;color:var(--mut);max-width:680px}
 .status-toast{
   position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
-  background:var(--ink);color:#fff;padding:10px 16px;border-radius:var(--r-md);
-  font-size:12.5px;font-weight:600;z-index:100;display:none;max-width:min(720px,92vw);
-  box-shadow:var(--shadow-float);font-family:var(--mono);white-space:pre-wrap;word-break:break-word;
+  background:var(--ink);color:#fff;padding:10px 16px;border-radius:var(--r);
+  font-size:13px;font-weight:500;z-index:100;display:none;max-width:min(560px,92vw);
+  box-shadow:var(--shadow-float);align-items:center;gap:12px;
 }
-.status-toast.show{display:block}
-.status-toast.err{background:var(--red)}
+.status-toast.show{display:flex}
+.status-toast.err{background:var(--rej)}
 .status-toast.ok{background:var(--ok)}
+.status-toast .t-msg{flex:1;min-width:0}
+.status-toast .t-undo{
+  font:inherit;font-weight:700;font-size:12px;padding:5px 10px;border-radius:4px;
+  border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;cursor:pointer;white-space:nowrap;
+}
+.status-toast .t-undo[hidden]{display:none!important}
 
 .queue{width:348px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--line);display:flex;flex-direction:column}
 .q-head{padding:14px 16px 0;flex-shrink:0}
@@ -196,7 +218,7 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);back
 <body>
 
 <header class="top">
-  <div class="brand"><a href="/">Closure<span>.</span></a></div>
+  <a class="logo" href="/"><span class="bar"></span>Clozure Redact</a>
   <div class="top-div"></div>
   <div class="crumb">
     <a class="case" id="crumb-case" href="#">CASE …</a>
@@ -209,6 +231,7 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);back
       <div class="meter"><i id="progress-meter"></i></div>
     </div>
     <span class="who">Reviewing as <b id="actor-label">A. Subbarao</b></span>
+    <button type="button" class="btn" id="btn-history" title="Version history (H)">History</button>
     <a class="btn" id="audit-link" href="#">Audit log</a>
     <a class="btn primary" id="exit-review" href="#">Back to review</a>
   </div>
@@ -273,8 +296,8 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);back
           </div>
         </div>
         <div class="add-popover-footer">
-          <button type="button" class="btn-cancel" id="btn-cancel">Cancel</button>
-          <button type="button" class="btn-add" id="btn-add" disabled>Add this redaction</button>
+          <button type="button" class="btn-cancel" id="btn-cancel">Cancel <kbd style="font-family:var(--mono);font-size:10px;opacity:.7">Esc</kbd></button>
+          <button type="button" class="btn-add" id="btn-add" disabled>Redact ⏎</button>
         </div>
         <div class="audit-note" id="audit-note">
           Will log as <b>reviewer-added</b> · <b id="audit-actor">A. Subbarao</b> · reason: missed by AI
@@ -324,7 +347,10 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);back
   </aside>
 </div>
 
-<div class="status-toast" id="toast" role="status"></div>
+<div class="status-toast" id="toast" role="status" aria-live="polite">
+  <span class="t-msg" id="toast-msg"></span>
+  <button type="button" class="t-undo" id="toast-undo" hidden>Undo</button>
+</div>
 
 <script>
   // Bootstrap params from the shell URL: /ui/add-missed?doc=&page=

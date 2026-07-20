@@ -6,84 +6,103 @@
 <title>Closure — Cases</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#F4F5F6; --surface:#FFFFFF; --surface-2:#F9FAFB;
-  --ink:#191B1E; --sub:#5A5F66; --mut:#878C93;
-  --line:#E4E6E9; --line-strong:#C9CCD1;
-  --amber-fill:rgba(252,196,25,.32); --amber-fill-strong:rgba(252,196,25,.55);
-  --amber-edge:#D99A06; --amber-text:#8A6A00; --amber-bg:#FFFBEE;
-  --red:#C03221; --red-soft:rgba(192,50,33,.07); --red-mid:rgba(192,50,33,.16); --red-text:#A02A1C;
-  --ok:#2F7D46; --ok-soft:rgba(47,125,70,.10);
-  --cur:#1D63ED; --cur-soft:rgba(29,99,237,.08);
-  --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,monospace;
-  --r-sm:5px; --r-md:8px; --r-lg:12px;
-  --shadow-panel:0 1px 3px rgba(25,27,30,.08),0 4px 12px rgba(25,27,30,.06);
+  --ws:#E9ECF0; --panel:#FFFFFF; --line:#D6DCE3; --line2:#E4E8EE;
+  --ink:#1A2230; --ink2:#5A6577; --ink3:#8A94A6;
+  --black:#0B0E14;
+  --pend:#B45309; --pendbg:#FDF3E3; --pendline:#EBCB9A;
+  --acc:#1D4ED8; --accbg:#EBF0FE;
+  --rej:#B42318; --rejbg:#FDECEA;
+  --ok:#087443; --okbg:#E7F5EE;
+  --r:6px;
+  --sans:'IBM Plex Sans',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --shadow:0 1px 3px rgba(26,34,48,.08),0 4px 14px rgba(26,34,48,.06);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;font-feature-settings:"tnum";min-height:100vh}
+body{font-family:var(--sans);font-size:13px;line-height:1.45;background:var(--ws);color:var(--ink);-webkit-font-smoothing:antialiased;min-height:100vh}
 
-.top{display:flex;align-items:center;gap:16px;height:52px;padding:0 20px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:100}
-.brand{font-weight:700;font-size:15px;flex-shrink:0}.brand span{color:var(--amber-edge)}
-.top-div{width:1px;height:20px;background:var(--line);flex-shrink:0}
-.crumb{font-family:var(--mono);font-size:11.5px;color:var(--sub)}
-.crumb b{color:var(--ink);font-weight:600}
-.top-right{margin-left:auto;display:flex;align-items:center;gap:12px}
-.who{font-size:12.5px;color:var(--sub)}.who b{color:var(--ink);font-weight:600}
+.appbar{background:var(--panel);border-bottom:1px solid var(--line);padding:0 20px;height:52px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;letter-spacing:-.01em;text-decoration:none;color:inherit}
+.logo .bar{width:22px;height:12px;background:var(--black);border-radius:2px;position:relative}
+.logo .bar::after{content:"";position:absolute;right:-5px;top:3px;width:3px;height:6px;background:var(--pend);border-radius:1px}
+.crumb{color:var(--ink2);font-size:12px}
+.appbar .sp{flex:1}
+.user{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2)}
+.avatar{width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600}
 
-.wrap{max-width:1200px;margin:0 auto;padding:30px 24px 80px}
+.wrap{padding:28px 20px 80px;max-width:1200px;margin:0 auto}
+h2.pagetitle{font-size:20px;font-weight:700;letter-spacing:-.02em;margin-bottom:4px}
+.subtitle{color:var(--ink2);font-size:12px;margin-bottom:20px;font-family:var(--mono)}
 
-.page-head{display:flex;align-items:flex-start;gap:28px;padding-bottom:22px;border-bottom:1px solid var(--line)}
-.ph-left h1{font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.2}
-.ph-left .sub{font-family:var(--mono);font-size:11.5px;color:var(--sub);margin-top:5px}
-.ph-right{margin-left:auto;display:flex;gap:24px;text-align:right;flex-shrink:0}
-.stat .v{font-family:var(--mono);font-size:24px;font-weight:600;display:block;line-height:1.1}
-.stat .v.warn{color:var(--amber-text)}.stat .v.alert{color:var(--red)}
-.stat .l{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin-top:3px}
+.statrow{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 16px;min-width:120px;flex:1;box-shadow:var(--shadow)}
+.stat .n{font-family:var(--mono);font-size:22px;font-weight:600;letter-spacing:-.02em}
+.stat .l{font-size:11px;color:var(--ink2);margin-top:2px}
+.stat.warn .n{color:var(--pend)}
 
-.case-card{display:block;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px 20px;box-shadow:var(--shadow-panel);text-decoration:none;color:inherit;transition:border-color .12s}
-.case-card:hover{border-color:var(--mut)}
-.case-card h2{font-size:16px;font-weight:700;margin-bottom:4px}
-.case-card .meta{font-family:var(--mono);font-size:11.5px;color:var(--sub);line-height:1.55}
+.case-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.case-card{
+  display:block;background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  padding:16px 18px;box-shadow:var(--shadow);text-decoration:none;color:inherit;
+  transition:border-color .12s,box-shadow .12s;
+}
+.case-card:hover{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc),var(--shadow)}
+.case-card:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.case-card h3{font-size:15px;font-weight:700;margin-bottom:6px;letter-spacing:-.01em}
+.case-card .meta{font-family:var(--mono);font-size:11.5px;color:var(--ink2);line-height:1.55}
 .case-card .meta b{color:var(--ink);font-weight:600}
-.case-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin-top:24px}
-.pill{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-top:10px}
-.p-ready{background:var(--amber-fill-strong);color:var(--amber-text)}
-.p-ok{background:var(--ok-soft);color:var(--ok)}
+.case-card .foot{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+.pill{font-family:var(--mono);font-size:10px;font-weight:600;padding:3px 8px;border-radius:3px;letter-spacing:.04em}
+.p-ready{background:var(--pendbg);color:var(--pend);border:1px solid var(--pendline)}
+.p-ok{background:var(--okbg);color:var(--ok);border:1px solid #BFE3CF}
+.p-link{margin-left:auto;font-size:12px;font-weight:600;color:var(--acc)}
+
+.empty{
+  padding:40px 24px;text-align:center;background:var(--panel);border:1px dashed var(--line);
+  border-radius:8px;color:var(--ink2);font-size:13px;line-height:1.55;
+}
+.empty b{color:var(--ink)}
 </style>
 </head>
 <body>
-<header class="top">
-  <div class="brand">Closure<span>.</span></div>
-  <div class="top-div"></div>
-  <div class="crumb">ALL CASES · public records redaction review</div>
-  <div class="top-right">
-    <span class="who">Reviewing as <b>A. Subbarao</b></span>
-  </div>
+<header class="appbar">
+  <a class="logo" href="/"><span class="bar"></span>Clozure Redact</a>
+  <span class="crumb">All cases · public records redaction review</span>
+  <span class="sp"></span>
+  <div class="user"><span>A. Subbarao</span><div class="avatar">AS</div></div>
 </header>
 <div class="wrap">
-  <div class="page-head">
-    <div class="ph-left">
-      <h1>Cases ready for review</h1>
-      <div class="sub">{{ stats.case_count }} cases · {{ stats.document_count }} documents · {{ stats.page_count }} pages · {{ stats.word_count }} words · {{ stats.entity_count }} entities · {{ stats.suggestion_count }} suggestions</div>
-    </div>
-    <div class="ph-right">
-      <div class="stat"><span class="v">{{ stats.case_count }}</span><div class="l">Cases</div></div>
-      <div class="stat"><span class="v">{{ stats.document_count }}</span><div class="l">Documents</div></div>
-      <div class="stat"><span class="v">{{ stats.entity_count }}</span><div class="l">Entities</div></div>
-      <div class="stat"><span class="v warn">{{ stats.suggestion_count }}</span><div class="l">Suggestions</div></div>
-    </div>
+  <h2 class="pagetitle">Cases ready for review</h2>
+  <div class="subtitle">{{ stats.case_count }} cases · {{ stats.document_count }} documents · {{ stats.page_count }} pages · {{ stats.suggestion_count }} suggestions · {{ stats.entity_count }} entities</div>
+
+  <div class="statrow">
+    <div class="stat"><div class="n">{{ stats.case_count }}</div><div class="l">Cases</div></div>
+    <div class="stat"><div class="n">{{ stats.document_count }}</div><div class="l">Documents</div></div>
+    <div class="stat"><div class="n">{{ stats.entity_count }}</div><div class="l">Entities</div></div>
+    <div class="stat warn"><div class="n">{{ stats.suggestion_count }}</div><div class="l">Suggestions fleet-wide</div></div>
   </div>
+
   <div class="case-grid">
+  {% if cases | length == 0 %}
+    <div class="empty" style="grid-column:1/-1">
+      <b>No cases ingested.</b><br>
+      Boot loads PDFs from <span style="font-family:var(--mono)">samples/*.pdf</span> + identities. If this is empty, check boot integrity asserts.
+    </div>
+  {% endif %}
   {% for c in cases %}
     <a class="case-card" href="/cases/{{ c.id }}">
-      <h2>{{ c.title }}</h2>
+      <h3>{{ c.title }}</h3>
       <div class="meta">
-        CASE <b>{{ c.case_no }}</b> · {{ c.doc_count }} docs · {{ c.page_count }} pp · {{ c.word_count }} words · {{ c.entity_count }} entities
+        CASE <b>{{ c.case_no }}</b><br>
+        {{ c.doc_count }} docs · {{ c.page_count }} pp · {{ c.entity_count }} entities
       </div>
-      <span class="pill p-ready">Open case dashboard →</span>
+      <div class="foot">
+        <span class="pill p-ready">OPEN</span>
+        <span class="p-link">Case dashboard →</span>
+      </div>
     </a>
   {% endfor %}
   </div>

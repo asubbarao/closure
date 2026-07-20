@@ -1,0 +1,134 @@
+<!--
+  judge_panel.html — judge-ensemble confidence surface (partial).
+  Mounted by static/judge.js on the review workspace.
+  SSR skeleton also lives in review.html (#judge-why-card) so curl sees markup.
+-->
+<style id="judge-panel-css">
+/* ── judge ensemble ───────────────────────────────────────────────────── */
+.judge-why-card{
+  display:none;
+  margin:0 12px 10px;
+  border:1px solid #F3C6C0;
+  background:#FDECEA;
+  border-radius:8px;
+  padding:12px 12px 10px;
+}
+.judge-why-card.on{display:block}
+.judge-why-card .jwc-title{
+  font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  color:#B42318;margin-bottom:6px;
+}
+.judge-why-card .jwc-head{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;
+}
+.judge-panel{
+  display:flex;flex-direction:column;gap:4px;
+}
+.judge-vote{
+  display:grid;
+  grid-template-columns:56px 52px 28px 1fr;
+  gap:6px;
+  align-items:baseline;
+  font-size:11px;
+  line-height:1.35;
+  padding:3px 0;
+  border-top:1px solid rgba(180,35,24,.12);
+}
+.judge-vote:first-child{border-top:none;padding-top:0}
+.judge-vote .jv-name{
+  font-weight:700;font-size:10.5px;color:#1A2230;letter-spacing:.02em;
+}
+.judge-vote .jv-verdict{
+  font-family:'IBM Plex Mono',ui-monospace,monospace;
+  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
+}
+.judge-vote .jv-verdict.redact{color:#087443}
+.judge-vote .jv-verdict.keep{color:#B42318}
+.judge-vote .jv-verdict.unsure{color:#B45309}
+.judge-vote .jv-score{
+  font-family:'IBM Plex Mono',ui-monospace,monospace;
+  font-size:11px;font-weight:700;text-align:right;
+  /* color set inline via 60→95 gradient */
+}
+.judge-vote .jv-reason{
+  font-size:11px;color:#5A6577;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  min-width:0;
+}
+
+/* agree / split / conflict badge */
+.judge-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  font-family:'IBM Plex Mono',ui-monospace,monospace;
+  font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  padding:2px 7px;border-radius:4px;border:1px solid transparent;
+}
+.judge-badge.agree{background:#E7F5EE;color:#087443;border-color:#BFE3CF}
+.judge-badge.split{background:#FDF3E3;color:#B45309;border-color:#EBCB9A}
+.judge-badge.conflict{background:#FDECEA;color:#B42318;border-color:#F3C6C0}
+
+.judge-conf{
+  font-family:'IBM Plex Mono',ui-monospace,monospace;
+  font-size:12px;font-weight:700;
+}
+.judge-conf-label{font-size:10.5px;color:#5A6577;font-weight:500}
+
+/* Compact chips under flagged queue rows */
+.sugg .judge-chips{
+  display:flex;flex-wrap:wrap;gap:3px;margin-top:3px;align-items:center;
+}
+.sugg .judge-chip{
+  display:inline-flex;align-items:center;gap:3px;
+  font-family:'IBM Plex Mono',ui-monospace,monospace;
+  font-size:9.5px;font-weight:600;
+  padding:1px 5px;border-radius:3px;
+  background:#F7F9FB;border:1px solid #E4E8EE;color:#5A6577;
+  max-width:100%;
+}
+.sugg .judge-chip .jc-v{text-transform:uppercase;letter-spacing:.03em}
+.sugg .judge-chip .jc-v.redact{color:#087443}
+.sugg .judge-chip .jc-v.keep{color:#B42318}
+.sugg .judge-chip .jc-v.unsure{color:#B45309}
+.sugg .judge-chip .jc-s{font-weight:700}
+.sugg .judge-chip-badge{
+  font-family:'IBM Plex Mono',ui-monospace,monospace;
+  font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
+  padding:1px 5px;border-radius:3px;
+}
+.sugg .judge-chip-badge.agree{background:#E7F5EE;color:#087443}
+.sugg .judge-chip-badge.split{background:#FDF3E3;color:#B45309}
+.sugg .judge-chip-badge.conflict{background:#FDECEA;color:#B42318}
+
+/* Queue confidence: continuous 60→95 ramp (overrides band classes when set) */
+.sugg .conf.judge-grad{/* color via inline style from JS */}
+</style>
+
+<!-- Canonical why-card shell (also SSR'd into review.html) -->
+<div class="judge-why-card" id="judge-why-card" data-judge-panel="1" hidden>
+  <div class="jwc-title">Judge panel</div>
+  <div class="jwc-head">
+    <span class="judge-badge" id="judge-badge" data-signal="">—</span>
+    <span class="judge-conf-label">confidence</span>
+    <span class="judge-conf" id="judge-conf" data-conf="0">—</span>
+  </div>
+  <div class="judge-panel" id="judge-panel" role="list" aria-label="Judge votes">
+    <!-- votes filled by static/judge.js: one line per judge -->
+    <div class="judge-vote" data-judge="Pattern" role="listitem">
+      <span class="jv-name">Pattern</span>
+      <span class="jv-verdict">—</span>
+      <span class="jv-score">—</span>
+      <span class="jv-reason">—</span>
+    </div>
+    <div class="judge-vote" data-judge="Context" role="listitem">
+      <span class="jv-name">Context</span>
+      <span class="jv-verdict">—</span>
+      <span class="jv-score">—</span>
+      <span class="jv-reason">—</span>
+    </div>
+    <div class="judge-vote" data-judge="Prior" role="listitem">
+      <span class="jv-name">Prior</span>
+      <span class="jv-verdict">—</span>
+      <span class="jv-score">—</span>
+      <span class="jv-reason">—</span>
+    </div>
+  </div>
+</div>

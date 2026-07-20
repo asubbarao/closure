@@ -1,0 +1,218 @@
+{# remainder_panel.html — "Possible missed redactions" panel partial.
+   Injected into the review surface by static/remainder.js, or rendered
+   standalone at GET /ui/missed?doc=&page=. #}
+<style id="remainder-panel-styles">
+/* Possible-missed panel — matches Clozure review tokens */
+.rm-panel{
+  border-top:1px solid var(--line, #D6DCE3);
+  background:var(--panel, #fff);
+  flex-shrink:0;
+  max-height:42%;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+.rm-panel.rm-standalone{
+  max-height:none;
+  height:100%;
+  border:none;
+}
+.rm-head{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:10px;
+  padding:10px 14px 6px;
+  flex-shrink:0;
+}
+.rm-head h3{
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  color:var(--ink2, #5A6577);
+  margin:0;
+}
+.rm-head .rm-count{
+  font-family:var(--mono, 'IBM Plex Mono', ui-monospace, monospace);
+  font-size:11px;
+  font-weight:700;
+  color:var(--acc, #1D4ED8);
+  background:var(--accbg, #EBF0FE);
+  border:1px solid #C5D4F8;
+  border-radius:10px;
+  padding:1px 8px;
+}
+.rm-note{
+  font-size:11px;
+  color:var(--ink2, #5A6577);
+  padding:0 14px 8px;
+  line-height:1.4;
+  flex-shrink:0;
+}
+.rm-note b{color:var(--ink, #1A2230)}
+.rm-list{
+  overflow-y:auto;
+  flex:1;
+  padding:0 10px 10px;
+  min-height:0;
+}
+.rm-empty{
+  padding:14px 8px;
+  font-size:12px;
+  color:var(--ink3, #8A94A6);
+  line-height:1.5;
+}
+.rm-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 8px;
+  border:1px solid var(--line, #D6DCE3);
+  border-radius:6px;
+  margin-bottom:6px;
+  background:#FAFBFD;
+  cursor:default;
+}
+.rm-row:hover{border-color:var(--acc, #1D4ED8);background:var(--accbg, #EBF0FE)}
+.rm-row.rm-added{
+  background:var(--okbg, #E7F5EE);
+  border-color:#BFE3CF;
+}
+.rm-sw{
+  width:7px;
+  height:22px;
+  border-radius:2px;
+  background:var(--acc, #1D4ED8);
+  flex-shrink:0;
+}
+.rm-row.rm-added .rm-sw{background:var(--ok, #087443)}
+.rm-body{flex:1;min-width:0}
+.rm-val{
+  font-family:var(--mono, 'IBM Plex Mono', ui-monospace, monospace);
+  font-size:12.5px;
+  font-weight:600;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  color:var(--ink, #1A2230);
+}
+.rm-meta{
+  font-size:11px;
+  color:var(--ink2, #5A6577);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  margin-top:1px;
+}
+.rm-badge{
+  font-size:9.5px;
+  font-weight:700;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  color:var(--acc, #1D4ED8);
+  background:rgba(29,78,216,.1);
+  padding:2px 7px;
+  border-radius:8px;
+  flex-shrink:0;
+  white-space:nowrap;
+}
+.rm-row.rm-added .rm-badge{
+  color:var(--ok, #087443);
+  background:rgba(8,116,67,.1);
+}
+.rm-add{
+  font-family:var(--sans, 'IBM Plex Sans', system-ui, sans-serif);
+  font-weight:600;
+  font-size:11px;
+  padding:5px 10px;
+  border-radius:6px;
+  border:1px solid var(--ink, #1A2230);
+  background:var(--ink, #1A2230);
+  color:#fff;
+  cursor:pointer;
+  flex-shrink:0;
+  white-space:nowrap;
+}
+.rm-add:hover{opacity:.9}
+.rm-add:disabled{opacity:.45;cursor:not-allowed}
+.rm-add.rm-done{
+  background:transparent;
+  border-color:#BFE3CF;
+  color:var(--ok, #087443);
+}
+.rm-toast{
+  position:fixed;
+  bottom:28px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:120;
+  background:var(--ink, #1A2230);
+  color:#fff;
+  padding:10px 14px;
+  border-radius:6px;
+  font-size:13px;
+  font-weight:500;
+  box-shadow:0 8px 28px rgba(26,34,48,.28);
+  max-width:min(520px,92vw);
+  display:none;
+}
+.rm-toast.show{display:block;animation:rm-in .16s ease}
+.rm-toast.err{background:var(--rej, #B42318)}
+@keyframes rm-in{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+/* Standalone page chrome */
+.rm-standalone-wrap{
+  font-family:'IBM Plex Sans',system-ui,sans-serif;
+  font-size:13px;
+  background:#E9ECF0;
+  color:#1A2230;
+  min-height:100vh;
+  margin:0;
+  padding:24px;
+  box-sizing:border-box;
+}
+.rm-standalone-wrap .rm-panel{
+  max-width:420px;
+  margin:0 auto;
+  border-radius:8px;
+  box-shadow:0 2px 12px rgba(26,34,48,.08);
+  max-height:none;
+}
+</style>
+
+{% if standalone %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Closure — Possible missed redactions</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body class="rm-standalone-wrap"
+  data-doc-id="{{ doc_id }}"
+  data-case-id="{{ case_id }}"
+  data-page-no="{{ page_no }}"
+  data-remainder-standalone="1">
+{% endif %}
+
+<aside class="rm-panel{% if standalone %} rm-standalone{% endif %}" id="remainder-panel" aria-label="Possible missed redactions">
+  <div class="rm-head">
+    <h3>Possible missed redactions</h3>
+    <span class="rm-count" id="rm-count">…</span>
+  </div>
+  <div class="rm-note">
+    Remainder scan — residual PII not covered by accepted/pending suggestions.
+    One-tap adds a <b>manual · accepted</b> redaction.
+  </div>
+  <div class="rm-list" id="rm-list">
+    <div class="rm-empty">Loading remainder scan…</div>
+  </div>
+</aside>
+<div class="rm-toast" id="rm-toast" role="status" aria-live="polite"></div>
+
+{% if standalone %}
+<script src="/static/remainder.js"></script>
+</body>
+</html>
+{% endif %}

@@ -1,52 +1,312 @@
--- app.sql — alternate single-file entrypoint (same stack as run.sh).
--- Prefer ./run.sh: it uses a sequential heredoc session so CREATE ROUTE
--- parses after LOAD (parser-extension timing).
+-- app.sql — composition root for Closure (database + HTTP + templates).
 --
--- Usage from repo root (sequential -c flags, LOAD first):
---   DUCKDB=/Users/aloksubbarao/personal/quackapi/build/release/duckdb
---   EXT=/Users/aloksubbarao/personal/quackapi/build/release/extension/quackapi/quackapi.duckdb_extension
---   $DUCKDB -unsigned closure.db \
---     -c "INSTALL pdf FROM community; LOAD pdf; INSTALL tera FROM community; LOAD tera; INSTALL shellfs FROM community; LOAD shellfs; LOAD '$EXT';" \
---     -c ".read server/app.sql"
+-- Run from repo root (preferred — set env, then):
+--   DUCKDB_BIN="${DUCKDB_BIN:-$HOME/personal/quackapi/build/release/duckdb}"
+--   rm -f closure.db closure.db.wal
+--   "$DUCKDB_BIN" -unsigned closure.db -c ".read server/app.sql"
+-- All knobs are env-overridable rows of app_config (server/config.sql):
+--   CLOSURE_PORT / CLOSURE_STATIC_DIR / CLOSURE_SAMPLES_DIR / CLOSURE_EXPORTS_DIR
+--   / CLOSURE_DECISIONS_GLOB / CLOSURE_QUACKAPI_EXT / CLOSURE_ACTOR
 --
--- HARD RULE this pass: no seed.sql — suggestions stay empty.
+-- This file is ONLY the boot orchestration: extensions, config, module load
+-- order, boot-integrity asserts, serve. Domain logic lives in sibling modules.
+--
+-- All derived tables are CREATE OR REPLACE CTAS — re-run is always clean.
+-- No shellfs. No SET VARIABLE. No VALUES. No INSERT for setup.
+-- Export boxes are built LIVE at request time (no boot-baked macros).
 
-SET VARIABLE data_dir = coalesce(getvariable('data_dir'), 'samples');
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Config relation (must load before anything that consumes it)
+-- ═══════════════════════════════════════════════════════════════════════════
 
-.read server/schema.sql
+.read server/config.sql
 
-CREATE OR REPLACE VIEW v_audit AS
-SELECT id, ts, actor, action, suggestion_id, case_id, target, reason, 'main' AS source
-FROM audit_events
-UNION ALL BY NAME
-SELECT
-    try_cast(json_extract_string(j.json, '$.id') AS INTEGER) AS id,
-    try_cast(json_extract_string(j.json, '$.ts') AS TIMESTAMP) AS ts,
-    json_extract_string(j.json, '$.actor') AS actor,
-    json_extract_string(j.json, '$.action') AS action,
-    try_cast(json_extract_string(j.json, '$.suggestion_id') AS INTEGER) AS suggestion_id,
-    try_cast(json_extract_string(j.json, '$.case_id') AS INTEGER) AS case_id,
-    json_extract_string(j.json, '$.target') AS target,
-    json_extract_string(j.json, '$.reason') AS reason,
-    'sidecar' AS source
-FROM read_json_objects('exports/audit_sidecar.jsonl', filename := true) j
-WHERE j.json IS NOT NULL;
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Extensions + runtime config
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- Resource ceiling: DuckDB's stock max_temp_directory_size is "90% of available
+-- disk space" — an unbounded query may legally fill the disk with spill files.
+-- Cap it so a runaway query FAILS at the ceiling instead (not a timeout).
+SET max_temp_directory_size = '8GB';
+
+-- Extensions required by domain modules (must load before .read of modules that
+-- use them — modules may re-INSTALL/LOAD idempotently).
+INSTALL pdf FROM community;
+LOAD pdf;
+INSTALL tera FROM community;
+LOAD tera;
+INSTALL rapidfuzz FROM community;
+LOAD rapidfuzz;
+INSTALL crypto FROM community;
+LOAD crypto;
+INSTALL finetype FROM community;
+LOAD finetype;
+INSTALL us_address_standardizer FROM community;
+LOAD us_address_standardizer;
+
+-- quackapi presence gate. LOAD accepts only a string literal, so the extension
+-- path cannot come from app_config here; instead the quackapi-built duckdb
+-- binary carries the extension statically, and a generic binary preloads it
+-- via the boot command (path from app_config key quackapi_ext / env):
+--   "$DUCKDB_BIN" -unsigned closure.db -cmd "LOAD '$QUACKAPI_EXT';" -c ".read server/app.sql"
+-- When neither holds this SELECT fails loudly at bind (quackapi_routes missing).
+SELECT format('quackapi present — {} routes pre-registered', count(*)) AS quackapi_gate
+FROM quackapi_routes();
+
+-- Runtime headroom for pdf_redact + large review pages.
+-- NOTE: quackapi_serve() forcibly re-SETs memory_limit TO '256MB' in
+-- ApplyServeResourceGuards (see quackapi_extension.cpp). That is why OOM
+-- errors report "~244.1 MiB used" — DuckDB's effective cap under 256MB after
+-- internal reservations, NOT a httplib cap and NOT a per-connection limit.
+-- memory_limit/max_memory are database-global buffer-pool settings; we raise
+-- them again immediately after serve starts (below).
+SET memory_limit = '4GB';
+SET max_memory = '4GB';
+SET threads = 4;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Working-dir bootstrap (decision log sentinel; empty glob would error)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- COPY TO targets are grammar literals (no expressions/subqueries); this path
+-- is the app_config exports_dir default — CLOSURE_DECISIONS_GLOB redirects
+-- reads only, decision WRITES always land under exports/decisions/.
+COPY (
+    SELECT
+        'sentinel' AS kind,
+        NULL::INTEGER AS suggestion_id,
+        NULL::VARCHAR AS status,
+        NULL::VARCHAR AS actor,
+        NULL::VARCHAR AS reason,
+        NULL::VARCHAR AS ts,
+        NULL::INTEGER AS document_id,
+        NULL::INTEGER AS page_no,
+        NULL::DOUBLE AS x0,
+        NULL::DOUBLE AS y0,
+        NULL::DOUBLE AS x1,
+        NULL::DOUBLE AS y1,
+        NULL::VARCHAR AS text,
+        NULL::VARCHAR AS context,
+        NULL::INTEGER AS confidence,
+        NULL::VARCHAR AS flag_tag,
+        NULL::VARCHAR AS source,
+        NULL::INTEGER AS entity_id,
+        NULL::INTEGER AS case_id,
+        NULL::VARCHAR AS batch_id,
+        NULL::VARCHAR AS batch_label,
+        NULL::VARCHAR AS undoes_batch_id
+) TO 'exports/decisions/_sentinel.json' (FORMAT JSON, ARRAY false);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Domain modules (order matters)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+.read server/ingest.sql
+-- OCR / scan-status enrich + export macros (must run before seed so OCR words
+-- participate in suggestion CTAS). See docs/scanned-docs.md.
+.read server/pdf_io.sql
+.read server/seed.sql
+.read server/judge.sql
+.read server/remainder_scan.sql
+
+-- Boot integrity (P0-1): refuse hollow boots; print triad orphans first.
+SELECT 'boot orphan diagnostics' AS phase, *
+FROM ingest_orphan_diag()
+ORDER BY kind, name;
+
+SELECT CASE
+    WHEN (SELECT count(*) FROM documents) = 0
+      OR (SELECT count(*) FROM suggestions) = 0
+    THEN error(
+        'boot integrity failed: documents=' ||
+        (SELECT count(*) FROM documents) ||
+        ' suggestions=' ||
+        (SELECT count(*) FROM suggestions) ||
+        ' cases=' ||
+        (SELECT count(*) FROM cases) ||
+        ' — sample triad desync (manifest.json × identities.json case_no × samples/*.pdf). ' ||
+        'orphans: ' ||
+        coalesce(
+            (SELECT string_agg(kind || ':' || name, ', ' ORDER BY kind, name)
+             FROM ingest_orphan_diag()),
+            '(none listed)'
+        )
+    )
+    ELSE 'boot integrity ok'
+END AS boot_integrity;
 
 .read server/load_templates.sql
-.read server/ingest.sql
-.read server/render_static.sql
-.read server/routes.sql
+
+-- Chain-of-custody: ingest fingerprints + recheck/lineage views (after documents).
+.read server/provenance.sql
+
+-- Mount panel partials into host templates (markers in case.html / review.html).
+-- History panel: inject before </body> + script (no host-template edit required).
+-- Geo minimap: inject at GEO_MOUNT on case dashboard (script is inside geo_panel.html).
+CREATE OR REPLACE TABLE app_templates AS
+-- base also stamps the reviewer identity: templates commit the default actor
+-- literal, swapped here for app_config.actor (CLOSURE_ACTOR) at load time.
+WITH base AS (
+    SELECT
+        name,
+        replace(content, 'A. Subbarao', (SELECT value FROM app_config WHERE key = 'actor')) AS content
+    FROM app_templates
+),
+prov AS (
+    SELECT content FROM base WHERE name = 'provenance_panel.html'
+),
+geo AS (
+    SELECT content FROM base WHERE name = 'geo_panel.html'
+),
+judge AS (
+    SELECT content FROM base WHERE name = 'judge_panel.html'
+),
+remainder AS (
+    SELECT content FROM base WHERE name = 'remainder_panel.html'
+),
+triage AS (
+    SELECT content FROM base WHERE name = 'triage_funnel.html'
+),
+hist AS (
+    SELECT content FROM base WHERE name = 'history_panel.html'
+),
+hist_mount AS (
+    SELECT
+        coalesce((SELECT content FROM hist), '<!-- history_panel.html missing -->') ||
+        chr(10) || '<script src="/static/history.js"></script>' || chr(10) AS html
+)
+SELECT
+    b.name,
+    CASE
+        WHEN b.name = 'case.html' THEN
+            replace(
+                replace(
+                    replace(
+                        b.content,
+                        '<!-- PROVENANCE_MOUNT -->',
+                        coalesce((SELECT content FROM prov), '<!-- PROVENANCE_MOUNT missing -->')
+                    ),
+                    '<!-- GEO_MOUNT -->',
+                    coalesce((SELECT content FROM geo), '<!-- GEO_MOUNT missing -->')
+                ),
+                '</body>',
+                (SELECT html FROM hist_mount) || '</body>'
+            )
+        WHEN b.name = 'review.html' THEN
+            replace(
+                replace(
+                    replace(
+                        replace(
+                            b.content,
+                            '<!-- TRIAGE_MOUNT -->',
+                            coalesce((SELECT content FROM triage), '<!-- TRIAGE_MOUNT missing -->')
+                        ),
+                        '<!-- JUDGE_MOUNT -->',
+                        coalesce((SELECT content FROM judge), '<!-- JUDGE_MOUNT missing -->')
+                    ),
+                    '<!-- REMAINDER_MOUNT -->',
+                    coalesce((SELECT content FROM remainder), '<!-- REMAINDER_MOUNT missing -->')
+                ),
+                '</body>',
+                (SELECT html FROM hist_mount) || '</body>'
+            )
+        -- Decision shells owned by UX polish: surface History / undo entry point
+        WHEN b.name IN ('bulk.html', 'add_missed.html', 'reject.html') THEN
+            replace(
+                b.content,
+                '</body>',
+                (SELECT html FROM hist_mount) || '</body>'
+            )
+        ELSE b.content
+    END AS content
+FROM base b;
+
+-- Audit view: boot snapshot ∪ decision-log projection
+CREATE OR REPLACE VIEW v_audit AS
+SELECT
+    id,
+    ts,
+    actor,
+    action,
+    suggestion_id,
+    case_id,
+    target,
+    reason,
+    'main' AS source
+FROM audit_events
+UNION ALL BY NAME
+-- Projection fallbacks: legacy log shards may lack ts/actor/kind; target is
+-- display text only ('' = nothing to show), never used as a join/group key.
+SELECT
+    NULL::INTEGER AS id,
+    coalesce(ts, now()) AS ts,
+    coalesce(actor, 'reviewer') AS actor,
+    coalesce(kind, 'decision') AS action,
+    suggestion_id,
+    coalesce(case_id, (SELECT d.case_id FROM documents d WHERE d.id = document_id)) AS case_id,
+    coalesce(text, cast(suggestion_id AS VARCHAR), '') AS target,
+    reason,
+    'decisions' AS source
+FROM v_decision_log
+WHERE kind IN ('decision', 'added');
+
+-- PDF I/O already loaded post-ingest (OCR enrich + export macros).
+-- PDF lifecycle: data/{source,working,export} layout + working-copy registry
+.read server/pdf_store.sql
+
+-- HTTP surface by resource
+.read server/routes/pages.sql
+.read server/routes/documents.sql
+.read server/routes/suggestions.sql
+.read server/routes/decisions.sql
+.read server/routes/triage.sql
+.read server/routes/history.sql
+.read server/routes/search.sql
+.read server/routes/remainder.sql
+.read server/routes/judge.sql
+.read server/routes/provenance.sql
+.read server/routes/geo.sql
+-- PDF lifecycle routes: plan is bind-safe; POST run_sql($sql) matches export.
+.read server/routes/store.sql
+
+-- Export routes: live boxes at request time (no boot-baked export_sql_case_N).
+.read server/routes/export.sql
+
+-- Routes map: v_routes over quackapi_routes() + GET /api/routes (must be last
+-- so every declaration above is already in the registry it introspects).
+.read server/routes/meta.sql
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Boot summary + serve
+-- ═══════════════════════════════════════════════════════════════════════════
 
 SELECT 'boot summary' AS phase,
        (SELECT count(*) FROM cases) AS cases,
        (SELECT count(*) FROM documents) AS documents,
        (SELECT count(*) FROM words) AS words,
        (SELECT count(*) FROM entities) AS entities,
-       (SELECT count(*) FROM suggestions) AS suggestions;
+       (SELECT count(*) FROM suggestions) AS suggestions,
+       (SELECT count(*) FROM v_routes) AS routes;
 
-SELECT name, method, pattern FROM quackapi_routes() ORDER BY name;
+SELECT d.filename, count(s.id) AS suggestions
+FROM documents d
+LEFT JOIN suggestions s ON s.document_id = d.id
+GROUP BY d.filename
+ORDER BY d.filename;
 
-FROM quackapi_serve(8117, host := '127.0.0.1', static_dir := '.');
-SELECT * FROM quackapi_servers();
-SELECT 'Closure ready at http://127.0.0.1:8117/ — Ctrl-C to stop' AS status;
+-- Serve args must be constant-foldable at bind (the binder rejects subqueries
+-- in table functions); cfg_* macros expand to getenv() CASE constants.
+FROM quackapi_serve(cfg_port()::INTEGER, static_dir := cfg_static_dir());
+
+-- Re-raise after quackapi's serve-time 256MB resource guard (must be AFTER serve).
+SET memory_limit = '4GB';
+SET max_memory = '4GB';
+
+SELECT format(
+           'Closure ready at http://127.0.0.1:{}/ — Ctrl-C to stop',
+           (SELECT value FROM app_config WHERE key = 'port')
+       ) AS status,
+       current_setting('memory_limit') AS memory_limit,
+       current_setting('max_memory') AS max_memory;
 SELECT sleep_ms(86400000);

@@ -6,144 +6,250 @@
 <title>Closure — Review · {{ doc.filename }}.pdf</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#F4F5F6; --surface:#FFFFFF; --surface-2:#F9FAFB;
-  --ink:#191B1E; --sub:#5A5F66; --mut:#878C93;
-  --line:#E4E6E9; --line-strong:#C9CCD1;
-  --amber-fill:rgba(252,196,25,.32); --amber-fill-strong:rgba(252,196,25,.55);
-  --amber-edge:#D99A06; --amber-text:#8A6A00;
-  --red:#C03221; --red-soft:rgba(192,50,33,.07); --red-mid:rgba(192,50,33,.16);
-  --ok:#2F7D46; --ok-soft:rgba(47,125,70,.10);
-  --cur:#1D63ED; --cur-soft:rgba(29,99,237,.08);
-  --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,monospace;
-  --r-sm:5px; --r-md:8px; --r-lg:12px;
-  --shadow-page:0 0 0 1px var(--line),0 2px 6px rgba(25,27,30,.07),0 12px 32px rgba(25,27,30,.10);
+  --ws:#E9ECF0; --panel:#FFFFFF; --line:#D6DCE3; --line2:#E4E8EE;
+  --ink:#1A2230; --ink2:#5A6577; --ink3:#8A94A6;
+  --black:#0B0E14;
+  --pend:#B45309; --pendbg:#FDF3E3; --pendline:#EBCB9A;
+  --acc:#1D4ED8; --accbg:#EBF0FE;
+  --rej:#B42318; --rejbg:#FDECEA;
+  --ok:#087443; --okbg:#E7F5EE;
+  --r:6px;
+  --sans:'IBM Plex Sans',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --shadow-page:0 0 0 1px var(--line),0 2px 6px rgba(26,34,48,.07),0 12px 32px rgba(26,34,48,.10);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased;font-feature-settings:"tnum"}
+body{font-family:var(--sans);font-size:13px;line-height:1.45;background:var(--ws);color:var(--ink);display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
 
-.top{display:flex;align-items:center;gap:14px;height:52px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0;z-index:30}
-.brand{font-weight:700;font-size:15px;flex-shrink:0}.brand span{color:var(--amber-edge)}
-.brand a{color:inherit;text-decoration:none}
-.top-div{width:1px;height:20px;background:var(--line);flex-shrink:0}
+.appbar{background:var(--panel);border-bottom:1px solid var(--line);padding:0 16px;height:52px;display:flex;align-items:center;gap:14px;flex-shrink:0;z-index:40}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;text-decoration:none;color:inherit;flex-shrink:0}
+.logo .bar{width:22px;height:12px;background:var(--black);border-radius:2px;position:relative}
+.logo .bar::after{content:"";position:absolute;right:-5px;top:3px;width:3px;height:6px;background:var(--pend);border-radius:1px}
 .crumb{display:flex;align-items:baseline;gap:7px;min-width:0}
-.crumb .case{font-family:var(--mono);font-size:11.5px;color:var(--sub);text-decoration:none}
-.crumb .sep{color:var(--mut)}
+.crumb .case{font-family:var(--mono);font-size:11.5px;color:var(--ink2);text-decoration:none}
+.crumb .case:hover{color:var(--acc)}
+.crumb .sep{color:var(--ink3)}
 .crumb .doc{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .top-right{margin-left:auto;display:flex;align-items:center;gap:12px}
-.pw{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--sub)}
-.meter{width:110px;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+.pw{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--ink2)}
+.meter{width:110px;height:5px;border-radius:3px;background:var(--line2);overflow:hidden}
 .meter i{display:block;height:100%;width:0%;background:var(--ink);transition:width .18s ease}
-.who{font-size:12.5px;color:var(--sub)}.who b{color:var(--ink);font-weight:600}
-.btn{font:inherit;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
+.who{font-size:12px;color:var(--ink2)}.who b{color:var(--ink);font-weight:600}
+.btn{font-family:var(--sans);font-weight:600;font-size:12px;padding:7px 14px;border-radius:var(--r);border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
 .btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn.small{padding:4px 10px;font-size:11px}
+.btn.danger{color:var(--rej);border-color:#F3C6C0}
+.btn[disabled]{opacity:.42;cursor:not-allowed}
+.kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;padding:1px 5px;color:var(--ink2);background:#FAFBFC}
 
 .body-wrap{display:flex;flex:1;min-height:0}
 
 /* Rail */
-.rail{width:230px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column}
-.rail-head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px 8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+.rail{width:220px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column}
+.rail-head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px 8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
 .docs-list{overflow-y:auto;flex:1}
-a.doc-item{display:flex;align-items:center;gap:9px;padding:9px 14px;cursor:pointer;border-left:3px solid transparent;color:inherit;text-decoration:none}
-.doc-item:hover{background:var(--bg)}
-.doc-item.active{border-left-color:var(--ink);background:var(--bg)}
+a.doc-item{display:flex;align-items:center;gap:9px;padding:9px 12px;cursor:pointer;border-left:3px solid transparent;color:inherit;text-decoration:none}
+.doc-item:hover{background:#F7F9FB}
+.doc-item.active{border-left-color:var(--acc);background:var(--accbg)}
 .dname{flex:1;min-width:0}
-.dn{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dn{font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .doc-item.active .dn{font-weight:700}
-.dm{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
-.dbadge{font-family:var(--mono);font-size:11px;font-weight:700;flex-shrink:0;min-width:26px;text-align:center;padding:2px 6px;border-radius:10px;background:var(--amber-fill-strong);color:var(--amber-text)}
-.dbadge.done{background:transparent;color:var(--ok)}
-.dbadge.flag{background:var(--red-mid);color:var(--red)}
-.rail-foot{margin-top:auto;padding:12px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--sub);line-height:1.6}
-.rail-foot b{font-family:var(--mono);font-size:11.5px;color:var(--ink)}
+.dm{font-family:var(--mono);font-size:10px;color:var(--ink3);margin-top:2px}
+.dprog{height:3px;background:var(--line2);border-radius:2px;margin-top:4px;overflow:hidden}
+.dprog i{display:block;height:100%;background:var(--ok)}
+.dbadge{font-family:var(--mono);font-size:11px;font-weight:700;flex-shrink:0;min-width:26px;text-align:center;padding:2px 6px;border-radius:10px;background:var(--pendbg);color:var(--pend);border:1px solid var(--pendline)}
+.dbadge.done{background:var(--okbg);color:var(--ok);border-color:#BFE3CF}
+.dbadge.flag{background:var(--rejbg);color:var(--rej);border-color:#F3C6C0}
+.rail-foot{margin-top:auto;padding:12px 14px;border-top:1px solid var(--line);font-size:11.5px;color:var(--ink2);line-height:1.55}
+.rail-foot b{font-family:var(--mono);font-size:11px;color:var(--ink)}
+.rail-link{display:block;margin-top:8px;font-size:11.5px;font-weight:600;color:var(--acc);text-decoration:none}
+.rail-link:hover{text-decoration:underline}
 
-/* Stage */
-.stage{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;overflow-y:auto;padding:22px 28px 50px;background:var(--bg)}
-.page-nav{display:flex;align-items:center;gap:10px;margin-bottom:14px;font-family:var(--mono);font-size:11.5px;color:var(--sub)}
-a.pgbtn,button.pgbtn{width:26px;height:26px;border-radius:var(--r-sm);border:1px solid var(--line-strong);background:var(--surface);color:var(--sub);cursor:pointer;font-size:13px;display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+/* Stage + minimap */
+.stage-wrap{flex:1;min-width:0;display:flex;min-height:0}
+.stage{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;overflow-y:auto;padding:18px 24px 50px;background:var(--ws)}
+.page-nav{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-family:var(--mono);font-size:11.5px;color:var(--ink2);flex-wrap:wrap;justify-content:center}
+a.pgbtn,button.pgbtn{width:26px;height:26px;border-radius:var(--r);border:1px solid var(--line);background:var(--panel);color:var(--ink2);cursor:pointer;font-size:13px;display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
 a.pgbtn[aria-disabled="true"]{pointer-events:none;opacity:.4}
+.page-jump{display:flex;align-items:center;gap:6px}
+.page-jump input{width:52px;font-family:var(--mono);font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:var(--r);text-align:center}
+.page-jump input:focus{outline:2px solid var(--acc);outline-offset:1px}
+.page-jump button{font-family:var(--sans);font-size:11px;font-weight:600;padding:4px 10px;border-radius:var(--r);border:1px solid var(--line);background:var(--panel);cursor:pointer}
 
-/* Real PDF page PNG + overlay marks */
-.pdf-page{
-  position:relative;width:680px;min-height:880px;
-  background:#fff;border-radius:3px;box-shadow:var(--shadow-page);
-  flex-shrink:0;overflow:hidden;
-}
+.pdf-page{position:relative;width:680px;min-height:880px;background:#fff;border-radius:3px;box-shadow:var(--shadow-page);flex-shrink:0;overflow:hidden}
 .pdf-page.real{padding:0}
 .pdf-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;z-index:0;user-select:none;pointer-events:none}
 .word-layer{position:absolute;inset:0;z-index:1;opacity:0;pointer-events:none}
 .word{position:absolute;font-family:var(--mono);line-height:1;white-space:nowrap;overflow:hidden}
 
-/* Redaction marks — status colors */
 .mark{position:absolute;border-radius:2px;cursor:pointer;z-index:10;transition:outline .1s ease,background .12s ease}
-.mark.pending{background:var(--amber-fill);outline:1.5px solid var(--amber-edge)}
-.mark.flagged{background:rgba(192,50,33,.14);outline:1.5px dashed var(--red)}
-.mark.accepted{background:var(--ink);outline:none}
-.mark.rejected{background:transparent;outline:1.5px dashed var(--line-strong)}
-.mark.rejected::after{content:"";position:absolute;inset:50% 0 auto;height:1.5px;background:var(--line-strong)}
-.mark.current{outline:2.5px solid var(--cur);outline-offset:2px;z-index:15}
+.mark.pending{background:rgba(253,243,227,.85);outline:1.5px solid var(--pend)}
+.mark.flagged{background:rgba(253,236,234,.7);outline:1.5px dashed var(--rej)}
+.mark.accepted{background:var(--black);outline:none}
+.mark.rejected{background:transparent;outline:1.5px dashed var(--ink3)}
+.mark.rejected::after{content:"";position:absolute;inset:50% 0 auto;height:1.5px;background:var(--ink3)}
+.mark.current{outline:2.5px solid var(--acc);outline-offset:2px;z-index:15}
+.mark.selected{box-shadow:0 0 0 2px #F2C464}
 .mark-tag{position:absolute;left:0;top:-22px;white-space:nowrap;font-family:var(--mono);font-size:10px;font-weight:700;background:var(--ink);color:#fff;padding:2px 8px;border-radius:4px;z-index:20;pointer-events:none}
-.mark-tag b{color:#FFD75E}
+.mark-tag b{color:#F2C464}
 
-.hint-bar{margin-top:14px;display:flex;align-items:center;gap:16px;font-size:12.5px;color:var(--sub)}
-kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:4px;padding:1px 6px}
+.hint-bar{margin-top:14px;display:flex;align-items:center;gap:12px;font-size:12px;color:var(--ink2);flex-wrap:wrap;justify-content:center}
+
+/* Page minimap / jump-list */
+.minimap{width:72px;flex-shrink:0;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
+.minimap .mh{padding:10px 8px 6px;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);text-align:center}
+.minimap .ml{overflow-y:auto;flex:1;padding:4px 6px 12px;display:flex;flex-direction:column;gap:2px}
+.minimap a.mi{display:flex;align-items:center;gap:4px;padding:3px 4px;border-radius:3px;text-decoration:none;color:var(--ink2);font-family:var(--mono);font-size:9.5px}
+.minimap a.mi:hover{background:#F7F9FB;color:var(--ink)}
+.minimap a.mi.on{background:var(--accbg);color:var(--acc);font-weight:700}
+.minimap a.mi .pn{width:22px;text-align:right}
+.minimap a.mi .dots{flex:1;display:flex;gap:1px;height:6px;align-items:center}
+.minimap a.mi .dots i{display:block;height:4px;min-width:2px;border-radius:1px;background:var(--line2)}
+.minimap a.mi .dots i.p{background:var(--pend)}
+.minimap a.mi .dots i.f{background:var(--rej)}
+.minimap a.mi .dots i.a{background:var(--black)}
+.minimap a.mi.has-pend{color:var(--pend)}
+.minimap a.mi.has-flag{color:var(--rej)}
+.minimap .mjump{padding:8px 6px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:4px}
+.minimap .mjump input{width:100%;font-family:var(--mono);font-size:11px;padding:4px;border:1px solid var(--line);border-radius:var(--r);text-align:center}
+.minimap .mjump button{width:100%;font-size:11px;font-weight:600;padding:5px;border-radius:var(--r);border:1px solid var(--line);background:var(--panel);cursor:pointer}
 
 /* Queue */
-.queue{width:348px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--line);display:flex;flex-direction:column}
-.q-head{padding:14px 16px 0;flex-shrink:0}
-.q-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+.queue{width:380px;flex-shrink:0;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column}
+.q-head{padding:10px 12px 0;flex-shrink:0;max-height:55vh;overflow-y:auto}
+.q-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
 .q-top h2{font-size:14px;font-weight:700}
-.q-top .pc{font-family:var(--mono);font-size:11.5px;color:var(--amber-text);font-weight:700}
+.q-top .pc{font-family:var(--mono);font-size:11.5px;color:var(--pend);font-weight:700}
+
+/* ── Triage funnel ── */
+.funnel{padding:0 2px 10px;border-bottom:1px solid var(--line);margin-bottom:8px}
+.funnel-title{display:flex;justify-content:space-between;align-items:center;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px}
+.funnel-scope{font-family:var(--mono);font-size:10px;letter-spacing:0;text-transform:none;font-weight:600;color:var(--acc);background:var(--accbg);padding:2px 6px;border-radius:3px}
+.funnel-steps{display:flex;align-items:center;gap:4px;margin-bottom:8px}
+.fstep{flex:1;text-align:center;padding:8px 4px 6px;border:1px solid var(--line);border-radius:var(--r);background:#F7F9FB}
+.fstep.auto{border-color:#BFE3CF;background:var(--okbg)}
+.fstep.residual{border-color:var(--pendline);background:var(--pendbg)}
+.fstep .fv{font-family:var(--mono);font-size:18px;font-weight:700;display:block;line-height:1.1;color:var(--ink)}
+.fstep.auto .fv{color:var(--ok)}
+.fstep.residual .fv{color:var(--pend)}
+.fstep .fl{font-size:9.5px;font-weight:600;color:var(--ink3);margin-top:3px;display:block;line-height:1.25}
+.fstep .fl b{color:var(--ink);font-family:var(--mono)}
+.farrow{color:var(--ink3);font-size:14px;flex-shrink:0;padding:0 1px}
+.funnel-progress{font-family:var(--mono);font-size:11.5px;font-weight:600;color:var(--ink);margin-bottom:8px;padding:6px 8px;background:#F7F9FB;border-radius:var(--r);border:1px solid var(--line2)}
+.funnel-threshold{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.funnel-threshold .ftl{font-size:10.5px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.04em}
+.thr-presets{display:flex;gap:3px}
+.thr{font-family:var(--mono);font-size:11px;font-weight:600;padding:3px 7px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);cursor:pointer;color:var(--ink2)}
+.thr.on{border-color:var(--ink);background:var(--ink);color:#fff}
+#thr-slider{flex:1;min-width:80px;accent-color:var(--ink)}
+.thr-val{font-family:var(--mono);font-size:12px;font-weight:700;min-width:22px;text-align:right}
+.btn.funnel-accept{width:100%;justify-content:center;background:var(--ok);border-color:var(--ok);color:#fff;padding:9px 12px;font-size:12.5px;margin-bottom:6px}
+.btn.funnel-accept:hover:not([disabled]){filter:brightness(1.05)}
+.btn.funnel-accept[disabled]{opacity:.42}
+.btn.funnel-accept b{font-family:var(--mono);font-weight:700}
+.funnel-note{font-size:10.5px;color:var(--ink3);line-height:1.4;margin-bottom:8px}
+.funnel-tools{display:flex;gap:5px;flex-wrap:wrap}
+.funnel-tools .btn.on{border-color:var(--ink);background:#F7F9FB}
+
 .bands{display:flex;gap:5px;margin-bottom:6px}
-.band{flex:1;text-align:center;cursor:pointer;padding:7px 2px 6px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);user-select:none}
-.band.on{border-color:var(--ink);background:var(--surface-2)}
+.band{flex:1;text-align:center;cursor:pointer;padding:7px 2px 6px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);user-select:none}
+.band.on{border-color:var(--ink);background:#F7F9FB}
 .band:not(.on){opacity:.45}
 .band .bv{font-family:var(--mono);font-size:15px;font-weight:700;display:block;line-height:1.1}
-.band .bl{font-size:9.5px;font-weight:700;letter-spacing:.04em;color:var(--mut);margin-top:2px}
-.band.mid .bv{color:var(--amber-text)}.band.low .bv{color:var(--red)}
-.band-note{font-size:11px;color:var(--sub);margin-bottom:8px;line-height:1.4;padding:0 2px}
+.band .bl{font-size:9.5px;font-weight:700;letter-spacing:.04em;color:var(--ink3);margin-top:2px}
+.band.mid .bv{color:var(--pend)}.band.low .bv{color:var(--rej)}
+.band-note{font-size:11px;color:var(--ink2);margin-bottom:6px;line-height:1.4;padding:0 2px}
 .band-note b{color:var(--ink)}
+
+/* Bulk selection bar */
+.bulk-sel{display:none;align-items:center;gap:8px;padding:8px 10px;margin:0 0 6px;background:var(--ink);color:#fff;border-radius:var(--r);flex-wrap:wrap}
+.bulk-sel.on{display:flex}
+.bulk-sel .n{font-family:var(--mono);font-weight:600;font-size:12px}
+.bulk-sel .meta{font-size:11px;opacity:.75;flex:1}
+.bulk-sel .btn{background:transparent;border-color:#3A4456;color:#fff;padding:4px 10px;font-size:11px}
+.bulk-sel .btn.go{background:#F2C464;border-color:#F2C464;color:var(--black)}
+.bulk-sel .btn.danger{border-color:#F3C6C0;color:#FCA5A5}
+.flag-excl{display:none;padding:7px 10px;margin-bottom:6px;background:var(--pendbg);border:1px solid var(--pendline);border-radius:var(--r);font-size:11.5px;color:var(--pend)}
+.flag-excl.on{display:block}
+.flag-excl b{font-family:var(--mono)}
+
+.q-tools{display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap}
+.q-tools .btn{padding:3px 8px;font-size:10.5px}
+.q-section{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);padding:6px 12px 4px;flex-shrink:0}
+
 .q-list{overflow-y:auto;flex:1;padding:4px 10px 10px}
+/* Residual group card */
+.rg{border:1px solid var(--line);border-radius:var(--r);margin-bottom:8px;overflow:hidden;background:var(--panel)}
+.rg.flagged{border-color:#F3C6C0}
+.rg.current{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.rg-head{display:flex;flex-direction:column;gap:6px;padding:10px 10px 8px;background:#F7F9FB;border-bottom:1px solid var(--line2);cursor:pointer}
+.rg.flagged .rg-head{background:rgba(253,236,234,.55)}
+.rg-top{display:flex;align-items:flex-start;gap:8px}
+.rg-top b{font-size:13px;font-weight:700;flex:1;min-width:0;line-height:1.3;word-break:break-word}
+.rg-count{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--pend);flex-shrink:0;background:var(--pendbg);border:1px solid var(--pendline);padding:2px 7px;border-radius:10px}
+.rg.flagged .rg-count{color:var(--rej);background:var(--rejbg);border-color:#F3C6C0}
+.rg-meta{font-size:11px;color:var(--ink2);line-height:1.35}
+.rg-meta .ek{color:var(--ink3)}
+.rg-why{font-size:11px;color:var(--rej);line-height:1.35;margin-top:2px}
+.rg-actions{display:flex;gap:6px;flex-wrap:wrap}
+.rg-actions .btn{padding:4px 10px;font-size:11px}
+.rg-actions .btn.accept-g{background:var(--ink);border-color:var(--ink);color:#fff}
+.rg-actions .btn.reject-g{color:var(--rej);border-color:#F3C6C0}
+.rg-body{padding:4px 6px 6px;display:none}
+.rg.open .rg-body{display:block}
+.rg-excl{font-size:10.5px;color:var(--ink3);padding:4px 6px 2px}
+
 .eg{display:flex;align-items:baseline;gap:8px;padding:11px 6px 5px;border-bottom:1px solid var(--line);margin-bottom:3px}
 .eg b{font-size:13px;font-weight:700}
-.eg .ek{font-size:10.5px;color:var(--mut)}
-.eg .bl2{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--cur);cursor:pointer;white-space:nowrap;background:none;border:none;font:inherit;font-size:11.5px;font-weight:600;color:var(--cur);padding:0}
+.eg .ek{font-size:10.5px;color:var(--ink3)}
+.eg .bl2{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--acc);cursor:pointer;white-space:nowrap;background:none;border:none;padding:0}
 .eg .bl2:hover{text-decoration:underline}
-.sugg{display:flex;align-items:center;gap:9px;padding:8px 6px;border-radius:var(--r-md);cursor:pointer;border:1px solid transparent}
-.sugg:hover{background:var(--bg)}
-.sugg.current{border-color:var(--cur);background:var(--cur-soft)}
-.sugg.fr{background:var(--red-soft)}
+.sugg{display:flex;align-items:center;gap:8px;padding:7px 6px;border-radius:var(--r);cursor:pointer;border:1px solid transparent}
+.sugg:hover{background:#F7F9FB}
+.sugg.current{border-color:var(--acc);background:var(--accbg)}
+.sugg.selected{background:rgba(242,196,100,.18);border-color:#F2C464}
+.sugg.excluded{opacity:.45;text-decoration:line-through}
+.sugg.fr{background:rgba(253,236,234,.55)}
+.sugg.fr.selected{background:rgba(253,236,234,.9)}
 .sugg.hidden{display:none}
+.sugg input.sc{width:14px;height:14px;accent-color:var(--ink);flex-shrink:0;cursor:pointer}
+.sugg input.sc:disabled{opacity:.35;cursor:not-allowed}
 .sw{width:7px;height:22px;border-radius:2px;flex-shrink:0}
-.sw.pending{background:var(--amber-edge)}
-.sw.flagged{background:transparent;border:1.5px dashed var(--red)}
-.sw.accepted{background:var(--ink)}
-.sw.rejected{background:var(--line-strong)}
+.sw.pending{background:var(--pend)}
+.sw.flagged{background:transparent;border:1.5px dashed var(--rej)}
+.sw.accepted{background:var(--black)}
+.sw.rejected{background:var(--ink3)}
 .st{flex:1;min-width:0}
 .val{font-family:var(--mono);font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.val s{color:var(--mut)}
-.ctx{font-size:11.5px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
-.ctx em{font-style:normal;background:var(--amber-fill);border-radius:2px;padding:0 1px}
+.val s{color:var(--ink3)}
+.ctx{font-size:11.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.ctx em{font-style:normal;background:var(--pendbg);border-radius:2px;padding:0 1px}
 .sm{text-align:right;flex-shrink:0}
 .conf{font-family:var(--mono);font-size:11.5px;font-weight:700}
-.conf.h{color:var(--ink)}.conf.m{color:var(--amber-text)}.conf.l{color:var(--red)}
-.pgr{font-family:var(--mono);font-size:10px;color:var(--mut)}
-.keys{border-top:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:7px 14px;font-size:11.5px;color:var(--sub);flex-shrink:0}
-.keys span{display:inline-flex;gap:5px;align-items:center}
-.empty-q{padding:24px 16px;color:var(--sub);font-size:13px;line-height:1.55}
+.conf.h{color:var(--ink)}.conf.m{color:var(--pend)}.conf.l{color:var(--rej)}
+.pgr{font-family:var(--mono);font-size:10px;color:var(--ink3)}
+.keys{border-top:1px solid var(--line);padding:10px 14px;display:flex;flex-wrap:wrap;gap:7px 12px;font-size:11px;color:var(--ink3);flex-shrink:0}
+.keys span{display:inline-flex;gap:4px;align-items:center}
+.empty-q{padding:24px 16px;color:var(--ink2);font-size:13px;line-height:1.55}
 .empty-q b{color:var(--ink)}
+.empty-q.done{color:var(--ok)}
 
-/* Toast */
 .toast-host{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:100;display:flex;flex-direction:column;gap:8px;pointer-events:none;align-items:center}
-.toast{pointer-events:auto;display:flex;align-items:center;gap:12px;background:var(--ink);color:#fff;padding:10px 14px;border-radius:var(--r-md);font-size:13px;font-weight:500;box-shadow:0 8px 28px rgba(25,27,30,.28);max-width:min(520px,92vw);animation:toast-in .16s ease}
+.toast{pointer-events:auto;display:flex;align-items:center;gap:12px;background:var(--ink);color:#fff;padding:10px 14px;border-radius:var(--r);font-size:13px;font-weight:500;box-shadow:0 8px 28px rgba(26,34,48,.28);max-width:min(520px,92vw);animation:toast-in .16s ease}
 .toast .t-msg{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.toast .t-undo{font-family:var(--mono);font-size:12px;font-weight:700;color:#FFD75E;background:none;border:none;cursor:pointer;padding:2px 4px}
+.toast .t-undo{font-family:var(--mono);font-size:12px;font-weight:700;color:#F2C464;background:none;border:none;cursor:pointer;padding:2px 4px}
 .toast .t-undo:hover{text-decoration:underline}
 @keyframes toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+@media(max-width:1100px){
+  .minimap{display:none}
+  .rail{width:180px}
+  .queue{width:320px}
+}
 </style>
 </head>
 <body
@@ -158,24 +264,23 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);back
   data-width-pt="{{ page.width_pt }}"
   data-height-pt="{{ page.height_pt }}"
 >
-<header class="top">
-  <div class="brand"><a href="/">Closure<span>.</span></a></div>
-  <div class="top-div"></div>
+<header class="appbar">
+  <a class="logo" href="/"><span class="bar"></span>Clozure Redact</a>
   <div class="crumb">
     <a class="case" href="/cases/{{ case.id }}">CASE {{ case.case_no }}</a>
+    <span class="sep">/</span>
+    <a class="case" href="/cases/{{ case.id }}">Library</a>
     <span class="sep">/</span>
     <span class="doc">{{ doc.filename }}.pdf</span>
   </div>
   <div class="top-right">
     <div class="pw">
-      <span id="progress-label">{{ stats.resolved }} of {{ stats.suggestion_count }} reviewed</span>
-      <div class="meter" title="reviewed / total"><i id="progress-bar" style="width:{{ stats.progress_pct }}%"></i></div>
+      <span id="progress-label">{{ stats.resolved }} of {{ stats.suggestion_count }} resolved · residual loading…</span>
+      <div class="meter" title="resolved / total"><i id="progress-bar" style="width:{{ stats.progress_pct }}%"></i></div>
     </div>
     <span class="who">Reviewing as <b>A. Subbarao</b></span>
     <a class="btn" href="/cases/{{ case.id }}/audit">Audit log</a>
-    <form method="POST" action="/cases/{{ case.id }}/export" style="display:inline">
-      <button class="btn primary" type="submit">Export redacted…</button>
-    </form>
+    <a class="btn primary" href="/cases/{{ case.id }}">Document library</a>
   </div>
 </header>
 
@@ -187,74 +292,118 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);back
       <a class="doc-item {% if d.id == doc.id %}active{% endif %}" href="/documents/{{ d.id }}" data-doc-id="{{ d.id }}">
         <div class="dname">
           <div class="dn">{{ d.filename }}</div>
-          <div class="dm">{{ d.page_count }} pp · {{ d.suggestion_count }} found</div>
+          <div class="dm">{{ d.page_count }} pp · {{ d.pending_count }} pend</div>
+          <div class="dprog"><i style="width:{{ d.progress_pct }}%"></i></div>
         </div>
-        <span class="dbadge {% if d.suggestion_count == 0 %}done{% endif %}" data-badge-for="{{ d.id }}">
-          {% if d.suggestion_count == 0 %}✓{% else %}{{ d.suggestion_count }}{% endif %}
+        <span class="dbadge {% if d.flagged_count > 0 %}flag{% elif d.pending_count == 0 and d.suggestion_count > 0 %}done{% endif %}" data-badge-for="{{ d.id }}">
+          {% if d.pending_count == 0 and d.suggestion_count > 0 %}✓{% else %}{{ d.pending_count }}{% endif %}
         </span>
       </a>
       {% endfor %}
     </div>
-    <div class="rail-foot">Case: <b id="case-sugg-count">{{ stats.suggestion_count }}</b> suggestions, <b id="page-word-count">{{ page.word_count }}</b> words on this page.<br>Entity decisions propagate to every document.</div>
+    <div class="rail-foot">
+      Case: <b id="case-sugg-count">{{ stats.suggestion_count }}</b> suggestions · page-scoped render (never loads whole doc).
+      <a class="rail-link" href="/cases/{{ case.id }}">← Document library</a>
+    </div>
   </nav>
 
-  <main class="stage" id="stage">
-    <div class="page-nav">
-      <a class="pgbtn" href="/documents/{{ doc.id }}/pages/{{ page.prev }}" aria-disabled="{% if page.page_no <= 1 %}true{% else %}false{% endif %}">‹</a>
-      <span>PAGE {{ page.page_no }} / {{ doc.page_count }}</span>
-      <a class="pgbtn" href="/documents/{{ doc.id }}/pages/{{ page.next }}" aria-disabled="{% if page.page_no >= doc.page_count %}true{% else %}false{% endif %}">›</a>
-      <span>·</span><span id="page-mark-meta">{{ page.word_count }} words · {{ page.mark_count }} marks</span>
-    </div>
-
-    <div class="pdf-page real" id="pdf-page"
-         style="width:{{ page.display_w }}px;height:{{ page.display_h }}px"
-         data-page-no="{{ page.page_no }}">
-      {% if page.png_href %}
-      <img class="pdf-bg" src="{{ page.png_href }}" alt="page {{ page.page_no }}" draggable="false" />
-      {% endif %}
-      <div class="word-layer" aria-hidden="true">
-        {% for w in words %}
-        <span class="word {% if w.is_hit %}hit{% endif %}"
-              style="left:{{ w.left_px }}px;top:{{ w.top_px }}px;width:{{ w.width }}px;height:{{ w.height }}px;font-size:{{ w.font_px }}px"
-              title="pt ({{ w.x0 }},{{ w.y0 }})–({{ w.x1 }},{{ w.y1 }})">{{ w.word }}</span>
-        {% endfor %}
+  <div class="stage-wrap">
+    <main class="stage" id="stage">
+      <div class="page-nav">
+        <a class="pgbtn" href="/documents/{{ doc.id }}/pages/{{ page.prev }}" aria-disabled="{% if page.page_no <= 1 %}true{% else %}false{% endif %}" title="Previous page">‹</a>
+        <span>PAGE <b id="page-no-label">{{ page.page_no }}</b> / {{ doc.page_count }}</span>
+        <a class="pgbtn" href="/documents/{{ doc.id }}/pages/{{ page.next }}" aria-disabled="{% if page.page_no >= doc.page_count %}true{% else %}false{% endif %}" title="Next page">›</a>
+        <span class="page-jump">
+          <input type="number" id="page-jump-input" min="1" max="{{ doc.page_count }}" value="{{ page.page_no }}" aria-label="Jump to page">
+          <button type="button" id="page-jump-btn">Go</button>
+        </span>
+        <span>·</span>
+        <span id="page-mark-meta">{{ page.word_count }} words · {{ page.mark_count }} marks</span>
+        <span>·</span>
+        <button type="button" class="pgbtn" id="btn-first-pend" title="Jump to first page with pending" style="width:auto;padding:0 8px;font-size:11px;font-family:var(--mono)">first pending</button>
       </div>
-      <div id="marks-layer">
-        {% for m in marks %}
-        <div class="mark {{ m.status }} {% if m.current %}current{% endif %}"
-             style="left:{{ m.left_px }}px;top:{{ m.top_px }}px;width:{{ m.width }}px;height:{{ m.height }}px"
-             data-text="{{ m.text }}"
-             data-conf="{{ m.confidence }}"
-             data-status="{{ m.status }}"
-             data-kind="{{ m.kind }}"
-             title="{{ m.text }} · conf {{ m.confidence }}">
-          {% if m.current %}<span class="mark-tag">{{ m.kind }} · <b>{{ m.confidence }}</b></span>{% endif %}
+
+      <div class="pdf-page real" id="pdf-page"
+           style="width:{{ page.display_w }}px;height:{{ page.display_h }}px"
+           data-page-no="{{ page.page_no }}">
+        {% if page.png_href %}
+        <img class="pdf-bg" src="{{ page.png_href }}" alt="page {{ page.page_no }}" draggable="false" />
+        {% endif %}
+        <div class="word-layer" aria-hidden="true">
+          {% for w in words %}
+          <span class="word {% if w.is_hit %}hit{% endif %}"
+                style="left:{{ w.left_px }}px;top:{{ w.top_px }}px;width:{{ w.width }}px;height:{{ w.height }}px;font-size:{{ w.font_px }}px"
+                title="pt ({{ w.x0 }},{{ w.y0 }})–({{ w.x1 }},{{ w.y1 }})">{{ w.word }}</span>
+          {% endfor %}
         </div>
+        <div id="marks-layer">
+          {% for m in marks %}
+          <div class="mark {{ m.status }} {% if m.current %}current{% endif %}"
+               style="left:{{ m.left_px }}px;top:{{ m.top_px }}px;width:{{ m.width }}px;height:{{ m.height }}px"
+               data-text="{{ m.text }}"
+               data-conf="{{ m.confidence }}"
+               data-status="{{ m.status }}"
+               data-kind="{{ m.kind }}"
+               title="{{ m.text }} · conf {{ m.confidence }}">
+            {% if m.current %}<span class="mark-tag">{{ m.kind }} · <b>{{ m.confidence }}</b></span>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="hint-bar">
+        <span><kbd>H</kbd> accept high-conf</span>
+        <span>·</span>
+        <span><kbd>j</kbd><kbd>k</kbd> residual cursor · <kbd>A</kbd>/<kbd>R</kbd> group decide</span>
+        <span>·</span>
+        <span><kbd>a</kbd><kbd>r</kbd> accept/reject · <kbd>x</kbd> except · <kbd>[</kbd><kbd>]</kbd> threshold</span>
+        <span>·</span>
+        <span>scale {{ page.scale }}</span>
+      </div>
+    </main>
+
+    <aside class="minimap" id="minimap" aria-label="Page jump list">
+      <div class="mh">Pages</div>
+      <div class="ml" id="minimap-list">
+        {% for p in page_map %}
+        <a class="mi {% if p.page_no == page.page_no %}on{% endif %} {% if p.flagged > 0 %}has-flag{% elif p.pending > 0 %}has-pend{% endif %}"
+           href="/documents/{{ doc.id }}/pages/{{ p.page_no }}"
+           data-page="{{ p.page_no }}"
+           data-pending="{{ p.pending }}"
+           data-flagged="{{ p.flagged }}"
+           data-total="{{ p.total }}"
+           title="p.{{ p.page_no }} · {{ p.pending }} pending · {{ p.total }} total">
+          <span class="pn">{{ p.page_no }}</span>
+          <span class="dots">
+            {% if p.total > 0 %}
+            <i class="{% if p.flagged > 0 %}f{% elif p.pending > 0 %}p{% else %}a{% endif %}" style="width:{% if p.total > 14 %}28{% else %}{{ p.total * 2 }}{% endif %}px"></i>
+            {% else %}
+            <i style="width:4px;opacity:.4"></i>
+            {% endif %}
+          </span>
+        </a>
         {% endfor %}
       </div>
-    </div>
-
-    <div class="hint-bar">
-      <span><kbd>n</kbd> add missed</span>
-      <span>·</span>
-      <span><kbd>j</kbd><kbd>k</kbd> navigate</span>
-      <span>·</span>
-      <span><kbd>a</kbd> accept · <kbd>r</kbd> reject · <kbd>u</kbd> undo</span>
-      <span>·</span>
-      <span>scale {{ page.scale }} · page {{ page.width_pt }}×{{ page.height_pt }} pt</span>
-    </div>
-  </main>
+      <div class="mjump">
+        <input type="number" id="minimap-jump" min="1" max="{{ doc.page_count }}" placeholder="p#" aria-label="Jump page">
+        <button type="button" id="minimap-go">Jump</button>
+      </div>
+    </aside>
+  </div>
 
   <aside class="queue">
     <div class="q-head">
       <div class="q-top">
-        <h2>Suggestions</h2>
+        <h2>Triage</h2>
         <span class="pc" id="pending-label">{{ stats.pending_count }} pending</span>
       </div>
+
+      <!-- TRIAGE_MOUNT -->
+
       <div class="bands" id="band-filters" role="group" aria-label="Confidence band filters">
         <button type="button" class="band on" data-band="high" aria-pressed="true">
           <span class="bv" id="band-high">{{ stats.high_count }}</span>
-          <span class="bl">HIGH ≥90</span>
+          <span class="bl">HIGH</span>
         </button>
         <button type="button" class="band mid on" data-band="review" aria-pressed="true">
           <span class="bv" id="band-review">{{ stats.review_count }}</span>
@@ -265,15 +414,38 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);back
           <span class="bl">FLAGGED</span>
         </button>
       </div>
-      <div class="band-note"><b>HIGH</b> items are candidates for bulk-verify. <b>FLAGGED</b> (&lt;60) require individual judgment.</div>
+      <div class="band-note"><b>Unit of work = group</b>. Auto-pass clears high-conf; residual is batch-judged below. Flagged never auto-pass.</div>
+
+      <div class="q-tools">
+        <button type="button" class="btn small" id="btn-sel-page">Select page</button>
+        <button type="button" class="btn small" id="btn-sel-high">Select HIGH</button>
+        <button type="button" class="btn small" id="btn-sel-band">Select visible</button>
+        <button type="button" class="btn small" id="btn-sel-none">Clear</button>
+      </div>
+
+      <div class="flag-excl" id="flag-excl">
+        <b id="flag-excl-n">0</b> flagged excluded from high-conf auto-pass — group-judge or decide individually.
+      </div>
+
+      <div class="bulk-sel" id="bulk-sel">
+        <span class="n" id="bulk-count">0 selected</span>
+        <span class="meta" id="bulk-meta"></span>
+        <button type="button" class="btn danger" id="btn-bulk-reject">Reject selected</button>
+        <button type="button" class="btn go" id="btn-bulk-accept">Accept 0 — lay the ink</button>
+      </div>
+
+      <!-- JUDGE_MOUNT -->
     </div>
+    <div class="q-section" id="residual-section-label">Residual queue · groups</div>
     <div class="q-list" id="q-list">
       {% if suggestions | length == 0 %}
       <div class="empty-q">
         Queue empty — <b>suggestions not seeded yet</b>.<br><br>
         Word boxes on the page are real extractions from the PDF ({{ page.word_count }} on this page).
       </div>
-      {% endif %}
+      {% else %}
+      <!-- SSR seed rows (hidden once triage groups hydrate) -->
+      <div id="ssr-seed" hidden>
       {% for s in suggestions %}
       <div class="sugg {% if s.current %}current{% endif %} {% if s.band == 'flagged' %}fr{% endif %}"
            data-id="{{ s.id }}"
@@ -283,8 +455,11 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);back
            data-text="{{ s.text }}"
            data-conf="{{ s.confidence }}"
            data-context="{{ s.context }}"
+           data-entity-id="{{ s.entity_id }}"
+           data-kind="{{ s.kind }}"
            role="button"
            tabindex="-1">
+        <input type="checkbox" class="sc" data-id="{{ s.id }}" {% if s.status != 'pending' or s.band == 'flagged' %}disabled{% endif %} aria-label="Select suggestion">
         <span class="sw {% if s.status == 'pending' and s.band == 'flagged' %}flagged{% else %}{{ s.status }}{% endif %}"></span>
         <div class="st">
           <div class="val">{% if s.status == 'rejected' %}<s>{{ s.text }}</s>{% else %}{{ s.text }}{% endif %}</div>
@@ -296,13 +471,20 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);back
         </div>
       </div>
       {% endfor %}
+      </div>
+      <div class="empty-q" id="triage-loading">Loading residual groups…</div>
+      {% endif %}
     </div>
+    <!-- REMAINDER_MOUNT -->
     <div class="keys" id="kbd-legend">
-      <span><kbd>j</kbd><kbd>k</kbd> next / prev</span>
-      <span><kbd>a</kbd> accept</span>
-      <span><kbd>r</kbd> reject</span>
-      <span><kbd>e</kbd> entity, case-wide</span>
-      <span><kbd>n</kbd> add missed</span>
+      <span><kbd>H</kbd> accept high</span>
+      <span><kbd>j</kbd><kbd>k</kbd> cursor</span>
+      <span><kbd>A</kbd>/<kbd>R</kbd> group</span>
+      <span><kbd>a</kbd>/<kbd>r</kbd> decide</span>
+      <span><kbd>x</kbd> except</span>
+      <span><kbd>[</kbd><kbd>]</kbd> thr</span>
+      <span><kbd>o</kbd> open</span>
+      <span><kbd>n</kbd> missed</span>
       <span><kbd>u</kbd> undo</span>
     </div>
   </aside>
@@ -314,5 +496,7 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);back
 {"docId":{{ doc.id }},"caseId":{{ case.id }},"pageNo":{{ page.page_no }},"pageCount":{{ doc.page_count }},"actor":"A. Subbarao","scale":{{ page.scale }},"displayW":{{ page.display_w }},"displayH":{{ page.display_h }},"widthPt":{{ page.width_pt }},"heightPt":{{ page.height_pt }},"stats":{"suggestion_count":{{ stats.suggestion_count }},"pending_count":{{ stats.pending_count }},"resolved":{{ stats.resolved }},"high_count":{{ stats.high_count }},"review_count":{{ stats.review_count }},"flagged_count":{{ stats.flagged_count }}}}
 </script>
 <script src="/static/review.js"></script>
+<script src="/static/judge.js"></script>
+<script src="/static/remainder.js"></script>
 </body>
 </html>

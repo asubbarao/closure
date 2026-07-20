@@ -1,0 +1,232 @@
+{# geo_panel.html — address minimap partial (visual grouping, not real geography).
+   Mounted on case dashboard via GEO_MOUNT; standalone at GET /ui/geo?case_id=. #}
+<style id="geo-panel-styles">
+.geo-card{
+  background:var(--panel,#fff);
+  border:1px solid var(--line,#D6DCE3);
+  border-radius:8px;
+  box-shadow:var(--shadow,0 1px 3px rgba(26,34,48,.08),0 4px 14px rgba(26,34,48,.06));
+  margin-bottom:16px;
+  overflow:hidden;
+}
+.geo-card.geo-standalone{
+  margin:20px auto;
+  max-width:420px;
+}
+.geo-card .geo-hd{
+  padding:12px 16px;
+  border-bottom:1px solid var(--line2,#E4E8EE);
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.geo-card .geo-hd h3{
+  font-size:13px;
+  font-weight:600;
+  margin:0;
+  color:var(--ink,#1A2230);
+}
+.geo-card .geo-hd .sp{flex:1}
+.geo-badge{
+  font-family:var(--mono,'IBM Plex Mono',ui-monospace,monospace);
+  font-size:10px;
+  font-weight:600;
+  letter-spacing:.04em;
+  padding:2px 7px;
+  border-radius:3px;
+  background:#F0F2F5;
+  color:var(--ink2,#5A6577);
+  border:1px solid var(--line,#D6DCE3);
+}
+.geo-honesty{
+  padding:8px 16px 0;
+  font-size:11px;
+  color:var(--ink2,#5A6577);
+  line-height:1.4;
+}
+.geo-honesty b{color:var(--ink,#1A2230);font-weight:600}
+.geo-map-wrap{
+  padding:10px 14px 8px;
+  position:relative;
+}
+.geo-svg{
+  display:block;
+  width:100%;
+  height:auto;
+  max-height:220px;
+  background:linear-gradient(165deg,#F7F9FB 0%,#EEF2F7 55%,#E9ECF0 100%);
+  border:1px solid var(--line2,#E4E8EE);
+  border-radius:6px;
+}
+.geo-svg .geo-grid line{stroke:var(--line2,#E4E8EE);stroke-width:.5}
+.geo-svg .geo-city-label{
+  font-family:var(--mono,'IBM Plex Mono',ui-monospace,monospace);
+  font-size:9px;
+  fill:var(--ink3,#8A94A6);
+  pointer-events:none;
+}
+.geo-svg .geo-dot{
+  cursor:pointer;
+  stroke:#fff;
+  stroke-width:1.5;
+  transition:r .12s ease, stroke-width .12s ease;
+}
+.geo-svg .geo-dot.addr{fill:var(--acc,#1D4ED8)}
+.geo-svg .geo-dot.street{fill:var(--pend,#B45309)}
+.geo-svg .geo-dot:hover,
+.geo-svg .geo-dot:focus{
+  stroke:var(--ink,#1A2230);
+  stroke-width:2;
+  outline:none;
+}
+.geo-svg .geo-dot.on{
+  fill:var(--ink,#1A2230);
+  stroke:var(--acc,#1D4ED8);
+  stroke-width:2.5;
+}
+.geo-svg .geo-dot.dim{opacity:.28}
+.geo-svg .geo-halo{
+  fill:none;
+  stroke:var(--acc,#1D4ED8);
+  stroke-width:1.5;
+  opacity:0;
+  pointer-events:none;
+}
+.geo-svg .geo-halo.on{opacity:.55}
+.geo-filter{
+  display:none;
+  margin:0 14px 10px;
+  padding:8px 10px;
+  background:var(--accbg,#EBF0FE);
+  border:1px solid #C5D4F8;
+  border-radius:6px;
+  font-size:12px;
+  color:var(--ink,#1A2230);
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.geo-filter.on{display:flex}
+.geo-filter .geo-filter-text{flex:1;min-width:0}
+.geo-filter .geo-filter-text b{
+  font-family:var(--mono,'IBM Plex Mono',ui-monospace,monospace);
+  font-weight:600;
+  font-size:11.5px;
+}
+.geo-filter .geo-filter-meta{
+  font-size:11px;
+  color:var(--ink2,#5A6577);
+  margin-top:2px;
+}
+.geo-filter .btn{
+  font-family:var(--sans,'IBM Plex Sans',system-ui,sans-serif);
+  font-size:11px;
+  font-weight:600;
+  padding:4px 10px;
+  border-radius:6px;
+  border:1px solid var(--line,#D6DCE3);
+  background:var(--panel,#fff);
+  color:var(--ink,#1A2230);
+  cursor:pointer;
+  text-decoration:none;
+  display:inline-flex;
+  align-items:center;
+  white-space:nowrap;
+}
+.geo-filter .btn.primary{
+  background:var(--ink,#1A2230);
+  border-color:var(--ink,#1A2230);
+  color:#fff;
+}
+.geo-filter .btn:hover{border-color:var(--ink3,#8A94A6)}
+.geo-leg{
+  display:flex;
+  gap:14px;
+  padding:0 16px 12px;
+  font-size:11px;
+  color:var(--ink2,#5A6577);
+  flex-wrap:wrap;
+}
+.geo-leg .k{display:flex;align-items:center;gap:6px}
+.geo-leg .sw{
+  width:8px;height:8px;border-radius:50%;
+  border:1.5px solid #fff;
+  box-shadow:0 0 0 1px var(--line,#D6DCE3);
+}
+.geo-leg .sw.addr{background:var(--acc,#1D4ED8)}
+.geo-leg .sw.street{background:var(--pend,#B45309)}
+.geo-empty{
+  padding:18px 16px;
+  font-size:12px;
+  color:var(--ink3,#8A94A6);
+  text-align:center;
+}
+.geo-err{
+  padding:10px 16px 14px;
+  font-size:12px;
+  color:var(--rej,#B42318);
+  background:var(--rejbg,#FDECEA);
+}
+/* Entity list highlight when a map filter is active */
+#ents-card .ent.geo-hit{
+  background:var(--accbg,#EBF0FE);
+  outline:1px solid #C5D4F8;
+}
+#ents-card .ent.geo-dim{opacity:.38}
+#ents-card.geo-filtering .ent:not(.geo-hit){opacity:.38}
+</style>
+
+<div
+  class="geo-card{% if standalone %} geo-standalone{% endif %}"
+  id="geo-minimap"
+  data-case-id="{% if case %}{{ case.id }}{% else %}{{ case_id }}{% endif %}"
+  data-schematic="1"
+  aria-label="Address minimap — visual grouping only"
+>
+  <div class="geo-hd">
+    <h3>Address minimap</h3>
+    <span class="sp"></span>
+    <span class="geo-badge" id="geo-count">—</span>
+  </div>
+  <div class="geo-honesty">
+    <b>Visual grouping — not real geography.</b>
+    Dots are city clusters + stable hash scatter (no geocoder). Click a dot to filter that address’s suggestions.
+  </div>
+  <div class="geo-map-wrap">
+    <svg
+      class="geo-svg"
+      id="geo-svg"
+      viewBox="0 0 320 200"
+      role="img"
+      aria-label="Schematic address dot map"
+    >
+      <title>Schematic address map (not real geography)</title>
+      <g class="geo-grid" aria-hidden="true">
+        <line x1="40" y1="20" x2="40" y2="180"/>
+        <line x1="160" y1="20" x2="160" y2="180"/>
+        <line x1="280" y1="20" x2="280" y2="180"/>
+        <line x1="20" y1="40" x2="300" y2="40"/>
+        <line x1="20" y1="100" x2="300" y2="100"/>
+        <line x1="20" y1="160" x2="300" y2="160"/>
+      </g>
+      <g id="geo-city-labels" aria-hidden="true"></g>
+      <g id="geo-halos"></g>
+      <g id="geo-dots"></g>
+    </svg>
+  </div>
+  <div class="geo-filter" id="geo-filter" role="status">
+    <div class="geo-filter-text">
+      <div><b id="geo-filter-label">—</b></div>
+      <div class="geo-filter-meta" id="geo-filter-meta"></div>
+    </div>
+    <a class="btn primary" id="geo-filter-review" href="#">Review →</a>
+    <button type="button" class="btn" id="geo-filter-clear">Clear</button>
+  </div>
+  <div class="geo-leg">
+    <div class="k"><span class="sw addr"></span>Subject address</div>
+    <div class="k"><span class="sw street"></span>Street name (often FP)</div>
+  </div>
+  <div class="geo-empty" id="geo-empty" hidden>No address entities in this case.</div>
+  <div class="geo-err" id="geo-err" hidden></div>
+</div>
+<script src="/static/geo.js"></script>
