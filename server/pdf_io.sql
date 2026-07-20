@@ -200,8 +200,15 @@ CREATE OR REPLACE MACRO redact_box(page_no, x0, y0, x1, y1, height_pt) AS
     );
 
 -- quackapi: query() only accepts foldable SQL strings (export/store routes).
+-- Shape gate: the sentence rides an HTTP param, so refuse anything but a
+-- single SELECT statement — narrows arbitrary-SQL to the intended surface
+-- (the CASE folds with q, so foldability is preserved).
 CREATE OR REPLACE MACRO run_sql(q) AS TABLE
-SELECT * FROM query(q);
+SELECT * FROM query(
+    CASE WHEN position(';' IN q) = 0 AND starts_with(q, 'SELECT ')
+         THEN q
+         ELSE 'SELECT error(''run_sql refused: single SELECT statements only'')'
+    END);
 
 SELECT 'pdf_io OCR enrich' AS phase,
        (SELECT ocr_available FROM pdf_ocr_capability) AS ocr_available,

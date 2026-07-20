@@ -167,26 +167,37 @@ lines AS (
     FROM remainder
     GROUP BY document_id, page_no, case_id, round(y0, 0)
 ),
+-- Phrase computed per branch (ngrams returns fixed-size ARRAY(n) — can't UNION tokens).
 raw AS (
-    SELECT l.*, 1 AS n, g.gram AS tokens, g.idx AS start_idx FROM lines l
+    SELECT l.document_id, l.page_no, l.case_id, l.word_list, l.word_meta,
+           1 AS n, g.idx AS start_idx,
+           array_to_string(list_transform(g.gram, lambda t: cast(t AS VARCHAR)), ' ') AS phrase
+    FROM lines l
     CROSS JOIN UNNEST(ngrams(l.word_list, 1)) WITH ORDINALITY AS g(gram, idx)
     UNION ALL BY NAME
-    SELECT l.*, 2, g.gram, g.idx FROM lines l
+    SELECT l.document_id, l.page_no, l.case_id, l.word_list, l.word_meta,
+           2 AS n, g.idx AS start_idx,
+           array_to_string(list_transform(g.gram, lambda t: cast(t AS VARCHAR)), ' ') AS phrase
+    FROM lines l
     CROSS JOIN UNNEST(ngrams(l.word_list, 2)) WITH ORDINALITY AS g(gram, idx)
     WHERE len(l.word_list) >= 2
     UNION ALL BY NAME
-    SELECT l.*, 3, g.gram, g.idx FROM lines l
+    SELECT l.document_id, l.page_no, l.case_id, l.word_list, l.word_meta,
+           3 AS n, g.idx AS start_idx,
+           array_to_string(list_transform(g.gram, lambda t: cast(t AS VARCHAR)), ' ') AS phrase
+    FROM lines l
     CROSS JOIN UNNEST(ngrams(l.word_list, 3)) WITH ORDINALITY AS g(gram, idx)
     WHERE len(l.word_list) >= 3
     UNION ALL BY NAME
-    SELECT l.*, 4, g.gram, g.idx FROM lines l
+    SELECT l.document_id, l.page_no, l.case_id, l.word_list, l.word_meta,
+           4 AS n, g.idx AS start_idx,
+           array_to_string(list_transform(g.gram, lambda t: cast(t AS VARCHAR)), ' ') AS phrase
+    FROM lines l
     CROSS JOIN UNNEST(ngrams(l.word_list, 4)) WITH ORDINALITY AS g(gram, idx)
     WHERE len(l.word_list) >= 4
 )
-SELECT document_id, page_no, case_id, n, start_idx,
-       array_to_string(list_transform(tokens, lambda t: cast(t AS VARCHAR)), ' ') AS phrase,
-       lower(trim(unaccent(array_to_string(
-           list_transform(tokens, lambda t: cast(t AS VARCHAR)), ' ')))) AS phrase_norm,
+SELECT document_id, page_no, case_id, n, start_idx, phrase,
+       lower(trim(unaccent(phrase))) AS phrase_norm,
        word_meta[start_idx].x0 AS x0, word_meta[start_idx].y0 AS y0,
        word_meta[start_idx + n - 1].x1 AS x1,
        list_max(list_transform(

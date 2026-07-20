@@ -20,19 +20,21 @@ WITH lines AS (
 ),
 -- token_count = number of words in the span (1..4-gram). Positional UNION ALL
 -- (not BY NAME — the size literal must align to token_count by position).
+-- ngrams(list, k) returns fixed-size ARRAY(k); cast each to VARCHAR[] so the
+-- different-length branches unify under one positional UNION ALL.
 raw AS (
-    SELECT l.*, 1 AS token_count, g.gram AS tokens, g.idx AS start_idx FROM lines l
+    SELECT l.*, 1 AS token_count, cast(g.gram AS VARCHAR[]) AS tokens, g.idx AS start_idx FROM lines l
     CROSS JOIN UNNEST(ngrams(l.word_list, 1)) WITH ORDINALITY AS g(gram, idx)
     UNION ALL
-    SELECT l.*, 2, g.gram, g.idx FROM lines l
+    SELECT l.*, 2, cast(g.gram AS VARCHAR[]), g.idx FROM lines l
     CROSS JOIN UNNEST(ngrams(l.word_list, 2)) WITH ORDINALITY AS g(gram, idx)
     WHERE len(l.word_list) >= 2
     UNION ALL
-    SELECT l.*, 3, g.gram, g.idx FROM lines l
+    SELECT l.*, 3, cast(g.gram AS VARCHAR[]), g.idx FROM lines l
     CROSS JOIN UNNEST(ngrams(l.word_list, 3)) WITH ORDINALITY AS g(gram, idx)
     WHERE len(l.word_list) >= 3
     UNION ALL
-    SELECT l.*, 4, g.gram, g.idx FROM lines l
+    SELECT l.*, 4, cast(g.gram AS VARCHAR[]), g.idx FROM lines l
     CROSS JOIN UNNEST(ngrams(l.word_list, 4)) WITH ORDINALITY AS g(gram, idx)
     WHERE len(l.word_list) >= 4
 )
@@ -143,8 +145,8 @@ LEFT JOIN entities e ON e.case_id = h.case_id AND e.kind = h.kind
    OR starts_with(h.text, e.canonical_text));
 
 -- Decision fold (arg_max, no row_number). VARCHAR ids unify UUID + legacy BIGINT.
-CREATE OR REPLACE VIEW v_decision_log AS SELECT * FROM v_src_decisions;
-
+-- Reads v_src_decisions directly — no alias view. routes/decisions.sql owns its
+-- own richer v_decision_log (filename := true for shard-derived batch ids).
 CREATE OR REPLACE VIEW v_latest_decision AS
 SELECT cast(suggestion_id AS VARCHAR) AS suggestion_id,
        arg_max(status, coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS status,

@@ -12,7 +12,9 @@
 -- order, boot-integrity asserts, serve. Domain logic lives in sibling modules.
 --
 -- All derived tables are CREATE OR REPLACE CTAS — re-run is always clean.
--- No shellfs. No SET VARIABLE. No VALUES. No INSERT for setup.
+-- No shellfs. No INSERT for setup. No cfg_* macros: app_config is the single
+-- config relation; boot SETs variables FROM it and modules getvariable() them
+-- (constant-foldable in table-function positions, unlike a subquery).
 -- Export boxes are built LIVE at request time (no boot-baked macros).
 
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -65,6 +67,15 @@ SET memory_limit = '4GB';
 SET max_memory = '4GB';
 SET threads = 4;
 
+-- Config → variables: the ONE hop from the app_config relation to the
+-- constant-foldable form table functions and serve args require. Modules
+-- consume getvariable('…'); nothing re-reads env and nothing re-commits a
+-- default — app_config stays the single source.
+SET VARIABLE port        = (SELECT value FROM app_config WHERE key = 'port');
+SET VARIABLE static_dir  = (SELECT value FROM app_config WHERE key = 'static_dir');
+SET VARIABLE samples_dir = (SELECT value FROM app_config WHERE key = 'samples_dir');
+SET VARIABLE exports_dir = (SELECT value FROM app_config WHERE key = 'exports_dir');
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Working-dir bootstrap (decision log sentinel; empty glob would error)
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -102,11 +113,14 @@ COPY (
 -- Domain modules (order matters)
 -- ═══════════════════════════════════════════════════════════════════════════
 
+-- Raw layer first: unmaterialized views straight over source files
+-- (pdf_info glob, decision-log JSON). Everything above composes these.
+.read server/sources.sql
 .read server/ingest.sql
--- OCR / scan-status enrich + export macros (must run before seed so OCR words
--- participate in suggestion CTAS). See docs/scanned-docs.md.
+-- OCR / scan-status enrich + export macros (must run before detect so OCR
+-- words participate in suggestion CTAS). See docs/scanned-docs.md.
 .read server/pdf_io.sql
-.read server/seed.sql
+.read server/detect.sql
 .read server/judge.sql
 .read server/remainder_scan.sql
 
@@ -222,34 +236,8 @@ SELECT
     END AS content
 FROM base b;
 
--- Audit view: boot snapshot ∪ decision-log projection
-CREATE OR REPLACE VIEW v_audit AS
-SELECT
-    id,
-    ts,
-    actor,
-    action,
-    suggestion_id,
-    case_id,
-    target,
-    reason,
-    'main' AS source
-FROM audit_events
-UNION ALL BY NAME
--- Projection fallbacks: legacy log shards may lack ts/actor/kind; target is
--- display text only ('' = nothing to show), never used as a join/group key.
-SELECT
-    NULL::INTEGER AS id,
-    coalesce(ts, now()) AS ts,
-    coalesce(actor, 'reviewer') AS actor,
-    coalesce(kind, 'decision') AS action,
-    suggestion_id,
-    coalesce(case_id, (SELECT d.case_id FROM documents d WHERE d.id = document_id)) AS case_id,
-    coalesce(text, cast(suggestion_id AS VARCHAR), '') AS target,
-    reason,
-    'decisions' AS source
-FROM v_decision_log
-WHERE kind IN ('decision', 'added');
+-- Audit trail = the append-only decision log itself; its only projection
+-- (v_audit) lives beside its consumers in routes/pages.sql.
 
 -- PDF I/O already loaded post-ingest (OCR enrich + export macros).
 -- PDF lifecycle: data/{source,working,export} layout + working-copy registry
@@ -296,8 +284,9 @@ GROUP BY d.filename
 ORDER BY d.filename;
 
 -- Serve args must be constant-foldable at bind (the binder rejects subqueries
--- in table functions); cfg_* macros expand to getenv() CASE constants.
-FROM quackapi_serve(cfg_port()::INTEGER, static_dir := cfg_static_dir());
+-- in table functions); getvariable() folds, and the variables came from
+-- app_config above.
+FROM quackapi_serve(getvariable('port')::INTEGER, static_dir := getvariable('static_dir'));
 
 -- Re-raise after quackapi's serve-time 256MB resource guard (must be AFTER serve).
 SET memory_limit = '4GB';

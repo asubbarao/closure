@@ -29,6 +29,23 @@ FROM v_document_stats ds
 JOIN documents d ON cast(d.id AS VARCHAR) = ds.document_id
 LEFT JOIN document_scan_status sc ON cast(sc.document_id AS VARCHAR) = ds.document_id;
 
+-- Audit strip rows: the append-only decision log IS the audit trail; this is
+-- its one display projection (case_id backfilled by JOIN, never a subselect).
+-- Fallbacks: legacy log shards may lack ts/actor/kind; target is display text
+-- only ('' = nothing to show), never a join/group key.
+CREATE OR REPLACE VIEW v_audit AS
+SELECT
+    coalesce(try_cast(l.ts AS TIMESTAMP), now()) AS ts,
+    coalesce(l.actor, 'reviewer') AS actor,
+    coalesce(l.kind, 'decision') AS action,
+    cast(l.suggestion_id AS VARCHAR) AS suggestion_id,
+    coalesce(cast(l.case_id AS VARCHAR), d.case_id) AS case_id,
+    coalesce(l.text, cast(l.suggestion_id AS VARCHAR), '') AS target,
+    l.reason
+FROM v_src_decisions l
+LEFT JOIN documents d ON cast(d.id AS VARCHAR) = cast(l.document_id AS VARCHAR)
+WHERE l.kind IN ('decision', 'added');
+
 CREATE OR REPLACE VIEW v_page_geom AS
 SELECT cast(p.document_id AS VARCHAR) AS document_id, p.page_no,
        p.width_pt, p.height_pt, 680.0 / p.width_pt AS scale,
@@ -71,7 +88,7 @@ LEFT JOIN (
 CREATE OR REPLACE VIEW v_case_page AS
 SELECT
     cast(c.id AS VARCHAR) AS case_id,
-    struct_pack(id := c.id, case_no := c.case_no, title := c.title) AS "case",
+    struct_pack(id := c.id, case_no := c.case_no, title := c.title) AS case_obj,
     (SELECT struct_pack(
          doc_count := s.doc_count, page_count := s.page_count, word_count := s.word_count,
          entity_count := s.entity_count, suggestion_count := s.suggestion_count,
@@ -228,21 +245,21 @@ JOIN v_page_geom g ON g.document_id = cast(d.id AS VARCHAR);
 CREATE OR REPLACE ROUTE case_dash GET '/cases/:id' AS
 SELECT tera_render(
     (SELECT content FROM app_templates WHERE name = 'case.html'),
-    {'case': "case", 'stats': stats, 'documents': documents,
+    {'case': case_obj, 'stats': stats, 'documents': documents,
      'entities': entities, 'audit': audit}::JSON
 ) AS html FROM v_case_page WHERE case_id = $id;
 
 CREATE OR REPLACE ROUTE home GET '/' AS
 SELECT tera_render(
     (SELECT content FROM app_templates WHERE name = 'case.html'),
-    {'case': "case", 'stats': stats, 'documents': documents,
+    {'case': case_obj, 'stats': stats, 'documents': documents,
      'entities': entities, 'audit': audit}::JSON
 ) AS html FROM v_case_page ORDER BY case_id LIMIT 1;
 
 CREATE OR REPLACE ROUTE library_shell GET '/cases/:id/library' AS
 SELECT tera_render(
     (SELECT content FROM app_templates WHERE name = 'case.html'),
-    {'case': "case", 'stats': stats, 'documents': documents,
+    {'case': case_obj, 'stats': stats, 'documents': documents,
      'entities': entities, 'audit': audit}::JSON
 ) AS html FROM v_case_page WHERE case_id = $id;
 

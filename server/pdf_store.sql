@@ -12,10 +12,10 @@
 INSTALL scalarfs FROM community;
 LOAD scalarfs;
 
--- Path roots as plain SET (no cfg_* macros).
-SET VARIABLE store_working_root = 'data/working';
-SET VARIABLE store_export_root  = 'data/export';
-SET VARIABLE store_export_compat = 'exports';
+-- Store roots are committed layout LITERALS (data/working, data/export,
+-- exports): the write side (COPY TO) only accepts grammar literals, so a
+-- variable read side would be fake flexibility — and route bind cannot see
+-- SET VARIABLEs anyway (getvariable binds NULL inside CREATE ROUTE handlers).
 
 -- ── tables ──────────────────────────────────────────────────────────────────
 
@@ -76,13 +76,19 @@ working_raw AS (
     WHERE kind = 'working' AND stage = 'working'
     UNION ALL BY NAME
     SELECT
-        regexp_extract(filename, 'doc(.+)_working\d+\.pdf$', 1),
-        filename,
-        try_cast(regexp_extract(filename, '_working(\d+)\.pdf$', 1) AS INTEGER),
-        sha256(content), cast(NULL AS VARCHAR), cast(NULL AS INTEGER),
-        cast(NULL AS INTEGER), size, 1::INTEGER,
-        try_cast(last_modified AS TIMESTAMP), 'disk', 1
-    FROM read_blob(getvariable('store_working_root') || '/*.pdf')
+        regexp_extract(filename, 'doc(.+)_working\d+\.pdf$', 1) AS document_id,
+        filename AS path,
+        try_cast(regexp_extract(filename, '_working(\d+)\.pdf$', 1) AS INTEGER) AS gen,
+        sha256(content) AS fingerprint,
+        cast(NULL AS VARCHAR) AS decision_batch,
+        cast(NULL AS INTEGER) AS accepted_count,
+        cast(NULL AS INTEGER) AS pages_redacted,
+        size AS size_bytes,
+        1::INTEGER AS revision_count,
+        try_cast(last_modified AS TIMESTAMP) AS created_ts,
+        'disk' AS actor,
+        1 AS src_rank
+    FROM read_blob('data/working' || '/*.pdf')
     WHERE regexp_matches(filename, 'doc.+_working\d+\.pdf$')
 ),
 cleaned AS (
@@ -108,35 +114,42 @@ working_live AS (
 export_blobs AS (
     SELECT filename AS path, sha256(content) AS fingerprint, size AS size_bytes,
            last_modified AS created_ts
-    FROM read_blob(getvariable('store_export_compat') || '/*_redacted.pdf')
+    FROM read_blob('exports' || '/*_redacted.pdf')
     UNION ALL BY NAME
-    SELECT filename, sha256(content), size, last_modified
-    FROM read_blob(getvariable('store_export_root') || '/*_redacted.pdf')
+    SELECT filename AS path, sha256(content) AS fingerprint, size AS size_bytes,
+           last_modified AS created_ts
+    FROM read_blob('data/export' || '/*_redacted.pdf')
 )
 SELECT document_id, case_id, filename, stage, path, gen, fingerprint,
        decision_batch, accepted_count, pages_redacted, size_bytes,
        revision_count, created_ts, actor, mutability, note
 FROM pdf_store_source
 UNION ALL BY NAME
-SELECT w.document_id, d.case_id, d.filename, 'working', w.path, w.gen,
-       w.fingerprint, w.decision_batch, w.accepted_count, w.pages_redacted,
-       w.size_bytes, coalesce(w.revision_count, 1)::INTEGER, w.created_ts, w.actor,
-       'regenerable', getvariable('store_working_root')
+SELECT w.document_id, d.case_id, d.filename,
+       'working' AS stage, w.path, w.gen, w.fingerprint, w.decision_batch,
+       w.accepted_count, w.pages_redacted, w.size_bytes,
+       coalesce(w.revision_count, 1)::INTEGER AS revision_count,
+       w.created_ts, w.actor, 'regenerable' AS mutability,
+       'data/working' AS note
 FROM working_live w
 JOIN documents d ON cast(d.id AS VARCHAR) = w.document_id
 LEFT JOIN cleaned c ON c.document_id = w.document_id AND c.gen = w.gen
 WHERE c.gen IS NULL
 UNION ALL BY NAME
-SELECT cast(d.id AS VARCHAR), d.case_id, d.filename, 'export', e.path,
-       cast(NULL AS INTEGER), e.fingerprint, cast(NULL AS VARCHAR),
-       cast(NULL AS INTEGER), cast(NULL AS INTEGER), e.size_bytes, 1::INTEGER,
-       e.created_ts, 'export_route', 'append_only',
-       CASE WHEN starts_with(e.path, getvariable('store_export_root'))
-            THEN getvariable('store_export_root') ELSE 'exports_compat' END
+SELECT cast(d.id AS VARCHAR) AS document_id, d.case_id, d.filename,
+       'export' AS stage, e.path,
+       cast(NULL AS INTEGER) AS gen, e.fingerprint,
+       cast(NULL AS VARCHAR) AS decision_batch,
+       cast(NULL AS INTEGER) AS accepted_count,
+       cast(NULL AS INTEGER) AS pages_redacted,
+       e.size_bytes, 1::INTEGER AS revision_count, e.created_ts,
+       'export_route' AS actor, 'append_only' AS mutability,
+       CASE WHEN starts_with(e.path, 'data/export')
+            THEN 'data/export' ELSE 'exports_compat' END AS note
 FROM documents d
 JOIN export_blobs e
-  ON e.path = getvariable('store_export_compat') || '/' || d.filename || '_redacted.pdf'
-  OR e.path = getvariable('store_export_root') || '/' || d.filename || '_redacted.pdf';
+  ON e.path = 'exports' || '/' || d.filename || '_redacted.pdf'
+  OR e.path = 'data/export' || '/' || d.filename || '_redacted.pdf';
 
 -- ── macros kept for routes/store.sql (parameterized, reused) ────────────────
 
@@ -189,7 +202,7 @@ plan AS (
                 WHERE cast(document_id AS VARCHAR) = cast(did AS VARCHAR)
                 UNION ALL
                 SELECT try_cast(regexp_extract(filename, '_working(\d+)\.pdf$', 1) AS INTEGER)
-                FROM read_blob(getvariable('store_working_root') || '/*.pdf')
+                FROM read_blob('data/working' || '/*.pdf')
                 WHERE position('doc' || cast(did AS VARCHAR) || '_working' IN filename) > 0
                 UNION ALL
                 SELECT 0
@@ -208,14 +221,15 @@ plan AS (
 SELECT
     p.document_id,
     p.gen,
-    getvariable('store_working_root') || '/doc' || p.document_id
+    'data/working' || '/doc' || p.document_id
         || '_working' || cast(p.gen AS VARCHAR) || '.pdf' AS path,
     p.decision_batch,
     p.accepted_count,
     'SELECT count(*)::INTEGER AS pages FROM pdf_redact(''' || d.source_path || ''', '''
-        || getvariable('store_working_root') || '/doc' || p.document_id
+        || 'data/working' || '/doc' || p.document_id
         || '_working' || cast(p.gen AS VARCHAR) || '.pdf'', '
-        || cast(p.box_list AS VARCHAR) || ')' AS working_sql,
+        || cast(p.box_list AS VARCHAR)
+        || '::STRUCT(page INTEGER, x DOUBLE, y DOUBLE, w DOUBLE, h DOUBLE)[])' AS working_sql,
     coalesce(act, 'reviewer') AS actor
 FROM documents d
 JOIN plan p ON p.document_id = cast(d.id AS VARCHAR);
@@ -239,4 +253,4 @@ SELECT 'pdf_store loaded' AS phase,
        (SELECT count(*) FROM pdf_store_source) AS source_rows,
        (SELECT count(*) FROM v_pdf_store) AS store_rows,
        typeof(getvariable('accepted_boxes_empty')) AS scalarfs_boxes_type,
-       getvariable('store_working_root') AS working_root;
+       'data/working' AS working_root;

@@ -16,8 +16,9 @@
 --     once at LOAD in ingest.sql (the "record created" event) and persisted;
 --     natural keys (filename) are used where they exist.
 --
--- Paths come from SET variables (samples_dir, exports_dir) set in app.sql — no
--- cfg_* macros.
+-- Paths are inline getenv folds (the committed app_config idiom): these views
+-- re-bind at REQUEST time inside route handlers, where SET VARIABLEs are not
+-- visible (see routes/decisions.sql) — getvariable here would bind NULL paths.
 
 -- Real documents: dimensions + on-disk path, keyed by filename (natural key).
 CREATE OR REPLACE VIEW v_src_pdf_info AS
@@ -27,7 +28,11 @@ SELECT parse_filename(file, true) AS filename,   -- built-in basename, no regex
        width  AS width_pt,
        height AS height_pt,
        file_size
-FROM pdf_info(getvariable('samples_dir') || '/*.pdf');
+FROM pdf_info(
+    CASE WHEN getenv('CLOSURE_SAMPLES_DIR') IS NOT NULL
+          AND length(getenv('CLOSURE_SAMPLES_DIR')) > 0
+         THEN getenv('CLOSURE_SAMPLES_DIR')
+         ELSE 'samples' END || '/*.pdf');
 
 -- The append-only decision log, read straight off disk. Writes append one JSON
 -- file per decision; this view always reflects current state with no mutable
@@ -35,7 +40,10 @@ FROM pdf_info(getvariable('samples_dir') || '/*.pdf');
 -- even before any decision exists.
 CREATE OR REPLACE VIEW v_src_decisions AS
 SELECT * FROM read_json_auto(
-    getvariable('exports_dir') || '/decisions/*.json',
+    CASE WHEN getenv('CLOSURE_EXPORTS_DIR') IS NOT NULL
+          AND length(getenv('CLOSURE_EXPORTS_DIR')) > 0
+         THEN getenv('CLOSURE_EXPORTS_DIR')
+         ELSE 'exports' END || '/decisions/*.json',
     union_by_name := true, ignore_errors := true)
 WHERE kind IS DISTINCT FROM 'sentinel';
 
