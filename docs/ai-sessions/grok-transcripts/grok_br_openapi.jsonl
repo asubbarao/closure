@@ -1,4 +1,0 @@
-{"event":"start","prompt_chars":2542,"t":0.0,"job":"br_openapi"}
-{"event":"update","kind":"available_commands_update","t":1.91,"job":"br_openapi"}
-{"event":"update","kind":"available_commands_update","t":1.93,"job":"br_openapi"}
-{"event":"update","kind":"user_message_chunk","t":6.26,"job":"br_openapi"}

@@ -66,3 +66,7 @@ samples/public/_renders/
 .playwright-mcp/
 samples/public/govinfo_usreports_vol5.pdf
 samples/stress/*.pdf
+
+# Offloaded from the graded tree (archived outside the repo)
+docs/ai-sessions/
+Alok_FDE*
