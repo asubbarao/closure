@@ -4,10 +4,9 @@
 -- undo_role tri-state: NULL=active forward, 'undo'=inverse batch, 'undone'=already inverted.
 -- Params VARCHAR. Spine: documents; decision log via exports/decisions/*.json.
 
-INSTALL scalarfs FROM community; LOAD scalarfs;
-
 -- Single upstream: event_ts alias reused by every view/route below.
--- Literal glob (not getvariable) so CREATE ROUTE can bind the view chain.
+-- Composes v_src_decisions (sources.sql, the ONE decision-log reader; its
+-- getenv fold is bind-safe inside CREATE ROUTE handlers).
 CREATE OR REPLACE VIEW v_history_events AS
 SELECT cast(d.suggestion_id AS VARCHAR) AS suggestion_id,
        cast(d.document_id AS VARCHAR) AS document_id,
@@ -20,14 +19,9 @@ SELECT cast(d.suggestion_id AS VARCHAR) AS suggestion_id,
        nullif(cast(d.undoes_batch_id AS VARCHAR), '') AS undoes_batch_id,
        cast(d.batch_id AS VARCHAR) AS batch_id,
        coalesce(try_cast(d.ts AS TIMESTAMP), TIMESTAMP '1970-01-01') AS event_ts
-FROM read_json_auto(
-    'exports/decisions/*.json',
-    union_by_name := true,
-    ignore_errors := true
-) d
+FROM v_src_decisions d
 LEFT JOIN documents doc ON cast(doc.id AS VARCHAR) = cast(d.document_id AS VARCHAR)
-WHERE d.kind IS DISTINCT FROM 'sentinel'
-  AND d.kind IN ('decision', 'added')
+WHERE d.kind IN ('decision', 'added')
   AND d.suggestion_id IS NOT NULL
   AND nullif(cast(d.batch_id AS VARCHAR), '') IS NOT NULL;
 
@@ -43,6 +37,9 @@ FROM (
     FROM v_history_events GROUP BY suggestion_id, batch_id
 );
 
+-- Sole owner of v_decision_batches (removed duplicate from routes/decisions.sql).
+-- Consumers: /api/cases/:id/history, /api/undo, /api/cases/:id/restore, /api/undo/status.
+-- Purpose: one set-based GROUP BY over history events + undo graph join.
 CREATE OR REPLACE VIEW v_decision_batches AS
 WITH agg AS (
     SELECT batch_id, min(event_ts) AS ts, max(event_ts) AS ts_end,

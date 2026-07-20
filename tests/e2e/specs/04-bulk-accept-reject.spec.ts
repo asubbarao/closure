@@ -15,7 +15,7 @@ test.describe("4. Bulk accept / reject", () => {
     page,
     request,
   }) => {
-    const docs = await (await import("../helpers/api")).getCaseDocuments(request, 1);
+    const docs = await (await import("../helpers/api")).getCaseDocuments(request);
     // Prefer a doc with multiple pending HIGH (not the huge consolidated file if avoidable)
     const ranked = [...docs]
       .filter((d) => d.pending_count > 0 && d.high_count > 0)
@@ -78,9 +78,11 @@ test.describe("4. Bulk accept / reject", () => {
     page,
     request,
   }) => {
-    const caseSuggs = await getCaseSuggestions(request, 1);
-    // Find an entity with ≥2 pending non-flagged suggestions
-    const byEnt = new Map<number, typeof caseSuggs>();
+    const { firstCaseId } = await import("../helpers/api");
+    const caseId = await firstCaseId(request);
+    const caseSuggs = await getCaseSuggestions(request);
+    // Find an entity with ≥2 pending non-flagged suggestions (entity ids are uuids)
+    const byEnt = new Map<string, typeof caseSuggs>();
     for (const s of caseSuggs) {
       if (
         s.status !== "pending" ||
@@ -88,11 +90,12 @@ test.describe("4. Bulk accept / reject", () => {
         s.entity_id == null
       )
         continue;
-      const list = byEnt.get(Number(s.entity_id)) || [];
+      const eid = String(s.entity_id);
+      const list = byEnt.get(eid) || [];
       list.push(s);
-      byEnt.set(Number(s.entity_id), list);
+      byEnt.set(eid, list);
     }
-    let entityId: number | null = null;
+    let entityId: string | null = null;
     let group: typeof caseSuggs = [];
     for (const [eid, list] of byEnt) {
       if (list.length >= 2) {
@@ -105,7 +108,7 @@ test.describe("4. Bulk accept / reject", () => {
 
     const beforePending = group.length;
 
-    await page.goto(`/ui/bulk?entity=${entityId}&case=1`, {
+    await page.goto(`/ui/bulk?entity=${entityId}&case=${caseId}`, {
       waitUntil: "domcontentloaded",
     });
     await expect(page.locator("#btn-accept")).toBeVisible({ timeout: 20_000 });
@@ -137,19 +140,19 @@ test.describe("4. Bulk accept / reject", () => {
 
     await expect
       .poll(async () => {
-        const live = await getCaseSuggestions(request, 1);
+        const live = await getCaseSuggestions(request);
         return live.filter(
           (s) =>
-            Number(s.entity_id) === entityId &&
+            String(s.entity_id) === entityId &&
             s.status === "pending" &&
             s.band !== "flagged"
         ).length;
       }, { timeout: 45_000 })
       .toBeLessThan(beforePending);
 
-    const after = await getCaseSuggestions(request, 1);
+    const after = await getCaseSuggestions(request);
     const accepted = after.filter(
-      (s) => Number(s.entity_id) === entityId && s.status === "accepted"
+      (s) => String(s.entity_id) === entityId && s.status === "accepted"
     ).length;
     expect(accepted).toBeGreaterThan(0);
   });

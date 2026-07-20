@@ -8,7 +8,7 @@ Review is **triage**, not reading. The unit of work is a **decision**, not a pag
 
 **Design principle** (not a measured 3k→800 run): high-confidence auto-pass + easy bulk groups clear most of the queue; a human hand-reviews only the residual, **grouped** (names, addresses, patterns) for batch judgment; FNs are caught by remainder scan + add-missed — not by rereading every page.
 
-**Our corpus (measured):** **1 328** suggestions / **11** docs / **210** pages / **22 247** words; one 110-page file holds **964**. Live entity bulk: **259** instances in one POST. Queue page-capped (≤80).
+**Our corpus (measured):** **1,764** suggestions / **9** docs / **141** pages / **105,677** words across 4 cases; one 110-page file dominates. Funnel: **1,275 HIGH** (auto-passable) / **254 REVIEW** / **235 FLAGGED** — a human hand-touches ~500, not 1,764. Queue page-capped.
 
 **Keyboard-first, full click parity** (`j`/`k` `a`/`r` Shift-bulk `e` entity `n` missed `u` undo). Confidence is three **bands** (HIGH / REVIEW / FLAGGED) — decision modes, not a slider. PDF canvas is non-negotiable: without surrounding text you cannot separate subject, citation, officer, or street. **Undo/history is a headline:** batch undo (Ctrl+Z / `u`), restore-to-prior-status, and an **append-only** decision log so a multi-hour session is reversible and legally reconstructable.
 
@@ -35,10 +35,10 @@ Clerk model: bulk-clear HIGH when safe → walk REVIEW on canvas → stop cold o
 This is a **prototype**. I was already building a DuckDB PDF extension and **quackapi** (a FastAPI-class web framework *inside* DuckDB), so collapsing the stack into one process was the fastest path to a working tool **and** a real stress test of my own ecosystem. DuckDB: single reader/writer, in-memory-fast with disk spill for query intermediates, near-zero dependencies, trivially easy deploy, and I know the ecosystem well.
 
 ```
-browser → DuckDB [ quackapi(CREATE ROUTE) · pdf · tera ]
+browser → DuckDB [ quackapi(CREATE ROUTE) · pdf · tera · finetype · addrust · rapidfuzz · splink_udfs · crypto · scalarfs ]
 ```
 
-DB + HTTP + PDF + HTML share **one address space**. Handlers are SQL; `pdf_redact` / `read_pdf_words` / `tera_render` are function calls, not RPC. Buys: no ORM skew, set-based detection (words→n-grams→roster), page-scoped review, one binary to demo.
+DB + HTTP + PDF + HTML share **one address space**. Handlers are SQL; `pdf_redact` / `read_pdf_words` / `tera_render` are function calls, not RPC. Buys: no ORM skew, **set-based generic detection** — `finetype` types tokens (SSN/phone/date), `us_address_standardizer` parses addresses, `rapidfuzz` matches a name watchlist over document words (no fixture answer-key, no hand-rolled n-grams) — page-scoped review, one binary to demo.
 
 **Honest limits:** single-writer file lock across processes; human-rate appends are fine (**~3k decision QPS**, p50 **~5 ms** in-process — not the bottleneck); quackapi **256 MB serve stomp** must re-raise post-serve; unsigned extension pending community submit. **In production multi-writer concurrency I would reach for Postgres + a conventional app tier + object storage**, keeping DuckDB as the geometry/analytics side-engine — not the horizontally scaled HTTP tier.
 
@@ -46,7 +46,7 @@ DB + HTTP + PDF + HTML share **one address space**. Handlers are SQL; `pdf_redac
 
 | Axis | Evidence |
 |------|----------|
-| **100+ suggestions** | Live **1 328** / 11 docs; 110-page doc **964** alone |
+| **100+ suggestions** | Live **1,764** / 9 docs; one 110-page doc dominates |
 | **50+ docs class** | Glob ingest near-linear (40 files, **165 ms** word CTAS); humans scale via entity/band bulk |
 | **Multi-k pages** | `pdf-stress`: **5 000** pp / 27 MiB → 3.1M words **8.2 s**, pool **~241 MiB**, spill **0** @512 MB; page words/PNG **O(page)** |
 | **Not claimed** | Open **~709 MiB / 130k pp** ≈ RSS ≈ file size (~791 MiB); full-doc list @256 MB **OOM**; scans/forms/annotations need extra paths |
@@ -55,8 +55,8 @@ DB + HTTP + PDF + HTML share **one address space**. Handlers are SQL; `pdf_redac
 
 **Users:** clerks/detectives, desktop, multi-hour FOIA release, keyboard-comfortable, legally accountable. They understand redaction, not ML. Bulk must preview the audit log.
 
-**MVP:** real PDF boxes + roster seed, keyboard triage (click parity), entity/band bulk, add-missed, judge + remainder modules, append-only audit + undo/history, `pdf_redact` export with flagged gate.
+**MVP:** real PDF boxes + generic extension detection (finetype/addrust/rapidfuzz), keyboard triage (click parity), entity/band bulk, add-missed, judge + remainder modules, append-only audit + undo/history, `pdf_redact` export with flagged gate.
 
 **More time:** real OCR for image-only pages; local-LLM judges; multi-reviewer FLAGGED sign-off; table-backed decision log; hard file-size guards + batch huge redact; published quackapi extension.
 
-*Claims map to: `server/{seed,judge,remainder_scan,routes,app}.sql`, `static/*.js`, `docs/{pdf-stress,scaling-and-limits,review-cleanroom,detection-design,sanity-check}.md`.*
+*Claims map to: `server/{sources,ingest,detect,judge,remainder_scan,routes,app}.sql`, `static/*.js`, `docs/{pdf-stress,scaling-and-limits,review-cleanroom,detection-design,sanity-check}.md`. Data model: layered unmaterialized views over raw sources (`sources.sql`), ids issued once at load, extensions do the work (finetype · addrust · rapidfuzz · splink_udfs · crypto · scalarfs · pdf · tera · quackapi).*

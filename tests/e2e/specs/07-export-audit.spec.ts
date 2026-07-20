@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import {
+  firstCaseId,
   getCaseAudit,
   getCaseSuggestions,
   getExportPlan,
@@ -16,8 +17,9 @@ test.describe("7. Export + audit", () => {
     page,
     request,
   }) => {
-    const plan = await getExportPlan(request, 1);
-    const caseSuggs = await getCaseSuggestions(request, 1);
+    const caseId = await firstCaseId(request);
+    const plan = await getExportPlan(request);
+    const caseSuggs = await getCaseSuggestions(request);
     const flaggedPending = caseSuggs.filter(
       (s) => s.band === "flagged" && s.status === "pending"
     );
@@ -33,7 +35,7 @@ test.describe("7. Export + audit", () => {
       expect(plan.blocked, "gate must be open with nothing flagged").toBeFalsy();
     }
 
-    await openCaseLibrary(page, 1);
+    await openCaseLibrary(page, caseId);
 
     const exportBtn = page.locator("#export-btn");
     await expect(exportBtn).toBeVisible();
@@ -67,7 +69,7 @@ test.describe("7. Export + audit", () => {
     // If blocked, attempting export via API still reports blocked
     if (plan.blocked) {
       const res = await request.post(
-        `/api/cases/1/export?actor=e2e-runner`,
+        `/api/cases/${caseId}/export?actor=e2e-runner`,
         {
           headers: {
             "Content-Type": "application/json",
@@ -89,7 +91,8 @@ test.describe("7. Export + audit", () => {
   });
 
   test("audit log records decisions", async ({ page, request }) => {
-    const caseSuggs = await getCaseSuggestions(request, 1);
+    const caseId = await firstCaseId(request);
+    const caseSuggs = await getCaseSuggestions(request);
     const target =
       caseSuggs.find(
         (s) => s.status === "pending" && s.band !== "flagged"
@@ -109,18 +112,18 @@ test.describe("7. Export + audit", () => {
     // API audit
     await expect
       .poll(async () => {
-        const events = await getCaseAudit(request, 1);
+        const events = await getCaseAudit(request);
         return events.some(
           (e) =>
             (e.reason || "").includes(marker) ||
             (e.target || "").includes(target.text) ||
-            Number(e.suggestion_id) === Number(target.id)
+            String(e.suggestion_id) === String(target.id)
         );
       }, { timeout: 20_000 })
       .toBeTruthy();
 
     // HTML audit page
-    await page.goto(`/cases/1/audit`, { waitUntil: "domcontentloaded" });
+    await page.goto(`/cases/${caseId}/audit`, { waitUntil: "domcontentloaded" });
     await expect(page.locator(".audit-card, .au").first()).toBeVisible({
       timeout: 15_000,
     });
@@ -137,7 +140,7 @@ test.describe("7. Export + audit", () => {
     ).toBeTruthy();
 
     // Case library recent audit strip
-    await openCaseLibrary(page, 1);
+    await openCaseLibrary(page, caseId);
     const auditList = page.locator("#audit-list");
     await expect(auditList).toBeVisible();
   });

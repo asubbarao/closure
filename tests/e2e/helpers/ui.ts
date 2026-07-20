@@ -1,6 +1,10 @@
 import { Page, expect } from "@playwright/test";
 
-export async function openDocument(page: Page, docId: number, pageNo = 1) {
+export async function openDocument(
+  page: Page,
+  docId: string | number,
+  pageNo = 1
+) {
   const path =
     pageNo <= 1 ? `/documents/${docId}` : `/documents/${docId}/pages/${pageNo}`;
   await page.goto(path, { waitUntil: "domcontentloaded" });
@@ -11,7 +15,8 @@ export async function openDocument(page: Page, docId: number, pageNo = 1) {
   await page.waitForSelector("#q-list .sugg, #q-list .empty-q", { timeout: 20_000 });
 }
 
-export async function openCaseLibrary(page: Page, caseId = 1) {
+/** Open case library; caseId is required (resolve via firstCaseId in the spec). */
+export async function openCaseLibrary(page: Page, caseId: string | number) {
   await page.goto(`/cases/${caseId}`, { waitUntil: "domcontentloaded" });
   await expect(page.locator("#doc-table")).toBeVisible({ timeout: 20_000 });
 }
@@ -20,11 +25,12 @@ export async function queueRows(page: Page) {
   return page.locator("#q-list .sugg[data-id]");
 }
 
-export async function currentSuggestionId(page: Page): Promise<number | null> {
+/** Raw data-id string (uuids or numeric ids); do not Number()-coerce. */
+export async function currentSuggestionId(page: Page): Promise<string | null> {
   const cur = page.locator("#q-list .sugg.current").first();
   if ((await cur.count()) === 0) return null;
   const id = await cur.getAttribute("data-id");
-  return id ? Number(id) : null;
+  return id || null;
 }
 
 export async function waitForQueueHydrated(page: Page) {
@@ -46,7 +52,7 @@ export async function pressReviewKey(page: Page, key: string) {
  * Open a document from the case library by data-doc-id.
  * Tolerates `a.btn` / `a.btn.small` / filename link markup drift.
  */
-export async function openDocFromLibrary(page: Page, docId: number) {
+export async function openDocFromLibrary(page: Page, docId: string | number) {
   const row = page.locator(`#doc-table tr[data-doc-id="${docId}"]`);
   await expect(row).toBeVisible({ timeout: 15_000 });
   const openBtn = row.locator(`a.btn[href="/documents/${docId}"], a[href="/documents/${docId}"]`).first();

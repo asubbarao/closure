@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import {
+  firstCaseId,
   getCaseDocuments,
   getCaseProvenance,
   getExportPlan,
@@ -18,7 +19,7 @@ test.describe("11. Provenance / chain-of-custody (wave-2)", () => {
   test("GET /api/cases/:id/provenance returns custody payload when live", async ({
     request,
   }) => {
-    const probe = await getCaseProvenance(request, 1);
+    const probe = await getCaseProvenance(request);
     test.skip(!probe.live, probe.live === false ? probe.reason : "not live");
 
     const body = probe.body;
@@ -52,7 +53,7 @@ test.describe("11. Provenance / chain-of-custody (wave-2)", () => {
 
     // If array of per-doc rows, should cover case docs roughly
     if (Array.isArray(body) && body.length > 0 && "document_id" in (body[0] as object)) {
-      const docs = await getCaseDocuments(request, 1);
+      const docs = await getCaseDocuments(request);
       expect(body.length).toBeGreaterThanOrEqual(1);
       // Not required to equal, but should not be empty while docs exist
       if (docs.length > 0) {
@@ -64,11 +65,11 @@ test.describe("11. Provenance / chain-of-custody (wave-2)", () => {
   test("provenance rows reference real case documents when structured", async ({
     request,
   }) => {
-    const probe = await getCaseProvenance(request, 1);
+    const probe = await getCaseProvenance(request);
     test.skip(!probe.live, probe.live === false ? probe.reason : "not live");
 
-    const docs = await getCaseDocuments(request, 1);
-    const docIds = new Set(docs.map((d) => Number(d.id)));
+    const docs = await getCaseDocuments(request);
+    const docIds = new Set(docs.map((d) => String(d.id)));
     const filenames = new Set(docs.map((d) => d.filename));
 
     const rows: Array<Record<string, unknown>> = [];
@@ -96,7 +97,7 @@ test.describe("11. Provenance / chain-of-custody (wave-2)", () => {
     const linked = rows.some((r) => {
       const id = r.document_id ?? r.doc_id ?? r.id;
       const fn = r.filename ?? r.stem ?? r.source_path;
-      if (id != null && docIds.has(Number(id))) return true;
+      if (id != null && docIds.has(String(id))) return true;
       if (typeof fn === "string") {
         const base = fn.replace(/^.*\//, "").replace(/\.pdf$/i, "");
         if (filenames.has(base) || filenames.has(fn)) return true;
@@ -128,10 +129,11 @@ test.describe("11. Provenance / chain-of-custody (wave-2)", () => {
     page,
     request,
   }) => {
-    const probe = await getCaseProvenance(request, 1);
+    const caseId = await firstCaseId(request);
+    const probe = await getCaseProvenance(request);
     test.skip(!probe.live, probe.live === false ? probe.reason : "not live");
 
-    await openCaseLibrary(page, 1);
+    await openCaseLibrary(page, caseId);
 
     // Live mount: #chain-of-custody (provenance_panel.html)
     const panel = provenancePanelLocator(page);
@@ -153,11 +155,11 @@ test.describe("11. Provenance / chain-of-custody (wave-2)", () => {
     expect(bodyText).toMatch(/chain of custody|intact|break|sha|fingerprint|revision|source/i);
 
     // Cross-check with export_plan still coexisting
-    const plan = await getExportPlan(request, 1);
+    const plan = await getExportPlan(request);
     expect(typeof plan.blocked).toBe("boolean");
 
     // Panel should list at least one live doc filename when API returned rows
-    const docs = await getCaseDocuments(request, 1);
+    const docs = await getCaseDocuments(request);
     if (docs.length > 0 && Array.isArray(probe.body) && (probe.body as unknown[]).length > 0) {
       const anyName = docs.some((d) => bodyText.includes(d.filename));
       expect(

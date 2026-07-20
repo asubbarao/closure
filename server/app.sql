@@ -117,8 +117,8 @@ COPY (
 -- (pdf_info glob, decision-log JSON). Everything above composes these.
 .read server/sources.sql
 .read server/ingest.sql
--- OCR / scan-status enrich + export macros (must run before detect so OCR
--- words participate in suggestion CTAS). See docs/scanned-docs.md.
+-- OCR / scan-status enrich (must run before detect so OCR words participate
+-- in suggestion CTAS). See docs/scanned-docs.md.
 .read server/pdf_io.sql
 .read server/detect.sql
 .read server/judge.sql
@@ -239,7 +239,6 @@ FROM base b;
 -- Audit trail = the append-only decision log itself; its only projection
 -- (v_audit) lives beside its consumers in routes/pages.sql.
 
--- PDF I/O already loaded post-ingest (OCR enrich + export macros).
 -- PDF lifecycle: data/{source,working,export} layout + working-copy registry
 .read server/pdf_store.sql
 
@@ -255,7 +254,7 @@ FROM base b;
 .read server/routes/judge.sql
 .read server/routes/provenance.sql
 .read server/routes/geo.sql
--- PDF lifecycle routes: plan is bind-safe; POST run_sql($sql) matches export.
+-- PDF lifecycle routes: plan is bind-safe; POST query($sql) matches export.
 .read server/routes/store.sql
 
 -- Export routes: live boxes at request time (no boot-baked export_sql_case_N).

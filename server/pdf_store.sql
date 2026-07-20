@@ -85,7 +85,7 @@ working_raw AS (
         try_cast(last_modified AS TIMESTAMP) AS created_ts,
         'disk' AS actor,
         1 AS src_rank
-    FROM read_blob('data/working' || '/*.pdf')
+    FROM read_blob('data/working/*.pdf')
     WHERE regexp_matches(filename, 'doc.+_working\d+\.pdf$')
 ),
 cleaned AS (
@@ -95,15 +95,10 @@ cleaned AS (
 ),
 working_live AS (
     SELECT document_id, gen,
-           arg_max(path, src_rank * -1) AS path,
-           arg_max(fingerprint, src_rank * -1) AS fingerprint,
-           arg_max(decision_batch, src_rank * -1) AS decision_batch,
-           arg_max(accepted_count, src_rank * -1) AS accepted_count,
-           arg_max(pages_redacted, src_rank * -1) AS pages_redacted,
-           arg_max(size_bytes, src_rank * -1) AS size_bytes,
-           arg_max(revision_count, src_rank * -1) AS revision_count,
-           arg_max(created_ts, src_rank * -1) AS created_ts,
-           arg_max(actor, src_rank * -1) AS actor
+           unnest(arg_min(struct_pack(path, fingerprint, decision_batch, accepted_count,
+                                      pages_redacted, size_bytes, revision_count,
+                                      created_ts, actor),
+                          src_rank))
     FROM working_raw
     WHERE document_id IS NOT NULL AND gen IS NOT NULL AND path IS NOT NULL
     GROUP BY document_id, gen
@@ -111,11 +106,11 @@ working_live AS (
 export_blobs AS (
     SELECT filename AS path, sha256(content) AS fingerprint, size AS size_bytes,
            last_modified AS created_ts
-    FROM read_blob('exports' || '/*_redacted.pdf')
+    FROM read_blob('exports/*_redacted.pdf')
     UNION ALL BY NAME
     SELECT filename AS path, sha256(content) AS fingerprint, size AS size_bytes,
            last_modified AS created_ts
-    FROM read_blob('data/export' || '/*_redacted.pdf')
+    FROM read_blob('data/export/*_redacted.pdf')
 )
 SELECT document_id, case_id, filename, stage, path, gen, fingerprint,
        decision_batch, accepted_count, pages_redacted, size_bytes,
@@ -145,15 +140,13 @@ SELECT cast(d.id AS VARCHAR) AS document_id, d.case_id, d.filename,
             THEN 'data/export' ELSE 'exports_compat' END AS note
 FROM documents d
 JOIN export_blobs e
-  ON e.path = 'exports' || '/' || d.filename || '_redacted.pdf'
-  OR e.path = 'data/export' || '/' || d.filename || '_redacted.pdf';
+  ON e.path = 'exports/' || d.filename || '_redacted.pdf'
+  OR e.path = 'data/export/' || d.filename || '_redacted.pdf';
 
 -- ── working plan: one row per document; sentence is a COLUMN (like export) ──
---
--- pdf_redact and query() are TABLE functions — their args must fold at bind,
--- so a sentence built from live data can't be assembled inside the executing
--- call. Construction lives in v_working_plans; GET …/working/plan hands the
--- sentence out, POST …/working hands it back as the foldable $sql param.
+-- Consumer: /api/documents/:id/working/plan (routes/store.sql).
+-- Purpose: bind-safe pdf_redact SQL + accepted-box STRUCT[] (not a stats dump).
+-- count(*) appears only inside the format() sentence string for pdf_redact.
 
 CREATE OR REPLACE VIEW v_working_plans AS
 WITH

@@ -3,8 +3,45 @@
 -- Product: confidence % + panel_signal (agree|split|conflict) + per-judge chips.
 -- Ext: finetype types hard PII shapes (replaces digit-regex cascade).
 -- kind strings load-bearing (SCHEMA_CONTRACT §1).
+-- Doctrine: taxonomy is data — pure (judge_id, bucket) cells live in judge_rules.
 
 INSTALL finetype FROM community; LOAD finetype;
+
+-- Pure rulebook: one row per (judge_id ∈ 1..3, bucket). Conditional overrides
+-- live in the judge_votes SELECT (ctx flags, docs thresholds / interpolation).
+CREATE OR REPLACE TABLE judge_rules AS
+SELECT * FROM (VALUES
+    (1, 'ssn',      'redact', 94, 4, 0, 0, 'hard SSN digit pattern'),
+    (1, 'phone',    'redact', 90, 4, 0, 0, 'hard phone digit pattern'),
+    (1, 'dob',      'redact', 91, 4, 0, 0, 'DOB pattern match'),
+    (1, 'address',  'redact', 86, 4, 0, 0, 'address-shaped span'),
+    (1, 'person',   'redact', 82, 4, 0, 0, 'person-name token shape'),
+    (1, 'citation', 'keep',   88, 4, 0, 0, 'citation form, not subject PII'),
+    (1, 'street',   'keep',   78, 4, 0, 0, 'street label, not a person'),
+    (1, 'officer',  'keep',   72, 4, 0, 0, 'officer line, weak person pattern'),
+    (1, 'fp',       'keep',   70, 4, 0, 0, 'seed-tagged non-PII pattern hit'),
+    (1, 'other',    'unsure', 50, 4, 0, 0, 'weak / ambiguous pattern'),
+    (2, 'ssn',      'redact', 92, 4, 0, 0, 'SSN kind — context does not override'),
+    (2, 'phone',    'redact', 92, 4, 0, 0, 'phone kind — context does not override'),
+    (2, 'dob',      'redact', 92, 4, 0, 0, 'DOB kind — context does not override'),
+    (2, 'address',  'redact', 88, 4, 0, 0, 'address field context'),
+    (2, 'person',   'unsure', 68, 4, 0, 0, 'name needs human context call'),
+    (2, 'citation', 'keep',   90, 4, 0, 0, 'citation wording in surrounding text'),
+    (2, 'street',   'keep',   84, 4, 0, 0, 'street-name context, not subject'),
+    (2, 'officer',  'keep',   80, 4, 0, 0, 'officer/badge context'),
+    (2, 'fp',       'keep',   55, 4, 0, 0, 'seed-tagged non-PII context'),
+    (2, 'other',    'unsure', 55, 4, 0, 0, 'context inconclusive'),
+    (3, 'ssn',      'redact', 96, 2, 0, 0, 'SSN prior: almost always redact'),
+    (3, 'phone',    'redact', 90, 4, 3, 1, 'phone prior · seen in N doc(s)'),
+    (3, 'dob',      'redact', 90, 4, 3, 1, 'DOB prior: redact'),
+    (3, 'address',  'redact', 84, 4, 0, 0, 'address prior: redact'),
+    (3, 'person',   'unsure', 70, 4, 5, 4, 'person prior · single-doc only'),
+    (3, 'citation', 'keep',   86, 4, 0, 0, 'citation prior: keep'),
+    (3, 'street',   'keep',   74, 4, 4, 1, 'street-name prior · N docs (often FP bait)'),
+    (3, 'officer',  'unsure', 62, 4, 0, 0, 'officer prior: usually not subject PII'),
+    (3, 'fp',       'keep',   52, 4, 0, 0, 'no strong entity prior'),
+    (3, 'other',    'unsure', 52, 4, 0, 0, 'no strong entity prior')
+) AS t(judge_id, bucket, verdict, base, jitter_cap, docs_cap, docs_mult, reason);
 
 CREATE OR REPLACE TABLE judge_votes AS
 WITH entity_docs AS (
@@ -50,82 +87,59 @@ SELECT
         WHEN 2 THEN 'surrounding-context'
         ELSE 'entity-type prior + cross-document corroboration'
     END AS factor,
-    CASE j.judge_id
-        WHEN 1 THEN CASE
-            WHEN b.bucket IN ('ssn','phone','dob','address','person') THEN 'redact'
-            WHEN b.bucket IN ('citation','street','officer','fp') THEN 'keep'
-            ELSE 'unsure' END
-        WHEN 2 THEN CASE
-            WHEN b.bucket IN ('ssn','phone','dob','address') THEN 'redact'
-            WHEN b.bucket IN ('citation','street','officer','fp') OR b.ctx_cite THEN 'keep'
-            WHEN b.bucket = 'person' AND (b.ctx_cite OR b.txt_st OR b.ctx_ofc) THEN 'keep'
-            WHEN b.bucket = 'person' AND b.ctx_subj THEN 'redact'
-            WHEN b.bucket = 'person' THEN 'unsure'
-            WHEN b.ctx_id THEN 'redact' ELSE 'unsure' END
-        ELSE CASE
-            WHEN b.bucket IN ('ssn','phone','dob','address') THEN 'redact'
-            WHEN b.bucket = 'person' AND b.docs >= 2 THEN 'redact'
-            WHEN b.bucket = 'person' THEN 'unsure'
-            WHEN b.bucket IN ('street','citation','fp') THEN 'keep'
-            WHEN b.bucket = 'officer' AND b.docs >= 3 THEN 'keep'
-            WHEN b.bucket = 'officer' THEN 'unsure' ELSE 'unsure' END
-    END AS verdict,
-    least(99, CASE j.judge_id
-        WHEN 1 THEN CASE b.bucket
-            WHEN 'ssn' THEN 94 WHEN 'phone' THEN 90 WHEN 'dob' THEN 91
-            WHEN 'address' THEN 86 WHEN 'person' THEN 82 WHEN 'citation' THEN 88
-            WHEN 'street' THEN 78 WHEN 'officer' THEN 72 WHEN 'fp' THEN 70 ELSE 50
-        END + b.jitter
-        WHEN 2 THEN CASE
-            WHEN b.bucket IN ('ssn','phone','dob') THEN 92 WHEN b.bucket = 'address' THEN 88
-            WHEN b.bucket = 'citation' OR b.ctx_cite THEN 90 WHEN b.bucket = 'street' THEN 84
-            WHEN b.bucket = 'officer' THEN 80 WHEN b.bucket = 'person' THEN 68 ELSE 55
-        END + b.jitter
-        ELSE CASE b.bucket
-            WHEN 'ssn' THEN 96 + least(b.jitter, 2)
-            WHEN 'phone' THEN 90 + b.jitter + least(b.docs, 3)
-            WHEN 'dob' THEN 90 + b.jitter + least(b.docs, 3)
-            WHEN 'person' THEN 70 + least(b.docs, 5) * 4 + b.jitter
-            WHEN 'address' THEN 84 + b.jitter WHEN 'citation' THEN 86 + b.jitter
-            WHEN 'street' THEN 74 + least(b.docs, 4) + b.jitter
-            WHEN 'officer' THEN 62 + b.jitter ELSE 52 + b.jitter END
-    END)::INTEGER AS score,
-    CASE j.judge_id
-        WHEN 1 THEN CASE b.bucket
-            WHEN 'ssn' THEN 'hard SSN digit pattern' WHEN 'phone' THEN 'hard phone digit pattern'
-            WHEN 'dob' THEN 'DOB pattern match' WHEN 'address' THEN 'address-shaped span'
-            WHEN 'person' THEN 'person-name token shape' WHEN 'citation' THEN 'citation form, not subject PII'
-            WHEN 'street' THEN 'street label, not a person' WHEN 'officer' THEN 'officer line, weak person pattern'
-            WHEN 'fp' THEN 'seed-tagged non-PII pattern hit' ELSE 'weak / ambiguous pattern' END
-        WHEN 2 THEN CASE
-            WHEN b.bucket = 'ssn' THEN 'SSN kind — context does not override'
-            WHEN b.bucket = 'phone' THEN 'phone kind — context does not override'
-            WHEN b.bucket = 'dob' THEN 'DOB kind — context does not override'
-            WHEN b.bucket = 'address' THEN 'address field context'
-            WHEN b.bucket = 'citation' OR b.ctx_cite THEN 'citation wording in surrounding text'
-            WHEN b.bucket = 'street' OR (b.bucket = 'person' AND b.txt_st) THEN 'street-name context, not subject'
-            WHEN b.bucket = 'officer' OR (b.bucket = 'person' AND b.ctx_ofc) THEN 'officer/badge context'
-            WHEN b.bucket = 'person' AND b.ctx_subj THEN 'subject/witness context nearby'
-            WHEN b.bucket = 'person' THEN 'name needs human context call'
-            WHEN b.bucket = 'fp' THEN 'seed-tagged non-PII context'
-            WHEN b.ctx_id THEN 'identifier cue in surrounding text' ELSE 'context inconclusive' END
-        ELSE CASE b.bucket
-            WHEN 'ssn' THEN 'SSN prior: almost always redact'
-            WHEN 'phone' THEN 'phone prior · seen in ' || b.docs || ' doc(s)'
-            WHEN 'dob' THEN 'DOB prior: redact'
-            WHEN 'person' THEN CASE WHEN b.docs >= 2
+    coalesce(
+        CASE
+            -- judge 2: ctx_cite forces keep outside hard-redact buckets
+            WHEN j.judge_id = 2 AND b.bucket NOT IN ('ssn','phone','dob','address') AND b.ctx_cite THEN 'keep'
+            WHEN j.judge_id = 2 AND b.bucket = 'person' AND (b.ctx_cite OR b.txt_st OR b.ctx_ofc) THEN 'keep'
+            WHEN j.judge_id = 2 AND b.bucket = 'person' AND b.ctx_subj THEN 'redact'
+            WHEN j.judge_id = 2 AND b.bucket = 'person' THEN 'unsure'
+            WHEN j.judge_id = 2 AND b.bucket = 'other' AND b.ctx_id THEN 'redact'
+            -- judge 3: docs thresholds on person / officer
+            WHEN j.judge_id = 3 AND b.bucket = 'person' AND b.docs >= 2 THEN 'redact'
+            WHEN j.judge_id = 3 AND b.bucket = 'person' THEN 'unsure'
+            WHEN j.judge_id = 3 AND b.bucket = 'officer' AND b.docs >= 3 THEN 'keep'
+            WHEN j.judge_id = 3 AND b.bucket = 'officer' THEN 'unsure'
+        END,
+        r.verdict
+    ) AS verdict,
+    least(99,
+        coalesce(
+            CASE WHEN j.judge_id = 2 AND b.ctx_cite AND b.bucket NOT IN ('ssn','phone','dob','address')
+                 THEN 90 END,
+            r.base
+        )
+        + least(b.jitter, r.jitter_cap)
+        + least(b.docs, r.docs_cap) * r.docs_mult
+    )::INTEGER AS score,
+    coalesce(
+        CASE
+            WHEN j.judge_id = 2 AND b.bucket NOT IN ('ssn','phone','dob','address') AND b.ctx_cite
+                THEN 'citation wording in surrounding text'
+            WHEN j.judge_id = 2 AND b.bucket = 'person' AND b.txt_st
+                THEN 'street-name context, not subject'
+            WHEN j.judge_id = 2 AND b.bucket = 'person' AND b.ctx_ofc
+                THEN 'officer/badge context'
+            WHEN j.judge_id = 2 AND b.bucket = 'person' AND b.ctx_subj
+                THEN 'subject/witness context nearby'
+            WHEN j.judge_id = 2 AND b.bucket = 'other' AND b.ctx_id
+                THEN 'identifier cue in surrounding text'
+            WHEN j.judge_id = 3 AND b.bucket = 'phone'
+                THEN 'phone prior · seen in ' || b.docs || ' doc(s)'
+            WHEN j.judge_id = 3 AND b.bucket = 'person' AND b.docs >= 2
                 THEN 'person prior · corroborated across ' || b.docs || ' docs'
-                ELSE 'person prior · single-doc only' END
-            WHEN 'address' THEN 'address prior: redact' WHEN 'citation' THEN 'citation prior: keep'
-            WHEN 'street' THEN 'street-name prior · ' || b.docs || ' docs (often FP bait)'
-            WHEN 'officer' THEN 'officer prior: usually not subject PII' ELSE 'no strong entity prior' END
-    END AS reason
-FROM buck b, UNNEST([1, 2, 3]) AS j(judge_id);
+            WHEN j.judge_id = 3 AND b.bucket = 'person'
+                THEN 'person prior · single-doc only'
+            WHEN j.judge_id = 3 AND b.bucket = 'street'
+                THEN 'street-name prior · ' || b.docs || ' docs (often FP bait)'
+        END,
+        r.reason
+    ) AS reason
+FROM buck b, UNNEST([1, 2, 3]) AS j(judge_id)
+JOIN judge_rules r ON r.judge_id = j.judge_id AND r.bucket = b.bucket;
 
-CREATE OR REPLACE VIEW v_judge_votes AS
-SELECT suggestion_id, judge_id, judge_name, factor, verdict, score, reason FROM judge_votes;
-
--- Aggregate votes ONCE (no correlated subselects).
+-- Panel blend: one set-based GROUP BY over judge_votes (vote counts are the purpose).
+-- Consumer: /api/suggestions/:id/judges (routes/judge.sql) + v_suggestions_judged.
 CREATE OR REPLACE VIEW v_judge_panel AS
 SELECT suggestion_id,
     round(avg(CASE verdict WHEN 'redact' THEN score WHEN 'keep' THEN 100 - score
@@ -141,6 +155,8 @@ SELECT suggestion_id,
          ORDER BY judge_id) AS judges
 FROM judge_votes GROUP BY suggestion_id;
 
+-- Live suggestion + panel + judge_band (projection join; no baked stats).
+-- Consumer: confidence/triage design path; routes join panel directly today.
 CREATE OR REPLACE VIEW v_suggestions_judged AS
 SELECT s.*, p.confidence AS judge_confidence, p.panel_signal, p.judge_count,
        p.redact_votes, p.keep_votes, p.unsure_votes, p.judges,
@@ -152,7 +168,11 @@ LEFT JOIN v_judge_panel p ON p.suggestion_id = s.id;
 
 SELECT 'judge ensemble ready' AS status,
        (SELECT count(*) FROM judge_votes) AS votes,
-       (SELECT count(*) FROM v_judge_panel) AS panels,
-       (SELECT count(*) FILTER (WHERE panel_signal = 'agree') FROM v_judge_panel) AS agree_n,
-       (SELECT count(*) FILTER (WHERE panel_signal = 'split') FROM v_judge_panel) AS split_n,
-       (SELECT count(*) FILTER (WHERE panel_signal = 'conflict') FROM v_judge_panel) AS conflict_n;
+       p.panels, p.agree_n, p.split_n, p.conflict_n
+FROM (
+    SELECT count(*) AS panels,
+           count(*) FILTER (WHERE panel_signal = 'agree') AS agree_n,
+           count(*) FILTER (WHERE panel_signal = 'split') AS split_n,
+           count(*) FILTER (WHERE panel_signal = 'conflict') AS conflict_n
+    FROM v_judge_panel
+) p;

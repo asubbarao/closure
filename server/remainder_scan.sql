@@ -3,7 +3,7 @@
 --
 -- Mask words covered by accepted|pending suggestion boxes, then re-run the
 -- detect stack (finetype / addrust / rapidfuzz) on what remains. Surfaces as
--- residual_pii_hits → residual_pii_candidates for routes/remainder.sql.
+-- residual_pii_hits for routes/remainder.sql.
 --
 -- No seq column on words — lines are round(y0) bags; spans via splink ngrams().
 -- No _name_variant_*/_remainder_grams hand tables; entity groups use soundex +
@@ -39,8 +39,6 @@ SELECT
     upper(trim(e.canonical_text)) AS standardized_text
 FROM entities e, UNNEST([addrust_parse(e.canonical_text)]) AS u(a)
 WHERE position('ADDRESS' IN e.kind) > 0 OR position('STREET' IN e.kind) > 0;
-
-CREATE OR REPLACE VIEW v_address_entity_canon AS SELECT * FROM entity_address_canon;
 
 -- ── Entity groups (soundex surname / addrust key — bulk-judge surface) ───────
 CREATE OR REPLACE TABLE entity_groups AS
@@ -121,6 +119,8 @@ FROM (
     SELECT * FROM addr_m
 ) m;
 
+-- Entity-group membership tallies (set-based GROUP BY join).
+-- Consumer: /api/cases/:id/entity-groups (routes/remainder.sql).
 CREATE OR REPLACE VIEW v_entity_groups AS
 SELECT g.*,
        coalesce(m.member_count, 0) AS member_count,
@@ -133,8 +133,6 @@ LEFT JOIN (
     FROM entity_group_members
     GROUP BY group_id
 ) m ON m.group_id = g.group_id;
-
-CREATE OR REPLACE VIEW v_entity_group_members AS SELECT * FROM entity_group_members;
 
 -- ── Remainder spans (detect pattern: line bags + ngrams, cover-masked) ───────
 CREATE OR REPLACE TABLE _remainder_spans AS
@@ -166,30 +164,19 @@ lines AS (
     FROM remainder
     GROUP BY document_id, page_no, case_id, round(y0, 0)
 ),
--- Phrase computed per branch (ngrams returns fixed-size ARRAY(n) — can't UNION tokens).
+-- ngrams(n) needs a constant n — the four calls are ONE list literal (each
+-- fixed-size ARRAY(n) cast to VARCHAR[] so they unify); projection written once.
+-- n > len(word_list) yields an empty gram list and vanishes — no length guards.
 raw AS (
     SELECT l.document_id, l.page_no, l.case_id, l.word_list, l.word_meta,
-           1 AS n, g.idx AS start_idx,
-           array_to_string(list_transform(g.gram, lambda t: cast(t AS VARCHAR)), ' ') AS phrase
-    FROM lines l, UNNEST(ngrams(l.word_list, 1)) WITH ORDINALITY AS g(gram, idx)
-    UNION ALL BY NAME
-    SELECT l.document_id, l.page_no, l.case_id, l.word_list, l.word_meta,
-           2 AS n, g.idx AS start_idx,
-           array_to_string(list_transform(g.gram, lambda t: cast(t AS VARCHAR)), ' ') AS phrase
-    FROM lines l, UNNEST(ngrams(l.word_list, 2)) WITH ORDINALITY AS g(gram, idx)
-    WHERE len(l.word_list) >= 2
-    UNION ALL BY NAME
-    SELECT l.document_id, l.page_no, l.case_id, l.word_list, l.word_meta,
-           3 AS n, g.idx AS start_idx,
-           array_to_string(list_transform(g.gram, lambda t: cast(t AS VARCHAR)), ' ') AS phrase
-    FROM lines l, UNNEST(ngrams(l.word_list, 3)) WITH ORDINALITY AS g(gram, idx)
-    WHERE len(l.word_list) >= 3
-    UNION ALL BY NAME
-    SELECT l.document_id, l.page_no, l.case_id, l.word_list, l.word_meta,
-           4 AS n, g.idx AS start_idx,
-           array_to_string(list_transform(g.gram, lambda t: cast(t AS VARCHAR)), ' ') AS phrase
-    FROM lines l, UNNEST(ngrams(l.word_list, 4)) WITH ORDINALITY AS g(gram, idx)
-    WHERE len(l.word_list) >= 4
+           len(g.gram) AS n, g.idx AS start_idx,
+           array_to_string(g.gram, ' ') AS phrase
+    FROM lines l,
+         UNNEST([ngrams(l.word_list, 1)::VARCHAR[][],
+                 ngrams(l.word_list, 2)::VARCHAR[][],
+                 ngrams(l.word_list, 3)::VARCHAR[][],
+                 ngrams(l.word_list, 4)::VARCHAR[][]]) AS gs(grams),
+         UNNEST(gs.grams) WITH ORDINALITY AS g(gram, idx)
 )
 SELECT document_id, page_no, case_id, n, start_idx, phrase,
        lower(trim(unaccent(phrase))) AS phrase_norm,
@@ -198,7 +185,7 @@ SELECT document_id, page_no, case_id, n, start_idx, phrase,
        list_max(list_transform(
            list_slice(word_meta, start_idx::BIGINT, (start_idx + n - 1)::BIGINT),
            lambda m: m.y1)) AS y1,
-       array_to_string(list_transform(word_list, lambda t: cast(t AS VARCHAR)), ' ') AS context
+       array_to_string(word_list, ' ') AS context
 FROM raw;
 
 -- ── Residual hits: finetype + addrust + rapidfuzz (vs entities ∪ watchlist) ──
@@ -301,15 +288,9 @@ fresh AS (
 ),
 -- One hit per box+kind; prefer rapidfuzz (has entity) > addrust > finetype.
 dedup AS (
-    SELECT document_id, page_no,
-           arg_max(text, prio) AS text,
-           arg_max(x0, prio) AS x0, arg_max(y0, prio) AS y0,
-           arg_max(x1, prio) AS x1, arg_max(y1, prio) AS y1,
-           kind,
-           arg_max(why, prio) AS why,
-           arg_max(detector, prio) AS detector,
-           arg_max(score, prio) AS score,
-           arg_max(entity_id, prio) AS entity_id
+    SELECT document_id, page_no, kind,
+           unnest(arg_max(struct_pack(text, x0, y0, x1, y1, why, detector, score, entity_id),
+                          prio))
     FROM (
         SELECT *,
                CASE detector WHEN 'rapidfuzz' THEN 3 WHEN 'addrust' THEN 2 ELSE 1 END AS prio
@@ -325,26 +306,21 @@ SELECT
     text, kind, why, detector, score, entity_id
 FROM dedup;
 
-CREATE OR REPLACE VIEW residual_pii_candidates AS
-SELECT
-    id, document_id, page,
-    struct_pack(x0 := x0, y0 := y0, x1 := x1, y1 := y1) AS box,
-    x0, y0, x1, y1, text, kind, why, detector, score, entity_id
-FROM residual_pii_hits;
-
-CREATE OR REPLACE VIEW v_residual_pii_candidates AS
-SELECT * FROM residual_pii_candidates;
-
 DROP TABLE IF EXISTS _remainder_spans;
 
 SELECT 'remainder scan ready' AS status,
-       (SELECT count(*) FROM residual_pii_hits) AS residual_n,
-       (SELECT count(*) FROM residual_pii_hits WHERE kind = 'SSN') AS ssn_n,
-       (SELECT count(*) FROM residual_pii_hits WHERE kind = 'PHONE') AS phone_n,
-       (SELECT count(*) FROM residual_pii_hits WHERE kind = 'PERSON') AS person_n,
-       (SELECT count(*) FROM residual_pii_hits WHERE kind = 'ADDRESS') AS address_n,
-       (SELECT count(*) FROM residual_pii_hits WHERE detector = 'rapidfuzz') AS fuzz_n,
-       (SELECT count(*) FROM residual_pii_hits WHERE detector = 'addrust') AS addrust_n,
-       (SELECT count(*) FROM entity_groups) AS entity_groups_n,
-       (SELECT count(*) FROM entity_group_members) AS entity_members_n,
-       (SELECT count(*) FROM entity_address_canon WHERE is_full_address) AS addr_full_n;
+       r.residual_n, r.ssn_n, r.phone_n, r.person_n, r.address_n, r.fuzz_n, r.addrust_n,
+       g.entity_groups_n, m.entity_members_n, a.addr_full_n
+FROM (
+    SELECT count(*) AS residual_n,
+           count(*) FILTER (WHERE kind = 'SSN') AS ssn_n,
+           count(*) FILTER (WHERE kind = 'PHONE') AS phone_n,
+           count(*) FILTER (WHERE kind = 'PERSON') AS person_n,
+           count(*) FILTER (WHERE kind = 'ADDRESS') AS address_n,
+           count(*) FILTER (WHERE detector = 'rapidfuzz') AS fuzz_n,
+           count(*) FILTER (WHERE detector = 'addrust') AS addrust_n
+    FROM residual_pii_hits
+) r,
+(SELECT count(*) AS entity_groups_n FROM entity_groups) g,
+(SELECT count(*) AS entity_members_n FROM entity_group_members) m,
+(SELECT count(*) FILTER (WHERE is_full_address) AS addr_full_n FROM entity_address_canon) a;

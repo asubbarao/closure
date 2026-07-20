@@ -1,0 +1,193 @@
+{"event":"start","prompt_chars":5394,"t":0.0,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":1.67,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":1.68,"job":"g_detect2"}
+{"event":"update","kind":"user_message_chunk","t":4.17,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":10.65,"job":"g_detect2"}
+{"event":"tool_call","tool":"read_file","n":1,"args_preview":"{\"target_file\": \"/Users/aloksubbarao/personal/closure/server/detect.sql\"}","t":10.66,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":10.66,"job":"g_detect2"}
+{"event":"tool_call","tool":"list_dir","n":2,"args_preview":"{\"target_directory\": \"/Users/aloksubbarao/personal/closure/server\"}","t":10.66,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":10.66,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":3,"args_preview":"{\"command\": \"wc -l /Users/aloksubbarao/personal/closure/server/detect.sql; ls -la /Users/aloksubbarao/personal/closure/samples 2>/dev/null | head -20; ls /tmp/detect_test.db 2>/dev/null; ls /Users/alo","t":10.67,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":10.67,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":10.68,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":10.69,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":10.69,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":10.69,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":10.84,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":10.84,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":18.18,"job":"g_detect2"}
+{"event":"tool_call","tool":"read_file","n":4,"args_preview":"{\"target_file\": \"/Users/aloksubbarao/personal/closure/samples/watchlist.json\", \"limit\": 100}","t":18.18,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":18.18,"job":"g_detect2"}
+{"event":"tool_call","tool":"grep","n":5,"args_preview":"{\"pattern\": \"watchlist|addrust|marisa|finetype|rapidfuzz\", \"path\": \"/Users/aloksubbarao/personal/closure/server\", \"glob\": \"*.sql\"}","t":18.18,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":18.18,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":6,"args_preview":"{\"command\": \"cd /Users/aloksubbarao/personal/closure && /opt/homebrew/bin/duckdb -unsigned -c \\\"\\nINSTALL marisa FROM community; LOAD marisa;\\nINSTALL us_address_standardizer FROM community; LOAD us_a","t":18.18,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":18.18,"job":"g_detect2"}
+{"event":"permission","approved":"allow-once","summary":"{'sessionId': '019f7f66-05d7-7ce2-92d8-11290157c9fa', 'toolCall': {'toolCallId': 'call-8f4f2bd8-5b94-4886-9e37-e6c4a1dfd","t":18.2,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":18.2,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":18.2,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":18.21,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":19.74,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":19.74,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":62.0,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":7,"args_preview":"{\"command\": \"cd /Users/aloksubbarao/personal/closure && /opt/homebrew/bin/duckdb -unsigned -c \\\"\\nINSTALL marisa FROM community; LOAD marisa;\\nINSTALL rapidfuzz FROM community; LOAD rapidfuzz;\\nINSTAL","t":62.01,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":62.01,"job":"g_detect2"}
+{"event":"permission","approved":"allow-once","summary":"{'sessionId': '019f7f66-05d7-7ce2-92d8-11290157c9fa', 'toolCall': {'toolCallId': 'call-422e00f4-1c46-46d5-bb59-7f979a176","t":62.02,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":62.02,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":62.14,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":62.84,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":62.84,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":68.96,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":8,"args_preview":"{\"command\": \"cd /Users/aloksubbarao/personal/closure && rm -f /tmp/detect_test.db && /opt/homebrew/bin/duckdb -unsigned /tmp/detect_test.db <<'SQL'\\nINSTALL pdf FROM community; LOAD pdf;\\nINSTALL scal","t":68.96,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":68.96,"job":"g_detect2"}
+{"event":"permission","approved":"allow-once","summary":"{'sessionId': '019f7f66-05d7-7ce2-92d8-11290157c9fa', 'toolCall': {'toolCallId': 'call-8668735f-9f19-4a72-87c5-07bd92da5","t":68.97,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":68.98,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":69.14,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":69.24,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":69.34,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":69.44,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":69.54,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":69.64,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":69.64,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":80.28,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":9,"args_preview":"{\"command\": \"cd /Users/aloksubbarao/personal/closure && /opt/homebrew/bin/duckdb -unsigned /tmp/detect_test.db <<'SQL'\\nINSTALL us_address_standardizer FROM community; LOAD us_address_standardizer;\\nI","t":80.28,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":80.28,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":80.29,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":80.44,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":80.84,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":80.84,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":93.49,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":10,"args_preview":"{\"command\": \"cd /Users/aloksubbarao/personal/closure && /opt/homebrew/bin/duckdb -unsigned /tmp/detect_test.db <<'SQL'\\nINSTALL us_address_standardizer FROM community; LOAD us_address_standardizer;\\nI","t":93.49,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":93.49,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":93.51,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":93.64,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":94.04,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":94.24,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":94.24,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":112.56,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":11,"args_preview":"{\"command\": \"cd /Users/aloksubbarao/personal/closure && /opt/homebrew/bin/duckdb -unsigned /tmp/detect_test.db <<'SQL'\\nINSTALL us_address_standardizer FROM community; LOAD us_address_standardizer;\\nI","t":112.56,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":112.57,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":112.58,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":112.74,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":113.11,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":127.69,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":130.83,"job":"g_detect2"}
+{"event":"tool_call","tool":"get_command_or_subagent_output","n":12,"args_preview":"{\"task_ids\": [\"call-5b4fb1ad-5b13-4251-bf0c-224fef68a970-10\"], \"timeout_ms\": 180000}","t":130.83,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":130.83,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":133.44,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":133.44,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":176.05,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":13,"args_preview":"{\"command\": \"cd /Users/aloksubbarao/personal/closure && /opt/homebrew/bin/duckdb -unsigned /tmp/detect_test.db <<'SQL'\\nINSTALL us_address_standardizer FROM community; LOAD us_address_standardizer;\\n\\","t":176.05,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":176.06,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":176.07,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":176.24,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":176.24,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":184.41,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":14,"args_preview":"{\"command\": \"cd /Users/aloksubbarao/personal/closure && /opt/homebrew/bin/duckdb -unsigned /tmp/detect_test.db <<'SQL'\\nINSTALL finetype FROM community; LOAD finetype;\\n\\nWITH c AS (\\n  SELECT trim(wo","t":184.41,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":184.41,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":184.43,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":184.54,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":187.44,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":187.44,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":202.56,"job":"g_detect2"}
+{"event":"tool_call","tool":"read_file","n":15,"args_preview":"{\"target_file\": \"/Users/aloksubbarao/personal/closure/server/detect.sql\", \"offset\": 128}","t":202.56,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":202.56,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":202.56,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":218.91,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":16,"args_preview":"{\"command\": \"cd /Users/aloksubbarao/personal/closure && /opt/homebrew/bin/duckdb -unsigned /tmp/detect_test.db -c \\\"SELECT typeof(case_id) FROM documents LIMIT 1; SELECT typeof(case_no), case_no FROM ","t":218.91,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":218.91,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":218.93,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":219.04,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":219.04,"job":"g_detect2"}
+{"event":"chunk","chars":504,"t":227.84,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":270.68,"job":"g_detect2"}
+{"event":"tool_call","tool":"write","n":17,"args_preview":"{\"file_path\": \"/Users/aloksubbarao/personal/closure/server/detect.sql\", \"content\": \"-- detect.sql \\u2014 generic AI redaction detection over words (ruling B).\\n-- Replaces seed.sql. Inputs: words, doc","t":270.69,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":270.69,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":270.69,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":275.17,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":18,"args_preview":"{\"command\": \"cd /Users/aloksubbarao/personal/closure && wc -l server/detect.sql && /opt/homebrew/bin/duckdb -unsigned /tmp/detect_test.db <<'SQL'\\nSET VARIABLE samples_dir='samples';\\nSET VARIABLE exp","t":275.17,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":275.17,"job":"g_detect2"}
+{"event":"permission","approved":"allow-once","summary":"{'sessionId': '019f7f66-05d7-7ce2-92d8-11290157c9fa', 'toolCall': {'toolCallId': 'call-c03b4472-2106-427b-ba60-340059f80","t":275.18,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":275.19,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":275.34,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":277.84,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":277.94,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":277.94,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":292.41,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":19,"args_preview":"{\"command\": \"cd /Users/aloksubbarao/personal/closure && /opt/homebrew/bin/duckdb -unsigned /tmp/detect_test.db <<'SQL'\\nSELECT d.filename, count(*) n\\nFROM v_suggestions s\\nJOIN documents d ON cast(d.","t":292.42,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":292.42,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":292.43,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":292.64,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":292.64,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":309.58,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":20,"args_preview":"{\"command\": \"cd /Users/aloksubbarao/personal/closure && /opt/homebrew/bin/duckdb -unsigned /tmp/detect_test.db <<'SQL'\\nINSTALL rapidfuzz FROM community; LOAD rapidfuzz;\\nINSTALL splink_udfs FROM comm","t":309.58,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":309.58,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":309.6,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":309.74,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":310.04,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":310.04,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":316.45,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":21,"args_preview":"{\"command\": \"cd /Users/aloksubbarao/personal/closure && /opt/homebrew/bin/duckdb -unsigned /tmp/detect_test.db <<'SQL'\\nINSTALL finetype FROM community; LOAD finetype;\\nWITH c AS (\\n  SELECT trim(word","t":316.45,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":316.45,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":316.46,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":316.64,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":318.24,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":318.24,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":324.93,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":22,"args_preview":"{\"command\": \"wc -l /Users/aloksubbarao/personal/closure/server/detect.sql; grep -n \\\"CREATE OR REPLACE TABLE entities\\\\|DROP TABLE\\\\|detect complete\\\" /Users/aloksubbarao/personal/closure/server/detec","t":324.93,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":324.93,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":324.94,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":325.04,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":325.04,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":362.83,"job":"g_detect2"}
+{"event":"tool_call","tool":"write","n":23,"args_preview":"{\"file_path\": \"/Users/aloksubbarao/personal/closure/server/detect.sql\", \"content\": \"-- detect.sql \\u2014 generic AI redaction detection over words (ruling B).\\n-- Inputs: words, documents, watchlist; ","t":362.83,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":362.83,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":362.83,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":374.82,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":24,"args_preview":"{\"command\": \"cd /Users/aloksubbarao/personal/closure && /opt/homebrew/bin/duckdb -unsigned -c \\\"\\nINSTALL finetype FROM community; LOAD finetype;\\nSELECT finetype(['642-6124']) AS a, finetype(['(523)'","t":374.82,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":374.82,"job":"g_detect2"}
+{"event":"permission","approved":"allow-once","summary":"{'sessionId': '019f7f66-05d7-7ce2-92d8-11290157c9fa', 'toolCall': {'toolCallId': 'call-4c73d17a-0c09-41a7-ba61-49ee6c9a2","t":374.83,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":374.84,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":374.94,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":375.04,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":375.14,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":375.24,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":375.34,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":375.44,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":375.54,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":379.94,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":380.04,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":380.04,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":393.51,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":25,"args_preview":"{\"command\": \"# Compare frozen section: extract from CREATE OR REPLACE TABLE entities to EOF\\n# Use the original from git? NO git allowed. We have the content from first read.\\n\\n# Verify current file'","t":393.51,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":393.51,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":393.53,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":393.64,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":393.64,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":434.65,"job":"g_detect2"}
+{"event":"tool_call","tool":"write","n":26,"args_preview":"{\"file_path\": \"/Users/aloksubbarao/personal/closure/server/detect.sql\", \"content\": \"-- detect.sql \\u2014 generic AI redaction detection over words (ruling B).\\n-- Inputs: words, documents, watchlist; ","t":434.65,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":434.65,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":434.65,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":441.02,"job":"g_detect2"}
+{"event":"tool_call","tool":"read_file","n":27,"args_preview":"{\"target_file\": \"/Users/aloksubbarao/personal/closure/server/sources.sql\", \"limit\": 80}","t":441.02,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":441.02,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":28,"args_preview":"{\"command\": \"wc -l /Users/aloksubbarao/personal/closure/server/detect.sql\\n# re-run detect only on existing db for final counts\\ncd /Users/aloksubbarao/personal/closure && /opt/homebrew/bin/duckdb -un","t":441.02,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":441.02,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":441.04,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":441.04,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":441.14,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":441.24,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":445.74,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":445.84,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":445.84,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":479.7,"job":"g_detect2"}
+{"event":"tool_call","tool":"run_terminal_command","n":29,"args_preview":"{\"command\": \"python3 <<'PY'\\nfrom pathlib import Path\\n# Reconstruct expected frozen from first read in conversation\\nexpected = r'''-- entities + suggestions: uuid issued once at load (ruling C).\\nCR","t":479.7,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":479.71,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":479.73,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":479.9,"job":"g_detect2"}
+{"event":"update","kind":"tool_call_update","t":479.9,"job":"g_detect2"}
+{"event":"chunk","chars":1005,"t":488.23,"job":"g_detect2"}
+{"event":"chunk","chars":1506,"t":490.05,"job":"g_detect2"}
+{"event":"chunk","chars":2006,"t":492.14,"job":"g_detect2"}
+{"event":"chunk","chars":2514,"t":493.46,"job":"g_detect2"}
+{"event":"update","kind":"available_commands_update","t":495.01,"job":"g_detect2"}
+{"event":"done","tool_calls":29,"output_chars":2754,"elapsed_s":495.02,"t":495.02,"job":"g_detect2"}

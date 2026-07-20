@@ -11,6 +11,8 @@
 -- as the foldable $sql param. The response is the redaction RELATION itself
 -- (document_id, pages per doc) — callers count rows, no server-side tallies.
 
+-- Bind-safe export sentence + fail-closed flagged gate (not a stats dump).
+-- Consumer: /api/cases/:id/export_plan (POST /export reuses the sentence).
 CREATE OR REPLACE VIEW v_export_plans AS
 WITH boxes AS (
     -- accepted boxes as a typed STRUCT[], geometry converted once

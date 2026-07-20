@@ -11,6 +11,7 @@ WITH thr AS (
 ),
 marked AS (
     SELECT s.status, s.band, s.confidence, s.flag_tag, s.entity_id, s.text, s.kind,
+           s.group_key,
            CASE
                WHEN s.status = 'pending'
                 AND s.confidence >= (SELECT threshold FROM thr)
@@ -40,8 +41,7 @@ bulk AS (
     SELECT coalesce(sum(n) FILTER (WHERE n > 1), 0)::BIGINT AS residual_bulk_eligible
     FROM (
         SELECT count(*) AS n FROM marked WHERE funnel = 'residual'
-        GROUP BY CASE WHEN entity_id IS NOT NULL THEN 'e:' || entity_id
-                      ELSE 't:' || lower(coalesce(text, '')) || '|' || coalesce(kind, '') END
+        GROUP BY group_key
     ) group_sizes
 )
 SELECT $id AS case_id, (SELECT threshold FROM thr) AS threshold,
@@ -60,9 +60,7 @@ AS
 WITH residual AS (
     SELECT s.id, s.document_id, s.page_no, s.text, s.context, s.confidence,
            s.band, s.kind, s.entity_id, s.entity_text, s.flag_tag, s.reason, d.filename,
-           CASE WHEN s.entity_id IS NOT NULL THEN 'e:' || s.entity_id
-                ELSE 't:' || lower(coalesce(s.text, '')) || '|' || coalesce(s.kind, '')
-           END AS group_key,
+           s.group_key,
            coalesce(nullif(s.entity_text, ''), s.text, '(unknown)') AS group_label
     FROM v_suggestions s
     JOIN documents d ON cast(d.id AS VARCHAR) = s.document_id
@@ -148,9 +146,7 @@ COPY (
         WHERE d.case_id = $id AND s.status = 'pending'
           AND NOT (s.confidence >= greatest(0, least(100, coalesce($threshold::INTEGER, 90)))
                    AND s.band <> 'flagged' AND coalesce(s.flag_tag, '') <> 'false_positive')
-          AND CASE WHEN s.entity_id IS NOT NULL THEN 'e:' || s.entity_id
-                   ELSE 't:' || lower(coalesce(s.text, '')) || '|' || coalesce(s.kind, '')
-              END = trim(coalesce($group_key::VARCHAR, ''))
+          AND s.group_key = trim(coalesce($group_key::VARCHAR, ''))
           AND s.id NOT IN (SELECT suggestion_id FROM excluded)
           AND lower(trim(coalesce($status::VARCHAR, ''))) IN ('accepted', 'rejected', 'pending')
     ),

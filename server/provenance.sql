@@ -38,6 +38,8 @@ JOIN blobs b ON b.source_path = d.source_path
 JOIN revs r ON r.source_path = d.source_path;
 
 -- Unified API surface: live recheck + working copy + export lineage + decision seal.
+-- Consumers: /api/cases/:id/provenance[/recheck], /api/documents/:id/store.
+-- Revision/event counts are custody fields (purpose), not a generic stats dump.
 CREATE OR REPLACE VIEW v_case_provenance AS
 WITH
 live AS (
@@ -93,6 +95,41 @@ seal AS (
            count(*)::BIGINT AS decision_event_count
     FROM v_src_decisions
     WHERE suggestion_id IS NOT NULL
+),
+checks AS (
+    SELECT c.document_id,
+           c.case_id,
+           c.filename,
+           c.source_path,
+           c.source_sha256,
+           c.source_blake3,
+           c.hash_algo,
+           c.crypto_core_match,
+           c.source_revision_count,
+           c.source_size,
+           live.live_sha256,
+           live.live_blake3,
+           live_revs.live_revision_count,
+           live.live_size,
+           (c.source_sha256 = live.live_sha256) AS hash_ok,
+           (c.source_blake3 = live.live_blake3) AS blake3_ok,
+           (c.source_revision_count IS NOT DISTINCT FROM live_revs.live_revision_count) AS rev_ok,
+           (c.source_size = live.live_size) AS size_ok,
+           working.working_path,
+           working.working_sha256,
+           working.working_blake3,
+           working.gen,
+           working.working_size,
+           exports.export_path,
+           exports.export_sha256,
+           exports.export_blake3,
+           exports.export_size,
+           exports.exported_at
+    FROM document_custody c
+    JOIN live ON live.source_path = c.source_path
+    LEFT JOIN live_revs ON live_revs.source_path = c.source_path
+    LEFT JOIN working ON working.document_id = cast(c.document_id AS VARCHAR)
+    LEFT JOIN exports ON exports.export_path = 'exports/' || c.filename || '_redacted.pdf'
 )
 SELECT c.document_id,
        c.case_id,
@@ -103,50 +140,41 @@ SELECT c.document_id,
        c.hash_algo,
        c.crypto_core_match,
        c.source_revision_count AS revision_count,
-       live.live_sha256,
-       live.live_blake3,
-       live_revs.live_revision_count,
+       c.live_sha256,
+       c.live_blake3,
+       c.live_revision_count,
        c.source_size AS ingest_size,
-       live.live_size,
-       (c.source_sha256 = live.live_sha256) AS hash_ok,
-       (c.source_blake3 = live.live_blake3) AS blake3_ok,
-       (c.source_revision_count IS NOT DISTINCT FROM live_revs.live_revision_count) AS rev_ok,
-       (c.source_size = live.live_size) AS size_ok,
-       (c.source_sha256 = live.live_sha256
-        AND c.source_size = live.live_size
-        AND c.source_revision_count IS NOT DISTINCT FROM live_revs.live_revision_count) AS recheck_ok,
-       CASE WHEN c.source_sha256 = live.live_sha256
-                 AND c.source_size = live.live_size
-                 AND c.source_revision_count IS NOT DISTINCT FROM live_revs.live_revision_count
-            THEN 'INTACT' ELSE 'BREAK' END AS recheck_status,
+       c.live_size,
+       c.hash_ok,
+       c.blake3_ok,
+       c.rev_ok,
+       c.size_ok,
+       (c.hash_ok AND c.size_ok AND c.rev_ok) AS recheck_ok,
+       CASE WHEN c.hash_ok AND c.size_ok AND c.rev_ok THEN 'INTACT' ELSE 'BREAK' END AS recheck_status,
        now() AS rechecked_at,
-       working.working_path,
-       working.working_sha256 AS working_fingerprint,
-       working.working_blake3,
-       working.gen AS working_gen,
-       working.working_size,
-       exports.export_path,
-       exports.export_sha256 AS export_fingerprint,
-       exports.export_blake3,
-       CASE WHEN exports.export_path IS NOT NULL THEN 1 END AS export_revision_count,
-       exports.export_size,
-       exports.exported_at,
-       CASE WHEN exports.export_path IS NOT NULL THEN format(
+       c.working_path,
+       c.working_sha256 AS working_fingerprint,
+       c.working_blake3,
+       c.gen AS working_gen,
+       c.working_size,
+       c.export_path,
+       c.export_sha256 AS export_fingerprint,
+       c.export_blake3,
+       CASE WHEN c.export_path IS NOT NULL THEN 1 END AS export_revision_count,
+       c.export_size,
+       c.exported_at,
+       CASE WHEN c.export_path IS NOT NULL THEN format(
            'Chain of custody: source {} (crypto sha2-256 {}, blake3 {}, {} revision{}, {} bytes) '
            || '→ export {} (crypto sha2-256 {}, blake3 {}, 1 revision, {} bytes).',
            c.source_path, c.source_sha256, c.source_blake3,
            c.source_revision_count,
            CASE WHEN c.source_revision_count = 1 THEN '' ELSE 's' END,
            c.source_size,
-           exports.export_path, exports.export_sha256, exports.export_blake3, exports.export_size
+           c.export_path, c.export_sha256, c.export_blake3, c.export_size
        ) END AS custody_statement,
-       (SELECT decision_chain_seal FROM seal) AS decision_chain_seal,
-       (SELECT decision_event_count FROM seal) AS decision_event_count
-FROM document_custody c
-JOIN live ON live.source_path = c.source_path
-LEFT JOIN live_revs ON live_revs.source_path = c.source_path
-LEFT JOIN working ON working.document_id = cast(c.document_id AS VARCHAR)
-LEFT JOIN exports ON exports.export_path = 'exports/' || c.filename || '_redacted.pdf';
+       seal.decision_chain_seal,
+       seal.decision_event_count
+FROM checks c, seal;
 
 SELECT 'provenance loaded' AS phase,
        (SELECT count(*) FROM document_custody) AS custody_docs,

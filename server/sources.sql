@@ -37,14 +37,16 @@ FROM pdf_info(
 -- The append-only decision log, read straight off disk. Writes append one JSON
 -- file per decision; this view always reflects current state with no mutable
 -- table. A committed _sentinel.json pins the column set so the glob resolves
--- even before any decision exists.
+-- even before any decision exists. THE one reader of the glob — every decision
+-- consumer (v_latest_decision, v_audit, v_history_events, …) composes this view;
+-- filename is the shard path.
 CREATE OR REPLACE VIEW v_src_decisions AS
 SELECT * FROM read_json_auto(
     CASE WHEN getenv('CLOSURE_EXPORTS_DIR') IS NOT NULL
           AND length(getenv('CLOSURE_EXPORTS_DIR')) > 0
          THEN getenv('CLOSURE_EXPORTS_DIR')
          ELSE 'exports' END || '/decisions/*.json',
-    union_by_name := true, ignore_errors := true)
+    union_by_name := true, ignore_errors := true, filename := true)
 WHERE kind IS DISTINCT FROM 'sentinel';
 
 -- NOTE: the entity / watchlist catalog is produced by detect.sql from generic

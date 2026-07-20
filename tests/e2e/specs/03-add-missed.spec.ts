@@ -1,5 +1,10 @@
 import { test, expect } from "@playwright/test";
-import { getCaseSuggestions, getDocSuggestions, pickReviewDoc } from "../helpers/api";
+import {
+  firstCaseId,
+  getCaseSuggestions,
+  getDocSuggestions,
+  pickReviewDoc,
+} from "../helpers/api";
 
 /**
  * CORE FLOW 3 — Add a missed redaction (false negative)
@@ -51,12 +56,16 @@ test.describe("3. Add missed redaction", () => {
     request,
   }) => {
     const doc = await pickReviewDoc(request);
+    const caseId = await firstCaseId(request);
     const before = await getDocSuggestions(request, doc.id);
     const beforeTotal = before.length;
 
-    await page.goto(`/ui/add-missed?doc=${doc.id}&page=1`, {
-      waitUntil: "domcontentloaded",
-    });
+    await page.goto(
+      `/ui/add-missed?doc=${doc.id}&page=1&case=${encodeURIComponent(caseId)}`,
+      {
+        waitUntil: "domcontentloaded",
+      }
+    );
 
     const pdf = page.locator("#pdf-page");
     await expect(pdf).toBeVisible({ timeout: 20_000 });
@@ -110,7 +119,7 @@ test.describe("3. Add missed redaction", () => {
     // Authoritative: re-query for the new manual/accepted row
     let found: { status: string; source?: string } | null = null;
     for (let i = 0; i < 16; i++) {
-      const live = await getCaseSuggestions(request, 1);
+      const live = await getCaseSuggestions(request);
       const hit = live.find((s) => s.text === unique);
       if (hit) {
         found = { status: hit.status, source: hit.source };

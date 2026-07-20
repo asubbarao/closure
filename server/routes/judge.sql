@@ -21,7 +21,7 @@ SELECT
         WHEN p.confidence >= 60 THEN 'review'
         ELSE 'flagged'
     END AS judge_band
-FROM v_judge_votes j
+FROM judge_votes j
 JOIN v_judge_panel p ON cast(p.suggestion_id AS VARCHAR) = cast(j.suggestion_id AS VARCHAR)
 WHERE cast(j.suggestion_id AS VARCHAR) = $id
 ORDER BY j.judge_id;

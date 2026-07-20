@@ -1,8 +1,8 @@
 import { APIRequestContext, expect } from "@playwright/test";
 
 export type Suggestion = {
-  id: number;
-  document_id: number;
+  id: string | number;
+  document_id: string | number;
   page_no: number;
   text: string;
   context?: string;
@@ -10,7 +10,7 @@ export type Suggestion = {
   status: string;
   band: string;
   kind?: string;
-  entity_id?: number | null;
+  entity_id?: string | number | null;
   entity_text?: string | null;
   flag_tag?: string | null;
   source?: string;
@@ -18,7 +18,7 @@ export type Suggestion = {
 };
 
 export type DocumentRow = {
-  id: number;
+  id: string | number;
   filename: string;
   page_count: number;
   suggestion_count: number;
@@ -40,15 +40,15 @@ export type AuditEvent = {
   ts?: string;
   actor?: string;
   action?: string;
-  suggestion_id?: number;
-  case_id?: number;
+  suggestion_id?: string | number;
+  case_id?: string | number;
   target?: string;
   reason?: string;
 };
 
 /** Judge panel row (wave-2). Shape may vary; fields optional. */
 export type JudgePanel = {
-  suggestion_id?: number;
+  suggestion_id?: string | number;
   confidence?: number;
   panel_signal?: string;
   judge_count?: number;
@@ -61,8 +61,8 @@ export type JudgePanel = {
 
 /** Residual / possible-missed candidate (wave-2). */
 export type MissedCandidate = {
-  id?: number;
-  document_id?: number;
+  id?: string | number;
+  document_id?: string | number;
   page?: number;
   page_no?: number;
   text?: string;
@@ -89,6 +89,26 @@ export type SearchResult = {
   fuzzy?: number;
   [key: string]: unknown;
 };
+
+/** Cached first case id from the home dashboard (`data-case-id`). */
+let _firstCaseId: string | undefined;
+
+/**
+ * Resolve the live case id used by the sample corpus (e.g. 24-001001).
+ * Parsed once from the home page and cached for the worker process.
+ */
+export async function firstCaseId(
+  request: APIRequestContext
+): Promise<string> {
+  if (_firstCaseId) return _firstCaseId;
+  const res = await request.get("/");
+  expect(res.ok(), `GET / → ${res.status()}`).toBeTruthy();
+  const html = await res.text();
+  const m = html.match(/data-case-id="([^"]+)"/);
+  expect(m, "home page must expose data-case-id").toBeTruthy();
+  _firstCaseId = m![1];
+  return _firstCaseId;
+}
 
 function asArray<T>(payload: unknown): T[] {
   if (Array.isArray(payload)) return payload as T[];
@@ -183,16 +203,17 @@ export async function getStats(request: APIRequestContext) {
 
 export async function getCaseDocuments(
   request: APIRequestContext,
-  caseId = 1
+  caseId?: string | number
 ): Promise<DocumentRow[]> {
-  const res = await request.get(`/api/cases/${caseId}/documents`);
-  expect(res.ok(), `GET /api/cases/${caseId}/documents → ${res.status()}`).toBeTruthy();
+  const cid = caseId ?? (await firstCaseId(request));
+  const res = await request.get(`/api/cases/${cid}/documents`);
+  expect(res.ok(), `GET /api/cases/${cid}/documents → ${res.status()}`).toBeTruthy();
   return asArray<DocumentRow>(await res.json());
 }
 
 export async function getDocSuggestions(
   request: APIRequestContext,
-  docId: number
+  docId: string | number
 ): Promise<Suggestion[]> {
   const res = await request.get(`/api/documents/${docId}/suggestions`);
   expect(res.ok(), `GET /api/documents/${docId}/suggestions → ${res.status()}`).toBeTruthy();
@@ -201,51 +222,58 @@ export async function getDocSuggestions(
 
 export async function getCaseSuggestions(
   request: APIRequestContext,
-  caseId = 1
+  caseId?: string | number
 ): Promise<Suggestion[]> {
-  const res = await request.get(`/api/cases/${caseId}/suggestions`);
-  expect(res.ok(), `GET /api/cases/${caseId}/suggestions → ${res.status()}`).toBeTruthy();
+  const cid = caseId ?? (await firstCaseId(request));
+  const res = await request.get(`/api/cases/${cid}/suggestions`);
+  expect(res.ok(), `GET /api/cases/${cid}/suggestions → ${res.status()}`).toBeTruthy();
   return asArray<Suggestion>(await res.json());
 }
 
 export async function getExportPlan(
   request: APIRequestContext,
-  caseId = 1
+  caseId?: string | number
 ): Promise<ExportPlan> {
-  const res = await request.get(`/api/cases/${caseId}/export_plan`);
-  expect(res.ok(), `GET /api/cases/${caseId}/export_plan → ${res.status()}`).toBeTruthy();
+  const cid = caseId ?? (await firstCaseId(request));
+  const res = await request.get(`/api/cases/${cid}/export_plan`);
+  expect(res.ok(), `GET /api/cases/${cid}/export_plan → ${res.status()}`).toBeTruthy();
   const data = await res.json();
   return (Array.isArray(data) ? data[0] : data) as ExportPlan;
 }
 
 export async function getCaseAudit(
   request: APIRequestContext,
-  caseId = 1
+  caseId?: string | number
 ): Promise<AuditEvent[]> {
-  const res = await request.get(`/api/cases/${caseId}/audit`);
-  expect(res.ok(), `GET /api/cases/${caseId}/audit → ${res.status()}`).toBeTruthy();
+  const cid = caseId ?? (await firstCaseId(request));
+  const res = await request.get(`/api/cases/${cid}/audit`);
+  expect(res.ok(), `GET /api/cases/${cid}/audit → ${res.status()}`).toBeTruthy();
   return asArray<AuditEvent>(await res.json());
 }
 
 /** GET /api/suggestions/:id/judges — wave-2; may 404. */
 export async function getSuggestionJudges(
   request: APIRequestContext,
-  suggestionId: number
+  suggestionId: string | number
 ) {
   return requireRoute(request, `/api/suggestions/${suggestionId}/judges`);
 }
 
 /** GET /api/documents/:id/missed — wave-2 residual PII queue; may 404. */
-export async function getDocMissed(request: APIRequestContext, docId: number) {
+export async function getDocMissed(
+  request: APIRequestContext,
+  docId: string | number
+) {
   return requireRoute(request, `/api/documents/${docId}/missed`);
 }
 
 /** GET /api/cases/:id/provenance — wave-2 chain-of-custody; may 404. */
 export async function getCaseProvenance(
   request: APIRequestContext,
-  caseId = 1
+  caseId?: string | number
 ) {
-  return requireRoute(request, `/api/cases/${caseId}/provenance`);
+  const cid = caseId ?? (await firstCaseId(request));
+  return requireRoute(request, `/api/cases/${cid}/provenance`);
 }
 
 /**
@@ -255,10 +283,11 @@ export async function getCaseProvenance(
 export async function searchCase(
   request: APIRequestContext,
   q: string,
-  caseId = 1,
+  caseId?: string | number,
   extra: Record<string, string> = {}
 ): Promise<{ status: number; result: SearchResult | null; raw: unknown }> {
-  const params = new URLSearchParams({ q, case: String(caseId), ...extra });
+  const cid = caseId ?? (await firstCaseId(request));
+  const params = new URLSearchParams({ q, case: String(cid), ...extra });
   const res = await request.get(`/api/search?${params}`);
   if (!res.ok()) {
     return { status: res.status(), result: null, raw: null };
@@ -315,7 +344,7 @@ export async function searchCase(
 
 export async function postDecision(
   request: APIRequestContext,
-  suggestionId: number,
+  suggestionId: string | number,
   status: string,
   reason = "e2e"
 ) {
@@ -336,27 +365,28 @@ export async function postDecision(
 
 export async function waitForSuggestionStatus(
   request: APIRequestContext,
-  docId: number,
-  suggestionId: number,
+  docId: string | number,
+  suggestionId: string | number,
   status: string,
   attempts = 20
 ): Promise<Suggestion | undefined> {
   for (let i = 0; i < attempts; i++) {
     const rows = await getDocSuggestions(request, docId);
-    const hit = rows.find((r) => Number(r.id) === Number(suggestionId));
+    const hit = rows.find((r) => String(r.id) === String(suggestionId));
     if (hit && hit.status === status) return hit;
     await new Promise((r) => setTimeout(r, 250));
   }
   const rows = await getDocSuggestions(request, docId);
-  return rows.find((r) => Number(r.id) === Number(suggestionId));
+  return rows.find((r) => String(r.id) === String(suggestionId));
 }
 
 /** Prefer a medium-sized reviewable doc with pending work (not the huge consolidated file). */
 export async function pickReviewDoc(
   request: APIRequestContext,
-  caseId = 1
+  caseId?: string | number
 ): Promise<DocumentRow> {
-  const docs = await getCaseDocuments(request, caseId);
+  const cid = caseId ?? (await firstCaseId(request));
+  const docs = await getCaseDocuments(request, cid);
   const ranked = [...docs].sort((a, b) => {
     // Prefer docs with pending suggestions and fewer pages
     const pendA = a.pending_count > 0 ? 0 : 1;
@@ -372,9 +402,10 @@ export async function pickReviewDoc(
 /** Pick any pending flagged suggestion from case (data-driven). */
 export async function pickFlaggedPending(
   request: APIRequestContext,
-  caseId = 1
+  caseId?: string | number
 ): Promise<Suggestion | null> {
-  const rows = await getCaseSuggestions(request, caseId);
+  const cid = caseId ?? (await firstCaseId(request));
+  const rows = await getCaseSuggestions(request, cid);
   return (
     rows.find((s) => s.band === "flagged" && s.status === "pending") ||
     rows.find((s) => s.band === "flagged") ||
@@ -422,7 +453,7 @@ export function asJudgePanel(body: unknown): JudgePanel {
     const votes = body as Array<Record<string, unknown>>;
     const first = votes[0] || {};
     return {
-      suggestion_id: first.suggestion_id as number | undefined,
+      suggestion_id: first.suggestion_id as string | number | undefined,
       confidence:
         (first.panel_confidence as number | undefined) ??
         (first.confidence as number | undefined),
@@ -442,9 +473,10 @@ export function asJudgePanel(body: unknown): JudgePanel {
 /** Prefer a document that has residual missed candidates (data-driven). */
 export async function pickDocWithMissed(
   request: APIRequestContext,
-  caseId = 1
+  caseId?: string | number
 ): Promise<{ doc: DocumentRow; candidates: MissedCandidate[] } | null> {
-  const docs = await getCaseDocuments(request, caseId);
+  const cid = caseId ?? (await firstCaseId(request));
+  const docs = await getCaseDocuments(request, cid);
   const ranked = [...docs].sort((a, b) => a.page_count - b.page_count);
   for (const doc of ranked) {
     const probe = await getDocMissed(request, doc.id);
@@ -453,12 +485,13 @@ export async function pickDocWithMissed(
     if (candidates.length > 0) return { doc, candidates };
   }
   // Case-level fallback
-  const caseProbe = await requireRoute(request, `/api/cases/${caseId}/missed`);
+  const caseProbe = await requireRoute(request, `/api/cases/${cid}/missed`);
   if (caseProbe.live) {
     const candidates = asMissedCandidates(caseProbe.body);
     if (candidates.length > 0) {
-      const docId = Number(candidates[0].document_id);
-      const doc = docs.find((d) => d.id === docId) || ranked[0];
+      const docId = candidates[0].document_id;
+      const doc =
+        docs.find((d) => String(d.id) === String(docId)) || ranked[0];
       if (doc) return { doc, candidates };
     }
   }

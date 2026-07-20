@@ -21,7 +21,7 @@ test.describe("9. Possible missed redactions queue (wave-2)", () => {
   test("GET /api/documents/:id/missed lists residual candidates (or empty array)", async ({
     request,
   }) => {
-    const docs = await getCaseDocuments(request, 1);
+    const docs = await getCaseDocuments(request);
     test.skip(docs.length === 0, "no documents in case");
 
     // Probe every case doc (data-driven); at least one route must be live
@@ -65,10 +65,10 @@ test.describe("9. Possible missed redactions queue (wave-2)", () => {
   test("one-tap add promotes a missed candidate into an accepted suggestion", async ({
     request,
   }) => {
-    const hit = await pickDocWithMissed(request, 1);
+    const hit = await pickDocWithMissed(request);
     if (!hit) {
       // Distinguish "route missing" vs "empty residual set"
-      const docs = await getCaseDocuments(request, 1);
+      const docs = await getCaseDocuments(request);
       const probe = docs[0]
         ? await getDocMissed(request, docs[0].id)
         : { live: false as const, status: 0, reason: "no docs" };
@@ -133,8 +133,8 @@ test.describe("9. Possible missed redactions queue (wave-2)", () => {
     page,
     request,
   }) => {
-    const hit = await pickDocWithMissed(request, 1);
-    const docs = await getCaseDocuments(request, 1);
+    const hit = await pickDocWithMissed(request);
+    const docs = await getCaseDocuments(request);
     const doc = hit?.doc || docs.sort((a, b) => a.page_count - b.page_count)[0];
     test.skip(!doc, "no documents");
 

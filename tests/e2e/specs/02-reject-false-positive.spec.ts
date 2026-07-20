@@ -16,7 +16,7 @@ test.describe("2. Reject false positive", () => {
     page,
     request,
   }) => {
-    const caseSuggs = await getCaseSuggestions(request, 1);
+    const caseSuggs = await getCaseSuggestions(request);
     const streetPending = caseSuggs.filter(
       (s) => s.status === "pending" && isStreetFalsePositive(s)
     );
@@ -29,7 +29,7 @@ test.describe("2. Reject false positive", () => {
 
     test.skip(
       !target,
-      "no pending street-name false positives — seed/decisions left none for case 1"
+      "no pending street-name false positives — seed/decisions left none for first case"
     );
 
     await page.goto(
@@ -50,7 +50,7 @@ test.describe("2. Reject false positive", () => {
     await expect
       .poll(async () => {
         const rows = await getDocSuggestions(request, target.document_id);
-        return rows.find((r) => r.id === target.id)?.status;
+        return rows.find((r) => String(r.id) === String(target.id))?.status;
       })
       .toBe("rejected");
 
@@ -67,7 +67,7 @@ test.describe("2. Reject false positive", () => {
     page,
     request,
   }) => {
-    const caseSuggs = await getCaseSuggestions(request, 1);
+    const caseSuggs = await getCaseSuggestions(request);
     // Group pending street FPs by exact text; need ≥2 pending matches
     const byText = new Map<string, typeof caseSuggs>();
     for (const s of caseSuggs) {
@@ -123,7 +123,7 @@ test.describe("2. Reject false positive", () => {
     // All previously-pending matching instances should clear from pending
     await expect
       .poll(async () => {
-        const live = await getCaseSuggestions(request, 1);
+        const live = await getCaseSuggestions(request);
         const stillPending = live.filter(
           (s) => s.text === text && s.status === "pending"
         );
@@ -131,13 +131,13 @@ test.describe("2. Reject false positive", () => {
       }, { timeout: 30_000 })
       .toBe(0);
 
-    const after = (await getCaseSuggestions(request, 1)).filter(
+    const after = (await getCaseSuggestions(request)).filter(
       (s) => s.text === text
     );
     // Instances we targeted should be rejected (others may already have been
     // accepted/rejected by earlier bulk/entity tests in the suite).
     const touched = after.filter((s) =>
-      group.some((g) => Number(g.id) === Number(s.id))
+      group.some((g) => String(g.id) === String(s.id))
     );
     expect(touched.length).toBeGreaterThan(0);
     expect(

@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import {
+  firstCaseId,
   getCaseDocuments,
   getCaseSuggestions,
   pickReviewDoc,
@@ -16,7 +17,7 @@ test.describe("10. Fuzzy add-missed search (wave-2)", () => {
     request,
   }) => {
     // Data-driven: pick a real suggestion token from the live case (not hardcoded names)
-    const suggs = await getCaseSuggestions(request, 1);
+    const suggs = await getCaseSuggestions(request);
     test.skip(suggs.length === 0, "no suggestions to derive search terms from");
 
     // Prefer a single-token alphabetic word (search is substring on words)
@@ -33,7 +34,7 @@ test.describe("10. Fuzzy add-missed search (wave-2)", () => {
     }
     test.skip(!token, "could not derive a searchable alphabetic token from suggestions");
 
-    const { status, result } = await searchCase(request, token, 1);
+    const { status, result } = await searchCase(request, token);
     expect(status, `search HTTP for q=${token}`).toBe(200);
     expect(result).toBeTruthy();
     expect(result!.count).toBeGreaterThan(0);
@@ -52,7 +53,7 @@ test.describe("10. Fuzzy add-missed search (wave-2)", () => {
   test("search reports exact vs similar counts when fuzzy fields are live", async ({
     request,
   }) => {
-    const suggs = await getCaseSuggestions(request, 1);
+    const suggs = await getCaseSuggestions(request);
     test.skip(suggs.length === 0, "no suggestions");
 
     // Use a multi-char token that should have exact hits
@@ -71,9 +72,9 @@ test.describe("10. Fuzzy add-missed search (wave-2)", () => {
 
     // Try baseline + explicit fuzzy modes
     const probes = [
-      await searchCase(request, token, 1),
-      await searchCase(request, token, 1, { mode: "fuzzy" }),
-      await searchCase(request, token, 1, { fuzzy: "1" }),
+      await searchCase(request, token),
+      await searchCase(request, token, undefined, { mode: "fuzzy" }),
+      await searchCase(request, token, undefined, { fuzzy: "1" }),
     ];
 
     const withSplit = probes.find((p) => {
@@ -132,10 +133,10 @@ test.describe("10. Fuzzy add-missed search (wave-2)", () => {
     request,
   }) => {
     const doc = await pickReviewDoc(request);
-    const suggs = await getCaseSuggestions(request, 1);
+    const suggs = await getCaseSuggestions(request);
     let token = "";
     for (const s of suggs) {
-      if (Number(s.document_id) !== Number(doc.id)) continue;
+      if (String(s.document_id) !== String(doc.id)) continue;
       const parts = (s.text || "")
         .split(/[\s#,./()-]+/)
         .map((p) => p.trim())
@@ -159,9 +160,13 @@ test.describe("10. Fuzzy add-missed search (wave-2)", () => {
     }
     test.skip(!token, "no token for add-missed search UI");
 
-    await page.goto(`/ui/add-missed?doc=${doc.id}&page=1`, {
-      waitUntil: "domcontentloaded",
-    });
+    const caseId = await firstCaseId(request);
+    await page.goto(
+      `/ui/add-missed?doc=${doc.id}&page=1&case=${encodeURIComponent(caseId)}`,
+      {
+        waitUntil: "domcontentloaded",
+      }
+    );
     const pdf = page.locator("#pdf-page");
     await expect(pdf).toBeVisible({ timeout: 20_000 });
     // #text-input lives in #add-popover — only visible after a drag selection
@@ -226,7 +231,7 @@ test.describe("10. Fuzzy add-missed search (wave-2)", () => {
     }
 
     // Cross-check API still agrees the token is findable
-    const { result } = await searchCase(request, token, 1);
+    const { result } = await searchCase(request, token);
     if (result && result.count > 0) {
       // UI should not claim absolute zero when API has hits (unless local-only empty)
       // Allow "this page only" / numeric counts; only soft-check contradiction
@@ -240,7 +245,7 @@ test.describe("10. Fuzzy add-missed search (wave-2)", () => {
     }
 
     // Sanity: case still has documents (data-driven corpus check)
-    const docs = await getCaseDocuments(request, 1);
-    expect(docs.some((d) => d.id === doc.id)).toBeTruthy();
+    const docs = await getCaseDocuments(request);
+    expect(docs.some((d) => String(d.id) === String(doc.id))).toBeTruthy();
   });
 });

@@ -75,7 +75,8 @@ FROM query(getvariable('pdf_io_ocr_sql'));
 
 DROP TABLE IF EXISTS _empty_pages;
 
--- ── Single scan-status view (library badge + /scan routes) ──────────────────
+-- ── Scan-status: per-doc native/OCR word tallies for library badges ──────────
+-- Consumers: /api/documents/:id/scan, /api/cases/:id/scan, v_doc_ui, documents route.
 CREATE OR REPLACE VIEW document_scan_status AS
 WITH page_words AS (
     SELECT document_id, page_no,
@@ -121,8 +122,8 @@ SELECT
     a.ocr_word_count,
     a.total_word_count,
     0::BIGINT AS image_count,
-    (SELECT ocr_available FROM pdf_ocr_capability) AS ocr_available,
-    (SELECT ocr_status_note FROM pdf_ocr_capability) AS ocr_status_note,
+    cap.ocr_available,
+    cap.ocr_status_note,
     (a.native_word_count = 0 AND a.page_count > 0) AS is_scanned,
     (a.native_word_count = 0 AND a.ocr_word_count > 0) AS ocr_ingested,
     (a.native_word_count = 0 AND a.ocr_word_count = 0 AND a.page_count > 0) AS scan_gap,
@@ -143,16 +144,16 @@ SELECT
         WHEN a.native_word_count = 0 AND a.ocr_word_count > 0
             THEN 'Image-only pages OCR''d into words (source=ocr). Review boxes before export.'
         WHEN a.native_word_count = 0 AND a.ocr_word_count = 0
-             AND NOT (SELECT ocr_available FROM pdf_ocr_capability)
+             AND NOT cap.ocr_available
             THEN 'Scanned / image-only PDF and OCR is not available on this host. '
-                 || (SELECT ocr_status_note FROM pdf_ocr_capability)
+                 || cap.ocr_status_note
                  || '. No suggestions can be generated from a missing text layer.'
         WHEN a.native_word_count = 0 AND a.ocr_word_count = 0
             THEN 'No text layer and OCR returned no words (blank or unreadable raster). '
                  || 'Do not treat zero suggestions as a clean document.'
         ELSE NULL
     END AS scan_detail
-FROM agg a;
+FROM agg a, pdf_ocr_capability cap;
 
 -- ── Scan routes (VARCHAR ids — case_no / uuid, not INTEGER) ─────────────────
 CREATE OR REPLACE ROUTE api_doc_scan GET '/api/documents/:id/scan' AS

@@ -133,8 +133,8 @@ LEFT JOIN entities e ON e.case_id = h.case_id AND e.kind = h.kind
    OR starts_with(h.text, e.canonical_text));
 
 -- Decision fold (arg_max, no row_number). VARCHAR ids unify UUID + legacy BIGINT.
--- Reads v_src_decisions directly — no alias view. routes/decisions.sql owns its
--- own richer v_decision_log (filename := true for shard-derived batch ids).
+-- Reads v_src_decisions directly — the ONE decision-log reader (sources.sql);
+-- this fold is the ONE latest-status view (route-bind safe: getenv fold).
 CREATE OR REPLACE VIEW v_latest_decision AS
 SELECT cast(suggestion_id AS VARCHAR) AS suggestion_id,
        arg_max(status, coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS status,
@@ -146,32 +146,28 @@ WHERE kind = 'decision' AND suggestion_id IS NOT NULL
 GROUP BY cast(suggestion_id AS VARCHAR);
 
 CREATE OR REPLACE VIEW v_manual_suggestions AS
-SELECT cast(suggestion_id AS VARCHAR) AS id, cast(document_id AS VARCHAR) AS document_id,
-       try_cast(page_no AS INTEGER) AS page_no,
-       try_cast(x0 AS DOUBLE) AS x0, try_cast(y0 AS DOUBLE) AS y0,
-       try_cast(x1 AS DOUBLE) AS x1, try_cast(y1 AS DOUBLE) AS y1,
-       cast(text AS VARCHAR) AS text,
-       coalesce(cast(context AS VARCHAR), cast(text AS VARCHAR)) AS context,
-       coalesce(try_cast(confidence AS INTEGER), 99) AS confidence,
-       cast(flag_tag AS VARCHAR) AS flag_tag, cast(reason AS VARCHAR) AS reason,
-       cast(entity_id AS VARCHAR) AS entity_id, cast(NULL AS VARCHAR) AS kind,
-       'manual' AS source, coalesce(try_cast(ts AS TIMESTAMP), now()) AS created_at
+SELECT cast(m.suggestion_id AS VARCHAR) AS id,
+       cast(m.latest.document_id AS VARCHAR) AS document_id,
+       try_cast(m.latest.page_no AS INTEGER) AS page_no,
+       try_cast(m.latest.x0 AS DOUBLE) AS x0, try_cast(m.latest.y0 AS DOUBLE) AS y0,
+       try_cast(m.latest.x1 AS DOUBLE) AS x1, try_cast(m.latest.y1 AS DOUBLE) AS y1,
+       cast(m.latest.text AS VARCHAR) AS text,
+       coalesce(cast(m.latest.context AS VARCHAR), cast(m.latest.text AS VARCHAR)) AS context,
+       coalesce(try_cast(m.latest.confidence AS INTEGER), 99) AS confidence,
+       cast(m.latest.flag_tag AS VARCHAR) AS flag_tag,
+       cast(m.latest.reason AS VARCHAR) AS reason,
+       cast(m.latest.entity_id AS VARCHAR) AS entity_id,
+       cast(NULL AS VARCHAR) AS kind,
+       'manual' AS source,
+       coalesce(m.ts, now()) AS created_at
 FROM (
     SELECT suggestion_id,
-           arg_max(document_id, coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS document_id,
-           arg_max(page_no, coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS page_no,
-           arg_max(x0, coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS x0,
-           arg_max(y0, coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS y0,
-           arg_max(x1, coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS x1,
-           arg_max(y1, coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS y1,
-           arg_max(text, coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS text,
-           arg_max(context, coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS context,
-           arg_max(confidence, coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS confidence,
-           arg_max(flag_tag, coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS flag_tag,
-           arg_max(reason, coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS reason,
-           arg_max(entity_id, coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS entity_id,
+           arg_max(struct_pack(document_id, page_no, x0, y0, x1, y1, text, context,
+                               confidence, flag_tag, reason, entity_id),
+                   coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS latest,
            max(try_cast(ts AS TIMESTAMP)) AS ts
-    FROM v_src_decisions WHERE kind = 'added' AND suggestion_id IS NOT NULL
+    FROM v_src_decisions
+    WHERE kind = 'added' AND suggestion_id IS NOT NULL
     GROUP BY suggestion_id
 ) m;
 
@@ -194,41 +190,19 @@ SELECT b.id, b.document_id, b.page_no, b.x0, b.y0, b.x1, b.y1, b.text, b.context
        coalesce(e.kind, b.kind_stored) AS kind, e.canonical_text AS entity_text,
        coalesce(ld.status, CASE b.source WHEN 'manual' THEN 'accepted' ELSE 'pending' END) AS status,
        CASE WHEN b.confidence >= 90 THEN 'high'
-            WHEN b.confidence >= 60 THEN 'review' ELSE 'flagged' END AS band
+            WHEN b.confidence >= 60 THEN 'review' ELSE 'flagged' END AS band,
+       CASE WHEN b.entity_id IS NOT NULL THEN 'e:' || b.entity_id
+            ELSE concat('t:', lower(b.text), '|', coalesce(e.kind, b.kind_stored)) END AS group_key
 FROM base b
 LEFT JOIN entities e ON cast(e.id AS VARCHAR) = b.entity_id
 LEFT JOIN v_latest_decision ld ON ld.suggestion_id = b.id;
 
--- One GROUP BY stats view (no correlated subselects).
-CREATE OR REPLACE VIEW v_document_stats AS
-SELECT cast(d.id AS VARCHAR) AS document_id, d.case_id, d.filename, d.page_count,
-       d.file_size, d.width_pt, d.height_pt,
-       coalesce(wc.n, 0) AS word_count, coalesce(pc.n, 0) AS page_rows,
-       coalesce(sc.suggestion_count, 0) AS suggestion_count,
-       coalesce(sc.pending_count, 0) AS pending_count,
-       coalesce(sc.accepted_count, 0) AS accepted_count,
-       coalesce(sc.rejected_count, 0) AS rejected_count,
-       coalesce(sc.flagged_count, 0) AS flagged_count,
-       coalesce(sc.high_count, 0) AS high_count,
-       coalesce(sc.review_count, 0) AS review_count
-FROM documents d
-LEFT JOIN (SELECT cast(document_id AS VARCHAR) AS document_id, count(*)::BIGINT AS n
-           FROM words GROUP BY 1) wc ON wc.document_id = cast(d.id AS VARCHAR)
-LEFT JOIN (SELECT cast(document_id AS VARCHAR) AS document_id, count(*)::BIGINT AS n
-           FROM pages GROUP BY 1) pc ON pc.document_id = cast(d.id AS VARCHAR)
-LEFT JOIN (
-    SELECT document_id, count(*)::BIGINT AS suggestion_count,
-           count(*) FILTER (WHERE status = 'pending')::BIGINT AS pending_count,
-           count(*) FILTER (WHERE status = 'accepted')::BIGINT AS accepted_count,
-           count(*) FILTER (WHERE status = 'rejected')::BIGINT AS rejected_count,
-           count(*) FILTER (WHERE band = 'flagged' AND status = 'pending')::BIGINT AS flagged_count,
-           count(*) FILTER (WHERE band = 'high')::BIGINT AS high_count,
-           count(*) FILTER (WHERE band = 'review')::BIGINT AS review_count
-    FROM v_suggestions GROUP BY document_id
-) sc ON sc.document_id = cast(d.id AS VARCHAR);
+-- v_document_stats deleted: generic count(*) dump with no exclusive purpose.
+-- Consumers (library rail, /api/cases/:id/documents, review stats) fold
+-- suggestion tallies inline via GROUP BY over v_suggestions (or v_doc_ui).
 
 DROP TABLE IF EXISTS _detect_hits;
-DROP TABLE IF EXISTS _detect_spans;
+DROP TABLE IF EXISTS _detect_lines;
 
 SELECT 'detect complete' AS status,
        (SELECT count(*) FROM suggestions) AS suggestions,

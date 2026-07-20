@@ -87,6 +87,8 @@ COPY (
     ORDER BY case_id, filename
 ) TO 'exports/export_map.csv' (HEADER true, DELIMITER ',');
 
+-- Manifest × samples/*.pdf desync rows (integrity gate, not a stats dump).
+-- Consumers: ingest assert + app.sql boot orphan diagnostics / integrity.
 CREATE OR REPLACE VIEW v_ingest_orphans AS
 WITH
 manifest AS (

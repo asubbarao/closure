@@ -22,10 +22,10 @@ test.describe("8. Judge panel (wave-2)", () => {
   test("GET /api/suggestions/:id/judges returns panel for a live suggestion", async ({
     request,
   }) => {
-    const flagged = await pickFlaggedPending(request, 1);
+    const flagged = await pickFlaggedPending(request);
     const any =
       flagged ||
-      (await getCaseSuggestions(request, 1)).find((s) => s.id != null);
+      (await getCaseSuggestions(request)).find((s) => s.id != null);
     test.skip(!any, "no suggestions available to probe judges");
 
     const probe = await getSuggestionJudges(request, any!.id);
@@ -68,7 +68,7 @@ test.describe("8. Judge panel (wave-2)", () => {
     page,
     request,
   }) => {
-    const flagged = await pickFlaggedPending(request, 1);
+    const flagged = await pickFlaggedPending(request);
     // Prefer flagged; fall back to any pending so we still exercise the page
     let target = flagged;
     if (!target) {
@@ -137,7 +137,7 @@ test.describe("8. Judge panel (wave-2)", () => {
   test("judges endpoint is consistent across multiple suggestions", async ({
     request,
   }) => {
-    const rows = await getCaseSuggestions(request, 1);
+    const rows = await getCaseSuggestions(request);
     const sample = rows.filter((s) => s.status === "pending").slice(0, 5);
     test.skip(sample.length === 0, "no pending suggestions");
 

@@ -1,7 +1,6 @@
 -- routes/search.sql — case word/phrase search + audit trail.
 -- Exact + fuzzy (rapidfuzz) over words; multi-token via splink ngrams (n const).
 -- Contract: matches[], count, exact_count, fuzzy_count. Params VARCHAR (case_no).
--- CREATE ROUTE rebinds without SET VARIABLE → audit uses fold-safe getenv path.
 
 INSTALL rapidfuzz FROM community; LOAD rapidfuzz;
 INSTALL splink_udfs FROM community; LOAD splink_udfs;
@@ -27,29 +26,23 @@ line_bags AS (
     WHERE w.word IS NOT NULL AND trim(w.word) <> ''
     GROUP BY w.document_id, d.filename, w.page_no, round(w.y0, 0)
 ),
--- ngrams(n) needs a constant n — emit 1..4, keep rows matching query_token_count.
+-- ngrams(n) needs a constant n — the four calls are ONE list literal (each
+-- fixed-size ARRAY(n) cast to VARCHAR[] so they unify); projection written once.
+-- n > len(word_list) yields an empty gram list and vanishes — no length guards.
 span_raw AS (
-    SELECT b.*, 1 AS token_count, g.gram AS tokens, g.idx AS start_idx
-    FROM line_bags b, UNNEST(ngrams(b.word_list, 1)) WITH ORDINALITY AS g(gram, idx)
-    UNION ALL BY NAME
-    SELECT b.*, 2, g.gram, g.idx
-    FROM line_bags b, UNNEST(ngrams(b.word_list, 2)) WITH ORDINALITY AS g(gram, idx)
-    WHERE len(b.word_list) >= 2
-    UNION ALL BY NAME
-    SELECT b.*, 3, g.gram, g.idx
-    FROM line_bags b, UNNEST(ngrams(b.word_list, 3)) WITH ORDINALITY AS g(gram, idx)
-    WHERE len(b.word_list) >= 3
-    UNION ALL BY NAME
-    SELECT b.*, 4, g.gram, g.idx
-    FROM line_bags b, UNNEST(ngrams(b.word_list, 4)) WITH ORDINALITY AS g(gram, idx)
-    WHERE len(b.word_list) >= 4
+    SELECT b.*, len(g.gram) AS token_count, g.gram AS tokens, g.idx AS start_idx
+    FROM line_bags b,
+         UNNEST([ngrams(b.word_list, 1)::VARCHAR[][],
+                 ngrams(b.word_list, 2)::VARCHAR[][],
+                 ngrams(b.word_list, 3)::VARCHAR[][],
+                 ngrams(b.word_list, 4)::VARCHAR[][]]) AS gs(grams),
+         UNNEST(gs.grams) WITH ORDINALITY AS g(gram, idx)
 ),
 spans AS (
     SELECT
         r.document_id, r.filename, r.page_no, r.token_count, query.query_norm,
-        array_to_string(list_transform(r.tokens, lambda t: cast(t AS VARCHAR)), ' ') AS text_raw,
-        lower(trim(unaccent(array_to_string(
-            list_transform(r.tokens, lambda t: cast(t AS VARCHAR)), ' ')))) AS text_norm,
+        array_to_string(r.tokens, ' ') AS text_raw,
+        lower(trim(unaccent(array_to_string(r.tokens, ' ')))) AS text_norm,
         r.word_meta[r.start_idx].x0 AS x0,
         r.word_meta[r.start_idx].y0 AS y0,
         r.word_meta[r.start_idx + r.token_count - 1].x1 AS x1,
@@ -85,29 +78,15 @@ SELECT
     count(*) FILTER (WHERE match_kind = 'fuzzy')::INTEGER AS fuzzy_count
 FROM hits;
 
--- GET /api/cases/:id/audit — decision trail (VARCHAR case_no). Fold-safe glob.
+-- GET /api/cases/:id/audit — decision trail (VARCHAR case_no); v_audit is the
+-- one decision-log display projection (routes/pages.sql).
 CREATE OR REPLACE ROUTE api_case_audit GET '/api/cases/:id/audit' AS
-SELECT
-    coalesce(try_cast(dl.ts AS TIMESTAMP), now()) AS ts,
-    coalesce(cast(dl.actor AS VARCHAR), 'system') AS actor,
-    coalesce(cast(dl.kind AS VARCHAR), 'event') AS action,
-    dl.suggestion_id,
-    coalesce(cast(dl.case_id AS VARCHAR), d.case_id) AS case_id,
-    coalesce(cast(dl.text AS VARCHAR), '') AS target,
-    coalesce(cast(dl.reason AS VARCHAR), '') AS reason
-FROM read_json_auto(
-    CASE WHEN getenv('CLOSURE_EXPORTS_DIR') IS NOT NULL
-          AND length(getenv('CLOSURE_EXPORTS_DIR')) > 0
-         THEN getenv('CLOSURE_EXPORTS_DIR') || '/decisions/*.json'
-         ELSE 'exports/decisions/*.json' END,
-    union_by_name := true, ignore_errors := true) dl
-LEFT JOIN documents d ON cast(d.id AS VARCHAR) = cast(dl.document_id AS VARCHAR)
-WHERE dl.kind IS DISTINCT FROM 'sentinel'
-  AND coalesce(cast(dl.case_id AS VARCHAR), d.case_id) = cast($id AS VARCHAR)
-ORDER BY coalesce(try_cast(dl.ts AS TIMESTAMP), TIMESTAMP '1970-01-01') DESC;
+SELECT ts, actor, action, suggestion_id, case_id, target, reason
+FROM v_audit
+WHERE case_id = cast($id AS VARCHAR)
+ORDER BY ts DESC;
 
 -- GET /api/stats — global corpus counters (one row).
--- v_suggestions is a getvariable view (CREATE ROUTE cannot bind it) → suggestions table.
 CREATE OR REPLACE ROUTE api_stats GET '/api/stats' AS
 SELECT
     (SELECT count(*)::BIGINT FROM cases) AS cases,
@@ -115,5 +94,4 @@ SELECT
     (SELECT count(*)::BIGINT FROM pages) AS pages,
     (SELECT count(*)::BIGINT FROM words) AS words,
     (SELECT count(*)::BIGINT FROM entities) AS entities,
-    (SELECT count(*)::BIGINT FROM suggestions) AS suggestions,
-    (SELECT count(*)::BIGINT FROM suggestions) AS v_suggestions;
+    (SELECT count(*)::BIGINT FROM suggestions) AS suggestions;

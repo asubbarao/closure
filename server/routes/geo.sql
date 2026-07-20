@@ -5,7 +5,8 @@
 
 INSTALL us_address_standardizer FROM community; LOAD us_address_standardizer;
 
--- One map for all cases; routes filter case_id = $id.
+-- Address minimap placement + suggestion tallies per entity (set-based GROUP BY).
+-- Consumers: /api/cases/:id/addresses, /api/cases/:id/geo.
 CREATE OR REPLACE VIEW v_address_map AS
 WITH city_anchor AS (
     SELECT * FROM (VALUES
@@ -30,16 +31,13 @@ addr AS (
 ),
 resolved AS (
     SELECT
-        entity_id, case_id, kind, canonical_text, is_street_fp,
-        CASE upper(parsed.city)
-            WHEN 'PORTLAND' THEN 'Portland'
-            WHEN 'SALEM'    THEN 'Salem'
-            WHEN 'EUGENE'   THEN 'Eugene'
-            WHEN 'BEND'     THEN 'Bend'
-        END AS parsed_city,
-        parsed.state AS parsed_state,
-        parsed.zip  AS parsed_zip
-    FROM addr
+        a.entity_id, a.case_id, a.kind, a.canonical_text, a.is_street_fp,
+        ca.city AS parsed_city,
+        a.parsed.state AS parsed_state,
+        a.parsed.zip  AS parsed_zip
+    FROM addr a
+    LEFT JOIN city_anchor ca
+      ON upper(ca.city) = upper(a.parsed.city) AND ca.city <> 'Unknown'
 ),
 -- STREET-only rows inherit a case-level subject city when they lack locality.
 case_city AS (
