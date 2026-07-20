@@ -1,0 +1,21 @@
+# GitHub Linguist overrides — make the language bar reflect the real project.
+# The backend is SQL (DuckDB) + SQL-authored HTTP routes; the .html files are
+# server-side tera templates + design mocks, not the substance of the app.
+
+# The AI-session export is evidence, not source — don't let it skew stats.
+docs/ai-sessions/**   linguist-documentation
+docs/**               linguist-documentation
+
+# Generated / sample corpus is data, not authored source.
+samples/**            linguist-generated
+pages/**              linguist-generated
+spikes/**             linguist-documentation
+
+# Tera templates are server-rendered views authored as part of the app, but
+# they read as HTML to Linguist and drown out the SQL — mark them as data so
+# the bar shows the languages that carry the logic (SQL, then the client JS/TS).
+server/templates/**   linguist-vendored
+design/**             linguist-documentation
+
+# Make sure SQL is always detected and counted.
+*.sql                 linguist-detectable=true
