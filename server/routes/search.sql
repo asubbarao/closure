@@ -30,19 +30,18 @@ line_bags AS (
 -- ngrams(n) needs a constant n — emit 1..4, keep rows matching query_token_count.
 span_raw AS (
     SELECT b.*, 1 AS token_count, g.gram AS tokens, g.idx AS start_idx
-    FROM line_bags b
-    CROSS JOIN UNNEST(ngrams(b.word_list, 1)) WITH ORDINALITY AS g(gram, idx)
+    FROM line_bags b, UNNEST(ngrams(b.word_list, 1)) WITH ORDINALITY AS g(gram, idx)
     UNION ALL BY NAME
-    SELECT b.*, 2, g.gram, g.idx FROM line_bags b
-    CROSS JOIN UNNEST(ngrams(b.word_list, 2)) WITH ORDINALITY AS g(gram, idx)
+    SELECT b.*, 2, g.gram, g.idx
+    FROM line_bags b, UNNEST(ngrams(b.word_list, 2)) WITH ORDINALITY AS g(gram, idx)
     WHERE len(b.word_list) >= 2
     UNION ALL BY NAME
-    SELECT b.*, 3, g.gram, g.idx FROM line_bags b
-    CROSS JOIN UNNEST(ngrams(b.word_list, 3)) WITH ORDINALITY AS g(gram, idx)
+    SELECT b.*, 3, g.gram, g.idx
+    FROM line_bags b, UNNEST(ngrams(b.word_list, 3)) WITH ORDINALITY AS g(gram, idx)
     WHERE len(b.word_list) >= 3
     UNION ALL BY NAME
-    SELECT b.*, 4, g.gram, g.idx FROM line_bags b
-    CROSS JOIN UNNEST(ngrams(b.word_list, 4)) WITH ORDINALITY AS g(gram, idx)
+    SELECT b.*, 4, g.gram, g.idx
+    FROM line_bags b, UNNEST(ngrams(b.word_list, 4)) WITH ORDINALITY AS g(gram, idx)
     WHERE len(b.word_list) >= 4
 ),
 spans AS (

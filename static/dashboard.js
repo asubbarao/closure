@@ -897,9 +897,11 @@
   }
 
   /* ── export ─────────────────────────────────────────────────────────── */
-  /* P0-2/P0-3: GET live export_plan first; hard-stop if blocked (no files).
-     When clear, POST export with plan export_sql so pdf_redact uses LIVE
-     accepted boxes (query() needs a foldable SQL string, not a subquery). */
+  /* GET export_plan → {blocked, export_sql}; hard-stop if blocked (no POST,
+     no files). When clear, POST {sql: export_sql} — the server built that
+     sentence from LIVE accepted boxes (v_export_plans), the client only
+     echoes it across the foldable-param wall. The response is the redaction
+     relation itself (one row per document); we count rows here. */
   async function doExport() {
     const btn = document.getElementById("export-btn");
     const out = document.getElementById("export-result");
@@ -942,64 +944,41 @@
       }
 
       if (plan.blocked) {
-        // Still POST with blocked:true so the server foldable short-circuit
-        // returns the same contract (and never runs pdf_redact).
-        const blockRes = await fetch(exportUrl, {
-          method: "POST",
-          headers: { Accept: "application/json", "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sql: "SELECT 0 AS document_id, 0 AS pages WHERE false",
-            blocked: true,
-          }),
-        });
-        let blockData;
-        try {
-          blockData = JSON.parse(await blockRes.text());
-        } catch (_) {
-          blockData = plan;
-        }
-        if (Array.isArray(blockData) && blockData.length === 1) blockData = blockData[0];
+        // Blocked plans never POST: the server's sentence is the no-op
+        // anyway (construction-gated), so there is nothing to run.
         if (out) {
           out.classList.add("show", "err");
-          out.textContent = JSON.stringify(blockData || plan, null, 2);
+          out.textContent = JSON.stringify(plan, null, 2);
         }
-        toast(
-          "Export blocked: " +
-            (plan.flagged_remaining != null ? plan.flagged_remaining : "?") +
-            " flagged items require individual judgment · wrote 0 files"
-        );
+        toast("Export blocked: flagged items require individual judgment · wrote 0 files");
         return;
       }
 
-      const sql = plan.export_sql || "";
       const res = await fetch(exportUrl, {
         method: "POST",
         headers: { Accept: "application/json", "Content-Type": "application/json" },
-        body: JSON.stringify({ sql: sql, blocked: false }),
+        body: JSON.stringify({ sql: plan.export_sql || "" }),
       });
       const text = await res.text();
-      let data;
+      let rows;
       try {
-        data = JSON.parse(text);
+        rows = JSON.parse(text);
       } catch (_) {
-        data = { raw: text, status: res.status };
+        rows = null;
       }
-      if (Array.isArray(data) && data.length === 1) data = data[0];
+      if (rows && !Array.isArray(rows)) rows = [rows];
+      const exported = Array.isArray(rows)
+        ? rows.filter((r) => r && r.document_id != null).length
+        : 0;
 
       if (out) {
         out.classList.add("show");
-        if (!res.ok || data.blocked || !data.exported) out.classList.add("err");
-        out.textContent = JSON.stringify(data, null, 2);
+        if (!res.ok || exported === 0) out.classList.add("err");
+        out.textContent = Array.isArray(rows) ? JSON.stringify(rows, null, 2) : text;
       }
 
-      if (res.ok && data && !data.blocked && data.exported > 0) {
-        toast("Exported " + data.exported + " redacted documents · redactions laid");
-      } else if (data && data.blocked) {
-        toast(
-          "Export blocked: " +
-            data.flagged_remaining +
-            " flagged items · wrote 0 files"
-        );
+      if (res.ok && exported > 0) {
+        toast("Exported " + exported + " redacted documents · redactions laid");
       } else {
         toast("Export failed (" + res.status + ")");
       }

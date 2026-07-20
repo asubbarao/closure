@@ -32,9 +32,7 @@ export type DocumentRow = {
 };
 
 export type ExportPlan = {
-  exported?: number;
   blocked: boolean;
-  flagged_remaining: number;
   export_sql?: string;
 };
 

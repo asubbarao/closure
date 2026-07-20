@@ -3,10 +3,6 @@
 -- CREATE ROUTE rebinds without SET VARIABLE → fold-safe getenv paths only.
 -- COPY TO rejects path expressions; use FILENAME_PATTERN '{uuid}' per shard.
 
-CREATE OR REPLACE MACRO batch_key(bid, shard_file) AS
-    CASE WHEN bid IS NOT NULL AND length(cast(bid AS VARCHAR)) > 0
-         THEN cast(bid AS VARCHAR) ELSE shard_file END;
-
 -- Auto-schema log + shard path as _file (no cast soup).
 CREATE OR REPLACE VIEW v_decision_log AS
 SELECT * RENAME (filename AS _file)
@@ -30,7 +26,8 @@ GROUP BY cast(suggestion_id AS VARCHAR);
 -- One GROUP BY; label = simple CASE over pre-agg facts (not COALESCE(CASE agg())).
 CREATE OR REPLACE VIEW v_decision_batches AS
 WITH raw AS (
-    SELECT batch_key(batch_id, _file) AS batch_id,
+    SELECT CASE WHEN batch_id IS NOT NULL AND length(cast(batch_id AS VARCHAR)) > 0
+                THEN cast(batch_id AS VARCHAR) ELSE _file END AS batch_id,
            cast(batch_label AS VARCHAR) AS batch_label,
            cast(undoes_batch_id AS VARCHAR) AS undoes_batch_id,
            cast(kind AS VARCHAR) AS kind, cast(status AS VARCHAR) AS status,

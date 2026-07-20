@@ -50,6 +50,7 @@ pages/**/*.png
 samples/*.pdf
 samples/identities.json
 samples/manifest.json
+samples/watchlist.json
 samples/messy/**
 !samples/messy/.gitkeep
 

@@ -126,7 +126,7 @@ COPY (
 
 -- Boot integrity (P0-1): refuse hollow boots; print triad orphans first.
 SELECT 'boot orphan diagnostics' AS phase, *
-FROM ingest_orphan_diag()
+FROM v_ingest_orphans
 ORDER BY kind, name;
 
 SELECT CASE
@@ -143,7 +143,7 @@ SELECT CASE
         'orphans: ' ||
         coalesce(
             (SELECT string_agg(kind || ':' || name, ', ' ORDER BY kind, name)
-             FROM ingest_orphan_diag()),
+             FROM v_ingest_orphans),
             '(none listed)'
         )
     )

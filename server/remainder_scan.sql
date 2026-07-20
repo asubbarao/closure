@@ -37,8 +37,7 @@ SELECT
         coalesce(a.suffix, '')
     )) AS group_key,
     upper(trim(e.canonical_text)) AS standardized_text
-FROM entities e
-CROSS JOIN UNNEST([addrust_parse(e.canonical_text)]) AS u(a)
+FROM entities e, UNNEST([addrust_parse(e.canonical_text)]) AS u(a)
 WHERE position('ADDRESS' IN e.kind) > 0 OR position('STREET' IN e.kind) > 0;
 
 CREATE OR REPLACE VIEW v_address_entity_canon AS SELECT * FROM entity_address_canon;
@@ -172,28 +171,24 @@ raw AS (
     SELECT l.document_id, l.page_no, l.case_id, l.word_list, l.word_meta,
            1 AS n, g.idx AS start_idx,
            array_to_string(list_transform(g.gram, lambda t: cast(t AS VARCHAR)), ' ') AS phrase
-    FROM lines l
-    CROSS JOIN UNNEST(ngrams(l.word_list, 1)) WITH ORDINALITY AS g(gram, idx)
+    FROM lines l, UNNEST(ngrams(l.word_list, 1)) WITH ORDINALITY AS g(gram, idx)
     UNION ALL BY NAME
     SELECT l.document_id, l.page_no, l.case_id, l.word_list, l.word_meta,
            2 AS n, g.idx AS start_idx,
            array_to_string(list_transform(g.gram, lambda t: cast(t AS VARCHAR)), ' ') AS phrase
-    FROM lines l
-    CROSS JOIN UNNEST(ngrams(l.word_list, 2)) WITH ORDINALITY AS g(gram, idx)
+    FROM lines l, UNNEST(ngrams(l.word_list, 2)) WITH ORDINALITY AS g(gram, idx)
     WHERE len(l.word_list) >= 2
     UNION ALL BY NAME
     SELECT l.document_id, l.page_no, l.case_id, l.word_list, l.word_meta,
            3 AS n, g.idx AS start_idx,
            array_to_string(list_transform(g.gram, lambda t: cast(t AS VARCHAR)), ' ') AS phrase
-    FROM lines l
-    CROSS JOIN UNNEST(ngrams(l.word_list, 3)) WITH ORDINALITY AS g(gram, idx)
+    FROM lines l, UNNEST(ngrams(l.word_list, 3)) WITH ORDINALITY AS g(gram, idx)
     WHERE len(l.word_list) >= 3
     UNION ALL BY NAME
     SELECT l.document_id, l.page_no, l.case_id, l.word_list, l.word_meta,
            4 AS n, g.idx AS start_idx,
            array_to_string(list_transform(g.gram, lambda t: cast(t AS VARCHAR)), ' ') AS phrase
-    FROM lines l
-    CROSS JOIN UNNEST(ngrams(l.word_list, 4)) WITH ORDINALITY AS g(gram, idx)
+    FROM lines l, UNNEST(ngrams(l.word_list, 4)) WITH ORDINALITY AS g(gram, idx)
     WHERE len(l.word_list) >= 4
 )
 SELECT document_id, page_no, case_id, n, start_idx, phrase,

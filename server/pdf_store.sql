@@ -1,16 +1,13 @@
 -- pdf_store.sql — PDF lifecycle: source / working / export.
 --
--- Two tables + ONE unmaterialized view. No cfg_* macros, no cast soup, no
--- registry JSON log views. scalarfs captures accepted boxes as a native list
--- for pdf_redact; working_plan embeds that list as a foldable literal so the
+-- Two tables + unmaterialized views. No macros: parameterized plan lives in
+-- v_working_plans (one row per document; routes filter WHERE document_id = $id).
+-- working_sql embeds the accepted box list as a foldable literal so the
 -- HTTP plan→POST path stays self-contained (variables do not span requests).
 --
 -- document_id is VARCHAR (uuid). Paths: data/working/doc{id}_working{gen}.pdf
 -- Route shapes: document_store / working_plan keys unchanged (SCHEMA_CONTRACT).
 -- Depends on: documents, pages, v_suggestions. Does NOT write exports/.
-
-INSTALL scalarfs FROM community;
-LOAD scalarfs;
 
 -- Store roots are committed layout LITERALS (data/working, data/export,
 -- exports): the write side (COPY TO) only accepts grammar literals, so a
@@ -151,106 +148,79 @@ JOIN export_blobs e
   ON e.path = 'exports' || '/' || d.filename || '_redacted.pdf'
   OR e.path = 'data/export' || '/' || d.filename || '_redacted.pdf';
 
--- ── macros kept for routes/store.sql (parameterized, reused) ────────────────
+-- ── working plan: one row per document; sentence is a COLUMN (like export) ──
+--
+-- pdf_redact and query() are TABLE functions — their args must fold at bind,
+-- so a sentence built from live data can't be assembled inside the executing
+-- call. Construction lives in v_working_plans; GET …/working/plan hands the
+-- sentence out, POST …/working hands it back as the foldable $sql param.
 
--- GET /api/documents/:id/store
-CREATE OR REPLACE MACRO document_store(did) AS TABLE
-SELECT document_id, case_id, filename, stage, path, gen, fingerprint,
-       decision_batch, accepted_count, pages_redacted, size_bytes,
-       revision_count, created_ts, actor, mutability, note
-FROM v_pdf_store
-WHERE document_id = cast(did AS VARCHAR)
-ORDER BY CASE stage WHEN 'source' THEN 0 WHEN 'working' THEN 1 WHEN 'export' THEN 2 ELSE 3 END,
-         coalesce(gen, 0), created_ts;
-
--- Accepted boxes → STRUCT[] (y-flip once: words top-left, pdf_redact bottom-left).
--- Same list shape as: COPY (...) TO 'variable:accepted_boxes' (FORMAT variable, LIST rows)
--- then pdf_redact(src, dst, getvariable('accepted_boxes')).
-CREATE OR REPLACE MACRO accepted_boxes(did) AS (
-    SELECT coalesce(
-        list(
-            struct_pack(
-                page := s.page_no::INTEGER,
-                x    := s.x0::DOUBLE,
-                y    := (p.height_pt - s.y1)::DOUBLE,
-                w    := (s.x1 - s.x0)::DOUBLE,
-                h    := (s.y1 - s.y0)::DOUBLE
-            )
-            ORDER BY s.page_no, s.id
-        ),
-        []::STRUCT(page INTEGER, x DOUBLE, y DOUBLE, w DOUBLE, h DOUBLE)[]
-    )
-    FROM v_suggestions s
-    JOIN pages p
-      ON cast(p.document_id AS VARCHAR) = s.document_id
-     AND p.page_no = s.page_no
-    WHERE s.document_id = cast(did AS VARCHAR) AND s.status = 'accepted'
-);
-
--- GET /api/documents/:id/working/plan — foldable working_sql for POST …/working.
--- box list is embedded as cast(STRUCT[] AS VARCHAR); same list handable via
--- COPY (…) TO 'variable:accepted_boxes' (FORMAT variable, LIST rows) + getvariable.
-CREATE OR REPLACE MACRO working_plan(did, act) AS TABLE
+CREATE OR REPLACE VIEW v_working_plans AS
 WITH
-plan AS (
+gens AS (
+    SELECT cast(document_id AS VARCHAR) AS document_id, gen
+    FROM pdf_store_events
+    UNION ALL
     SELECT
-        cast(did AS VARCHAR) AS document_id,
-        (
-            SELECT coalesce(max(g), 0) + 1
-            FROM (
-                SELECT gen AS g FROM pdf_store_events
-                WHERE cast(document_id AS VARCHAR) = cast(did AS VARCHAR)
-                UNION ALL
-                SELECT try_cast(regexp_extract(filename, '_working(\d+)\.pdf$', 1) AS INTEGER)
-                FROM read_blob('data/working' || '/*.pdf')
-                WHERE position('doc' || cast(did AS VARCHAR) || '_working' IN filename) > 0
-                UNION ALL
-                SELECT 0
-            ) z
-        ) AS gen,
-        accepted_boxes(did) AS box_list,
-        coalesce(
-            (SELECT sha256(string_agg(s.id || ':' || s.status, '|' ORDER BY s.id))
-             FROM v_suggestions s
-             WHERE s.document_id = cast(did AS VARCHAR) AND s.status = 'accepted'),
-            sha256('no-accepted')
-        ) AS decision_batch,
-        (SELECT count(*)::INTEGER FROM v_suggestions s
-         WHERE s.document_id = cast(did AS VARCHAR) AND s.status = 'accepted') AS accepted_count
+        regexp_extract(filename, 'doc(.+)_working\d+\.pdf$', 1) AS document_id,
+        try_cast(regexp_extract(filename, '_working(\d+)\.pdf$', 1) AS INTEGER) AS gen
+    FROM read_blob('data/working/*.pdf')
+    WHERE regexp_matches(filename, 'doc.+_working\d+\.pdf$')
+),
+next_gen AS (
+    SELECT document_id,
+           coalesce(max(gen), 0) + 1 AS gen
+    FROM gens
+    WHERE document_id IS NOT NULL AND gen IS NOT NULL
+    GROUP BY document_id
+),
+boxes AS (
+    -- accepted boxes as a typed STRUCT[], geometry converted once
+    -- (words are top-left, pdf_redact is bottom-left: y = height_pt - y1)
+    SELECT s.document_id,
+           list(struct_pack(
+                    page := s.page_no::INTEGER,
+                    x    := s.x0::DOUBLE,
+                    y    := (p.height_pt - s.y1)::DOUBLE,
+                    w    := (s.x1 - s.x0)::DOUBLE,
+                    h    := (s.y1 - s.y0)::DOUBLE)
+                ORDER BY s.page_no, s.id) AS boxes
+    FROM v_suggestions s
+    JOIN pages p ON cast(p.document_id AS VARCHAR) = s.document_id
+                AND p.page_no = s.page_no
+    WHERE s.status = 'accepted'
+    GROUP BY s.document_id
+),
+batches AS (
+    SELECT s.document_id,
+           sha256(string_agg(format('{}:{}', s.id, s.status), '|' ORDER BY s.id)) AS decision_batch
+    FROM v_suggestions s
+    WHERE s.status = 'accepted'
+    GROUP BY s.document_id
+),
+base AS (
+    SELECT cast(d.id AS VARCHAR) AS document_id,
+           d.source_path,
+           coalesce(g.gen, 1) AS gen
+    FROM documents d
+    LEFT JOIN next_gen g ON g.document_id = cast(d.id AS VARCHAR)
 )
-SELECT
-    p.document_id,
-    p.gen,
-    'data/working' || '/doc' || p.document_id
-        || '_working' || cast(p.gen AS VARCHAR) || '.pdf' AS path,
-    p.decision_batch,
-    p.accepted_count,
-    'SELECT count(*)::INTEGER AS pages FROM pdf_redact(''' || d.source_path || ''', '''
-        || 'data/working' || '/doc' || p.document_id
-        || '_working' || cast(p.gen AS VARCHAR) || '.pdf'', '
-        || cast(p.box_list AS VARCHAR)
-        || '::STRUCT(page INTEGER, x DOUBLE, y DOUBLE, w DOUBLE, h DOUBLE)[])' AS working_sql,
-    coalesce(act, 'reviewer') AS actor
-FROM documents d
-JOIN plan p ON p.document_id = cast(d.id AS VARCHAR);
-
--- Cleanup markers (INSERT OR REPLACE INTO pdf_store_events BY NAME SELECT * FROM …).
-CREATE OR REPLACE MACRO cleanup_working_rows(did) AS TABLE
-SELECT document_id, 'cleanup' AS stage, path, gen, fingerprint, decision_batch,
-       accepted_count, pages_redacted, size_bytes, revision_count,
-       now() AS created_ts, 'system' AS actor, 'cleanup' AS kind
-FROM v_pdf_store
-WHERE stage = 'working' AND document_id = cast(did AS VARCHAR);
-
--- Prove scalarfs: capture empty box list into a typed variable (LIST rows).
-COPY (
-    SELECT 0::INTEGER AS page, 0.0::DOUBLE AS x, 0.0::DOUBLE AS y,
-           0.0::DOUBLE AS w, 0.0::DOUBLE AS h
-    WHERE false
-) TO 'variable:accepted_boxes_empty' (FORMAT variable, LIST rows);
+SELECT b.document_id,
+       b.gen,
+       format('data/working/doc{}_working{}.pdf', b.document_id, b.gen) AS path,
+       coalesce(bt.decision_batch, sha256('no-accepted')) AS decision_batch,
+       coalesce(bx.boxes, []) AS boxes,
+       format(
+           'SELECT count(*)::INTEGER AS pages FROM pdf_redact(''{}'', ''{}'', {}::STRUCT(page INTEGER, x DOUBLE, y DOUBLE, w DOUBLE, h DOUBLE)[])',
+           b.source_path,
+           format('data/working/doc{}_working{}.pdf', b.document_id, b.gen),
+           cast(coalesce(bx.boxes, []) AS VARCHAR)
+       ) AS working_sql
+FROM base b
+LEFT JOIN boxes bx ON bx.document_id = b.document_id
+LEFT JOIN batches bt ON bt.document_id = b.document_id;
 
 SELECT 'pdf_store loaded' AS phase,
        (SELECT count(*) FROM pdf_store_source) AS source_rows,
        (SELECT count(*) FROM v_pdf_store) AS store_rows,
-       typeof(getvariable('accepted_boxes_empty')) AS scalarfs_boxes_type,
        'data/working' AS working_root;

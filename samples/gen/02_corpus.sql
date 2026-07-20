@@ -98,6 +98,69 @@ SELECT CASE
     ELSE 'identities.json written from fakeit'
 END AS identities_status;
 
+-- ── write watchlist.json ───────────────────────────────────────────────────
+-- Flat operator watchlist (case_no, term, kind) for server/ingest.sql.
+-- Derived from the SAME in-memory roster as identities.json — never re-read
+-- that file — so reuse=1 and fresh fakeit both emit a matching pair.
+COPY (
+    SELECT case_no, term, kind
+    FROM (
+        SELECT
+            c.case_no,
+            c.subject_name AS term,
+            'PERSON · SUBJECT' AS kind,
+            1 AS kind_ord,
+            c.cid AS ord_a,
+            0 AS ord_b
+        FROM _cases c
+        UNION ALL
+        SELECT
+            c.case_no,
+            w.name AS term,
+            'PERSON · WITNESS' AS kind,
+            2 AS kind_ord,
+            w.slot AS ord_a,
+            c.cid AS ord_b
+        FROM _wits w
+        JOIN _cases c ON c.cid = w.cid
+        UNION ALL
+        SELECT
+            c.case_no,
+            o.officer AS term,
+            'OFFICER · NOT SUBJECT PII' AS kind,
+            3 AS kind_ord,
+            o.ono AS ord_a,
+            c.cid AS ord_b
+        FROM _offs o
+        JOIN _cases c ON c.cid = o.cid
+        UNION ALL
+        SELECT
+            c.case_no,
+            c.fp_street AS term,
+            'STREET NAME · NOT PII' AS kind,
+            4 AS kind_ord,
+            c.cid AS ord_a,
+            0 AS ord_b
+        FROM _cases c
+        UNION ALL
+        SELECT
+            c.case_no,
+            -- short plant form ("Hayes v. Ohio"), not the full reporter cite
+            regexp_extract(c.fp_citation, '^[^,]+') AS term,
+            'CITATION · NOT PII' AS kind,
+            5 AS kind_ord,
+            c.cid AS ord_a,
+            0 AS ord_b
+        FROM _cases c
+    )
+    ORDER BY kind_ord, ord_a, ord_b, case_no
+) TO (getvariable('samples_dir') || '/watchlist.json') (FORMAT json, ARRAY true);
+
+SELECT CASE
+    WHEN (SELECT reuse_identities FROM _cfg) = 1 THEN 'watchlist.json re-emitted from loaded fixture roster'
+    ELSE 'watchlist.json written from fakeit roster'
+END AS watchlist_status;
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 2. DOCUMENT PLAN — general types, rotating FN plants (not case-hardcoded)
 -- ═══════════════════════════════════════════════════════════════════════════

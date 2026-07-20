@@ -19,8 +19,8 @@
 #   SAMPLES_DIR          output dir relative to repo root   (default: samples)
 #
 # On a fresh clone, running this script produces the whole sample corpus:
-#   samples/identities.json, samples/manifest.json, samples/*.pdf,
-#   samples/messy/* (+ samples/messy/manifest.json).
+#   samples/identities.json, samples/watchlist.json, samples/manifest.json,
+#   samples/*.pdf, samples/messy/* (+ samples/messy/manifest.json).
 # Does not touch samples/stress/ (owned elsewhere).
 # Prefer scripts/setup.sh (this + page PNG render) for a full working app.
 set -euo pipefail
@@ -114,6 +114,7 @@ SQL
 
 echo "==> done"
 echo "    identities: $SAMPLES_DIR/identities.json"
+echo "    watchlist:  $SAMPLES_DIR/watchlist.json"
 echo "    manifest:   $SAMPLES_DIR/manifest.json"
 echo "    messy:      $SAMPLES_DIR/messy/"
 ls -la "$SAMPLES_DIR"/*.pdf 2>/dev/null | awk '{print "    pdf:", $NF, "(" $5 " bytes)"}'

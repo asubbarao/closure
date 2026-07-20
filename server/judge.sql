@@ -120,8 +120,7 @@ SELECT
             WHEN 'street' THEN 'street-name prior · ' || b.docs || ' docs (often FP bait)'
             WHEN 'officer' THEN 'officer prior: usually not subject PII' ELSE 'no strong entity prior' END
     END AS reason
-FROM buck b
-CROSS JOIN UNNEST([1, 2, 3]) AS j(judge_id);
+FROM buck b, UNNEST([1, 2, 3]) AS j(judge_id);
 
 CREATE OR REPLACE VIEW v_judge_votes AS
 SELECT suggestion_id, judge_id, judge_name, factor, verdict, score, reason FROM judge_votes;

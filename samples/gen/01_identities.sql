@@ -11,8 +11,9 @@
 --   reuse_identities     INT   1 = keep samples/identities.json   (default 0)
 --   samples_dir          TEXT  output directory                   (default 'samples')
 --
--- Writes:
+-- Writes (via 02_corpus.sql after this stage + optional reuse overlay):
 --   {samples_dir}/identities.json   answer-key cast (ingest.sql / seed.sql schema)
+--   {samples_dir}/watchlist.json    flat operator watchlist (term/kind/case_no)
 --   {samples_dir}/manifest.json     per-PDF ground truth
 --   {samples_dir}/*.pdf             police-report narratives (write_pdf)
 --   {samples_dir}/messy/*           edge-case PDFs + messy/manifest.json

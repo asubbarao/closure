@@ -87,8 +87,7 @@ COPY (
     ORDER BY case_id, filename
 ) TO 'exports/export_map.csv' (HEADER true, DELIMITER ',');
 
--- Kept as macro: app.sql boot integrity calls ingest_orphan_diag() by name.
-CREATE OR REPLACE MACRO ingest_orphan_diag() AS TABLE
+CREATE OR REPLACE VIEW v_ingest_orphans AS
 WITH
 manifest AS (
     SELECT
@@ -109,12 +108,12 @@ FROM pdfs p
 WHERE NOT EXISTS (SELECT 1 FROM manifest m WHERE m.filename = p.filename);
 
 SELECT CASE
-    WHEN (SELECT count(*) FROM ingest_orphan_diag()) > 0
+    WHEN (SELECT count(*) FROM v_ingest_orphans) > 0
     THEN error(
         'ingest desync (manifest × samples/*.pdf): ' ||
         coalesce(
             (SELECT string_agg(kind || ':' || name, ', ' ORDER BY kind, name)
-             FROM ingest_orphan_diag()),
+             FROM v_ingest_orphans),
             '(unknown)'
         )
     )

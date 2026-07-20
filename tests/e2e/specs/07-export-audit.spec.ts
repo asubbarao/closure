@@ -22,16 +22,15 @@ test.describe("7. Export + audit", () => {
       (s) => s.band === "flagged" && s.status === "pending"
     );
 
-    // API contract
+    // API contract: the plan is {blocked, export_sql} — counts are the
+    // client's job (we already have the suggestions relation right here).
     if (flaggedPending.length > 0) {
       expect(
         plan.blocked,
         "export_plan.blocked must be true when flagged pending remain"
       ).toBeTruthy();
-      expect(plan.flagged_remaining).toBeGreaterThan(0);
     } else {
-      // If nothing flagged pending, record that the gate is open
-      expect(plan.flagged_remaining ?? 0).toBe(0);
+      expect(plan.blocked, "gate must be open with nothing flagged").toBeFalsy();
     }
 
     await openCaseLibrary(page, 1);
