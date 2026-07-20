@@ -1,125 +1,113 @@
 -- detect.sql — generic AI redaction detection over words (ruling B).
--- Replaces seed.sql. Inputs: words, documents, watchlist; v_src_decisions.
--- Extensions: finetype, us_address_standardizer, rapidfuzz, splink_udfs.
--- No qnorm, v_grams, row_number, identities unpivot.
+-- Inputs: words, documents, watchlist; v_src_decisions.
+-- Ext: finetype, us_address_standardizer, rapidfuzz, splink_udfs.
+-- No ngram union, no row_number. Taxonomy is data (kinds not sprinkled).
 
 INSTALL finetype FROM community; LOAD finetype;
 INSTALL us_address_standardizer FROM community; LOAD us_address_standardizer;
 INSTALL rapidfuzz FROM community; LOAD rapidfuzz;
 INSTALL splink_udfs FROM community; LOAD splink_udfs;
 
--- Line bags + splink ngrams (n constant) → phrase/box. Meta list carries coords.
-CREATE OR REPLACE TABLE _detect_spans AS
-WITH lines AS (
-    SELECT w.document_id, w.page_no, d.case_id,
-           list(w.word ORDER BY w.x0) AS word_list,
-           list(struct_pack(word := w.word, x0 := w.x0, y0 := w.y0, x1 := w.x1, y1 := w.y1)
-                ORDER BY w.x0) AS word_meta
-    FROM words w JOIN documents d ON d.id = w.document_id
-    GROUP BY w.document_id, w.page_no, d.case_id, round(w.y0, 0)
-),
--- token_count = number of words in the span (1..4-gram). Positional UNION ALL
--- (not BY NAME — the size literal must align to token_count by position).
--- ngrams(list, k) returns fixed-size ARRAY(k); cast each to VARCHAR[] so the
--- different-length branches unify under one positional UNION ALL.
-raw AS (
-    SELECT l.*, 1 AS token_count, cast(g.gram AS VARCHAR[]) AS tokens, g.idx AS start_idx FROM lines l
-    CROSS JOIN UNNEST(ngrams(l.word_list, 1)) WITH ORDINALITY AS g(gram, idx)
-    UNION ALL
-    SELECT l.*, 2, cast(g.gram AS VARCHAR[]), g.idx FROM lines l
-    CROSS JOIN UNNEST(ngrams(l.word_list, 2)) WITH ORDINALITY AS g(gram, idx)
-    WHERE len(l.word_list) >= 2
-    UNION ALL
-    SELECT l.*, 3, cast(g.gram AS VARCHAR[]), g.idx FROM lines l
-    CROSS JOIN UNNEST(ngrams(l.word_list, 3)) WITH ORDINALITY AS g(gram, idx)
-    WHERE len(l.word_list) >= 3
-    UNION ALL
-    SELECT l.*, 4, cast(g.gram AS VARCHAR[]), g.idx FROM lines l
-    CROSS JOIN UNNEST(ngrams(l.word_list, 4)) WITH ORDINALITY AS g(gram, idx)
-    WHERE len(l.word_list) >= 4
-)
-SELECT document_id, page_no, case_id, token_count, start_idx,
-       array_to_string(list_transform(tokens, lambda t: cast(t AS VARCHAR)), ' ') AS phrase,
-       lower(trim(unaccent(array_to_string(
-           list_transform(tokens, lambda t: cast(t AS VARCHAR)), ' ')))) AS phrase_norm,
-       word_meta[start_idx].x0 AS x0, word_meta[start_idx].y0 AS y0,
-       word_meta[start_idx + token_count - 1].x1 AS x1,
-       list_max(list_transform(
-           list_slice(word_meta, start_idx::BIGINT, (start_idx + token_count - 1)::BIGINT),
-           lambda m: m.y1)) AS y1,
-       array_to_string(list_transform(word_list, lambda t: cast(t AS VARCHAR)), ' ') AS context
-FROM raw;
+CREATE OR REPLACE TABLE pii_taxonomy AS
+SELECT * FROM (VALUES
+    ('finetype_ssn',   'SSN',               true),
+    ('finetype_phone', 'PHONE · SUBJECT',   true),
+    ('finetype_date',  'DATE OF BIRTH',     true),
+    ('finetype_email', 'PHONE · SUBJECT',   true),
+    ('addrust',        'ADDRESS · SUBJECT', true)
+) AS t(code, kind, is_pii);
 
--- Hits: (1) finetype PII  (2) addrust addresses  (3) rapidfuzz × watchlist names.
--- finetype(col) bulk-profiles; finetype([tok]) is per-row. SSN lands as isbn.
+-- Visual lines: string_agg + word_meta ordered by x0 (bbox for name/address spans).
+CREATE OR REPLACE TABLE _detect_lines AS
+SELECT w.document_id, w.page_no, d.case_id,
+       string_agg(w.word, ' ' ORDER BY w.x0) AS line_text,
+       lower(trim(unaccent(string_agg(w.word, ' ' ORDER BY w.x0)))) AS line_norm,
+       list(struct_pack(word := w.word, x0 := w.x0, y0 := w.y0, x1 := w.x1, y1 := w.y1)
+            ORDER BY w.x0) AS word_meta
+FROM words w JOIN documents d ON d.id = w.document_id
+GROUP BY w.document_id, w.page_no, d.case_id, round(w.y0, 0);
+
+-- Hits: finetype words | tightened addrust | watchlist×lines rapidfuzz. No ngrams.
 CREATE OR REPLACE TABLE _detect_hits AS
 WITH type_hits AS (
-    SELECT document_id, page_no, case_id, token AS text, context, x0, y0, x1, y1,
-           CASE
-               WHEN position('@' IN token) > 0 OR ft_type LIKE 'identity.person.email%'
-                   OR ft_type LIKE '%phone%' THEN 'PHONE · SUBJECT'
-               WHEN ft_type LIKE 'datetime.date%' THEN 'DATE OF BIRTH'
-               WHEN ft_type LIKE 'identity.commerce.isbn%' THEN 'SSN'
-           END AS kind,
-           greatest(1, least(99, cast(round(100.0 * coalesce(ft_conf, 0.70)) AS INTEGER))) AS confidence,
-           'finetype: ' || ft_type AS reason,
-           cast(NULL AS VARCHAR) AS flag_tag
+    SELECT c.document_id, c.page_no, c.case_id, c.token AS text, c.token AS context,
+           c.x0, c.y0, c.x1, c.y1, tax.kind,
+           greatest(1, least(99, cast(round(100.0 * coalesce(c.ft_conf, 0.70)) AS INTEGER))) AS confidence,
+           'finetype: ' || c.ft_type AS reason, cast(NULL AS VARCHAR) AS flag_tag
     FROM (
-        SELECT document_id, page_no, case_id, context, x0, y0, x1, y1,
-               trim(phrase, '.,;:()"''[]') AS token,
-               finetype([trim(phrase, '.,;:()"''[]')]) AS ft_type,
+        SELECT w.document_id, w.page_no, d.case_id, w.x0, w.y0, w.x1, w.y1,
+               trim(w.word, '.,;:()"''[]') AS token,
+               finetype([trim(w.word, '.,;:()"''[]')]) AS ft_type,
                try_cast(json_extract_string(
-                   finetype_detail([trim(phrase, '.,;:()"''[]')])::JSON, '$.confidence'
-               ) AS DOUBLE) AS ft_conf
-        FROM _detect_spans
-        WHERE token_count = 1 AND length(trim(phrase, '.,;:()"''[]')) BETWEEN 6 AND 40
-          AND (position('-' IN phrase) > 0 OR position('/' IN phrase) > 0
-            OR position('@' IN phrase) > 0 OR position('(' IN phrase) > 0)
-    ) t
-    WHERE ft_type LIKE 'datetime.date%' OR ft_type LIKE 'identity.commerce.isbn%'
-       OR ft_type LIKE 'identity.person.email%' OR ft_type LIKE '%phone%'
-       OR position('@' IN token) > 0
+                   finetype_detail([trim(w.word, '.,;:()"''[]')])::JSON, '$.confidence') AS DOUBLE) AS ft_conf
+        FROM words w JOIN documents d ON d.id = w.document_id
+        WHERE length(trim(w.word, '.,;:()"''[]')) BETWEEN 6 AND 40
+          AND (position('-' IN w.word) > 0 OR position('/' IN w.word) > 0
+            OR position('@' IN w.word) > 0 OR position('(' IN w.word) > 0)
+    ) c
+    JOIN pii_taxonomy tax ON tax.code = CASE
+        WHEN c.ft_type LIKE 'identity.commerce.isbn%' THEN 'finetype_ssn'
+        WHEN c.ft_type LIKE '%phone%' THEN 'finetype_phone'
+        WHEN c.ft_type LIKE 'datetime.date%' THEN 'finetype_date'
+        WHEN c.ft_type LIKE 'identity.person.email%' OR position('@' IN c.token) > 0 THEN 'finetype_email'
+    END
+    WHERE nullif(trim(tax.code), '') IS NOT NULL
 ),
 addr_hits AS (
-    SELECT document_id, page_no, case_id, phrase AS text, context, x0, y0, x1, y1,
-           'ADDRESS · SUBJECT' AS kind, 88 AS confidence,
-           'addrust: ' || coalesce(a.street_number, '') || ' ' || coalesce(a.street_name, '') AS reason,
+    SELECT p.document_id, p.page_no, p.case_id, p.addr_span AS text, p.line_text AS context,
+           list_min(list_transform(p.span_words, lambda m: m.x0)) AS x0,
+           list_min(list_transform(p.span_words, lambda m: m.y0)) AS y0,
+           list_max(list_transform(p.span_words, lambda m: m.x1)) AS x1,
+           list_max(list_transform(p.span_words, lambda m: m.y1)) AS y1,
+           tax.kind, 92 AS confidence,
+           'addrust: ' || p.a.street_number || ' ' || coalesce(p.a.street_name, '') AS reason,
            cast(NULL AS VARCHAR) AS flag_tag
     FROM (
-        SELECT *, addrust_parse(phrase) AS a FROM _detect_spans
-        WHERE token_count BETWEEN 3 AND 4
-          AND try_cast(list_extract(string_split(phrase, ' '), 1) AS INTEGER) IS NOT NULL
+        SELECT document_id, page_no, case_id, line_text, addr_span, addrust_parse(addr_span) AS a,
+               list_filter(word_meta, lambda m:
+                   position(lower(trim(unaccent(m.word))) IN lower(trim(unaccent(addr_span)))) > 0) AS span_words
+        FROM (
+            SELECT *, regexp_extract(line_text,
+                '(\d{2,6}\s+[A-Za-z][A-Za-z0-9 .''-]{1,40}?,\s*[A-Za-z .]{2,30},\s*[A-Z]{2}\s+\d{5})', 1
+            ) AS addr_span FROM _detect_lines
+        ) e WHERE nullif(trim(addr_span), '') IS NOT NULL
     ) p
-    WHERE a.street_number IS NOT NULL
-      AND (a.city IS NOT NULL OR a.zip IS NOT NULL OR a.street_name IS NOT NULL)
-),
--- watchlist normalized ONCE (was recomputed 4×/row): term_norm for fuzzy match,
--- term_token_count so we only compare a span to same-length watchlist terms.
-wl_norm AS (
-    SELECT case_no, kind, term,
-           lower(trim(unaccent(term)))        AS term_norm,
-           len(string_split(trim(term), ' ')) AS term_token_count
-    FROM watchlist
-    WHERE coalesce(trim(term), '') <> ''
-),
-name_scored AS (   -- score ONCE (was computed twice, in SELECT and WHERE)
-    SELECT s.document_id, s.page_no, s.case_id, s.phrase, s.context,
-           s.x0, s.y0, s.x1, s.y1, wl.kind AS wl_kind, wl.term AS wl_term,
-           rapidfuzz_token_sort_ratio(s.phrase_norm, wl.term_norm)               AS token_sort,
-           100.0 * rapidfuzz_jaro_winkler_similarity(s.phrase_norm, wl.term_norm) AS jaro_winkler
-    FROM _detect_spans s
-    JOIN wl_norm wl ON wl.case_no = s.case_id AND wl.term_token_count = s.token_count
+    JOIN pii_taxonomy tax ON tax.code = 'addrust'
+    WHERE nullif(trim(p.a.street_number), '') IS NOT NULL
+      AND nullif(trim(p.a.zip), '') IS NOT NULL
+      AND nullif(trim(p.a.city), '') IS NOT NULL
+      AND len(p.span_words) > 0
 ),
 name_hits AS (
-    SELECT document_id, page_no, case_id, phrase AS text, context, x0, y0, x1, y1,
-           wl_kind AS kind,
-           greatest(1, least(99, cast(round(greatest(token_sort, jaro_winkler)) AS INTEGER))) AS confidence,
-           'rapidfuzz: ' || wl_term AS reason,
-           CASE WHEN position('NOT PII' IN wl_kind) > 0 THEN 'false_positive' END AS flag_tag
-    FROM name_scored
-    WHERE CASE WHEN token_sort   >= 88   THEN true
-               WHEN jaro_winkler >= 92   THEN true
+    SELECT s.document_id, s.page_no, s.case_id, s.wl_term AS text, s.line_text AS context,
+           list_min(list_transform(s.match_words, lambda m: m.x0)) AS x0,
+           list_min(list_transform(s.match_words, lambda m: m.y0)) AS y0,
+           list_max(list_transform(s.match_words, lambda m: m.x1)) AS x1,
+           list_max(list_transform(s.match_words, lambda m: m.y1)) AS y1,
+           s.wl_kind AS kind,
+           greatest(1, least(99, cast(round(greatest(s.token_sort, s.partial_ratio,
+               100.0 * s.jaro_winkler)) AS INTEGER))) AS confidence,
+           'rapidfuzz: ' || s.wl_term AS reason,
+           CASE WHEN position('NOT PII' IN s.wl_kind) > 0 THEN 'false_positive' END AS flag_tag
+    FROM (
+        SELECT l.document_id, l.page_no, l.case_id, l.line_text, wl.term AS wl_term, wl.kind AS wl_kind,
+               rapidfuzz_token_sort_ratio(l.line_norm, wl.term_norm) AS token_sort,
+               rapidfuzz_partial_ratio(l.line_norm, wl.term_norm) AS partial_ratio,
+               rapidfuzz_jaro_winkler_similarity(l.line_norm, wl.term_norm) AS jaro_winkler,
+               list_filter(l.word_meta, lambda m: list_bool_or(list_transform(wl.term_tokens, lambda t:
+                   rapidfuzz_ratio(lower(trim(unaccent(trim(m.word, '.,;:()"''[]')))), t) >= 88))) AS match_words
+        FROM _detect_lines l
+        JOIN (
+            SELECT case_no, kind, term, lower(trim(unaccent(term))) AS term_norm,
+                   string_split(lower(trim(unaccent(term))), ' ') AS term_tokens
+            FROM watchlist WHERE nullif(trim(term), '') IS NOT NULL
+        ) wl ON wl.case_no = l.case_id
+    ) s
+    WHERE CASE WHEN s.token_sort >= 90 THEN true
+               WHEN s.jaro_winkler >= 0.93 THEN true
+               WHEN s.partial_ratio >= 95 THEN true
                ELSE false END
+      AND len(s.match_words) > 0
 )
 SELECT * FROM type_hits
 UNION ALL BY NAME SELECT * FROM addr_hits

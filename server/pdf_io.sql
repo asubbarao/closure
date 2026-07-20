@@ -3,11 +3,8 @@
 -- After ingest (documents/pages/words exist). Prefer before detect so OCR words
 -- feed suggestion CTAS. Does NOT rebuild documents/pages (ingest owns those).
 --
--- Extensions: pdf (read_pdf_words auto_ocr), scalarfs (box lists for pdf_redact).
+-- Extensions: pdf (read_pdf_words auto_ocr).
 -- One geometry conversion for pdf_redact: top-left → bottom-left (y = height_pt - y1).
-
-INSTALL scalarfs FROM community;
-LOAD scalarfs;
 
 -- ── OCR capability (one probe row) ──────────────────────────────────────────
 CREATE OR REPLACE TABLE pdf_ocr_capability AS
@@ -179,36 +176,9 @@ FROM document_scan_status
 WHERE case_id = $id
 ORDER BY filename;
 
--- ── ONE box conversion: top-left words → pdf_redact bottom-left ─────────────
--- y = height_pt - y1. Hand the list via scalarfs (no temp files, no SQL builders):
---   COPY (
---     SELECT list(redact_box(s.page_no, s.x0, s.y0, s.x1, s.y1, p.height_pt)
---                 ORDER BY s.page_no, s.id)
---     FROM v_suggestions s
---     JOIN pages p ON cast(p.document_id AS VARCHAR) = s.document_id
---                  AND p.page_no = s.page_no
---     WHERE s.document_id = $id AND s.status = 'accepted'
---   ) TO 'variable:boxes' (FORMAT variable);
---   SELECT * FROM pdf_redact(src, out_path, getvariable('boxes'));
-CREATE OR REPLACE MACRO redact_box(page_no, x0, y0, x1, y1, height_pt) AS
-    struct_pack(
-        page := page_no,
-        x := x0,
-        y := height_pt - y1,
-        w := x1 - x0,
-        h := y1 - y0
-    );
-
--- quackapi: query() only accepts foldable SQL strings (export/store routes).
--- Shape gate: the sentence rides an HTTP param, so refuse anything but a
--- single SELECT statement — narrows arbitrary-SQL to the intended surface
--- (the CASE folds with q, so foldability is preserved).
-CREATE OR REPLACE MACRO run_sql(q) AS TABLE
-SELECT * FROM query(
-    CASE WHEN position(';' IN q) = 0 AND starts_with(q, 'SELECT ')
-         THEN q
-         ELSE 'SELECT error(''run_sql refused: single SELECT statements only'')'
-    END);
+-- Box geometry (the ONE conversion, applied where sentences are built —
+-- v_export_plans / v_working_plans): words are top-left, pdf_redact is
+-- bottom-left, so y = height_pt - y1.
 
 SELECT 'pdf_io OCR enrich' AS phase,
        (SELECT ocr_available FROM pdf_ocr_capability) AS ocr_available,
