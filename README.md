@@ -132,6 +132,12 @@ samples/              PDFs + identities.json + manifest.json
 pages/                pre-rendered page PNGs (served as static)
 exports/              redacted PDFs + decisions/*.json event log
 static/               client JS (review, dashboard, add-missed, …)
+docs/                 design notes + extension surveys
+design/               UX flows and wireframes
+spikes/               isolated feasibility experiments behind design decisions
+                      (marisa vs hash join, pdf_revisions custody, OCR, …);
+                      each owns only its own dir — nothing here is loaded by the app
+tests/                Playwright e2e (tests/e2e) + stress harness (tests/stress)
 ```
 
 ## Routes (primary)
