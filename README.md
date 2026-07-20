@@ -20,6 +20,35 @@ HTTP server, the PDF engine, and the HTML renderer.
 
 No React. No shellfs. No `mutate.sh`. Confidence bands and entity bulk are real.
 
+## For reviewers — where each assignment challenge lives
+
+| Challenge | Where to click / look |
+|-----------|------------------------|
+| **False positives** (e.g. "Hayes Street" / "Hayes v. Ohio" flagged for subject Hayes) | Reject (`r`) + reject-all-matching; low-confidence hits land in the FLAGGED band, which **hard-blocks export** until resolved |
+| **False negatives** (missed PII) | Add-missed (`n` + drag a box) and the remainder scan (`/api/documents/:id/missed`), which re-scans uncovered text with fuzzy/format detectors |
+| **Volume** (hundreds of suggestions) | Confidence bands HIGH / REVIEW / FLAGGED, keyboard triage (`j`/`k`/`a`/`r`), entity- and band-level bulk decisions |
+| **Multi-document packages** | Case dashboard → document rail; entity decisions fan out across every document in the case |
+| **Context / disambiguation** | The canvas shows the hit in place with surrounding text; citation-vs-subject conflicts carry flag tags and a judge panel |
+| **Audit trail** | Append-only decision event log; `/cases/:id/audit` renders the full history — undo is another event, never a delete |
+
+Design rationale (assignment Part 3): [`docs/rationale.md`](docs/rationale.md).
+High-fidelity design (Part 1): [`design/`](design/).
+
+## Prerequisites
+
+1. **A quackapi-built DuckDB binary** — stock `brew install duckdb` cannot
+   parse `CREATE ROUTE`. Build [quackapi](https://github.com/asubbarao/quackapi)
+   (`GEN=ninja make release`) and either place it as a **sibling** of this repo
+   (`../quackapi/build/release/duckdb`, the default `run.sh` looks for) or point
+   `DUCKDB_BIN` / `CLOSURE_QUACKAPI_EXT` at your build.
+2. **Network on first run** — setup/boot auto-INSTALL DuckDB community
+   extensions: `pdf`, `tera`, `fakeit` (setup), `rapidfuzz`, `finetype`,
+   `us_address_standardizer` (boot).
+3. **poppler** (`pdftoppm`, `brew install poppler`) — fast page-PNG previews;
+   without it setup falls back to the slower in-DuckDB `pdf_to_png`.
+4. **Node 18+** — only for the e2e suite:
+   `cd tests/e2e && npm install && npx playwright install chromium`.
+
 ## Quick start
 
 ```sh
@@ -41,7 +70,7 @@ the extension is statically linked into that binary, so no `LOAD` is needed):
 ```sh
 cd /path/to/closure
 
-export DUCKDB_BIN="${DUCKDB_BIN:-$HOME/personal/quackapi/build/release/duckdb}"
+export DUCKDB_BIN="${DUCKDB_BIN:-../quackapi/build/release/duckdb}"  # sibling quackapi build
 
 # Kill any prior listener on your port; fresh DB each boot (ingest is source of truth).
 lsof -ti :"${CLOSURE_PORT:-8117}" | xargs kill 2>/dev/null || true
@@ -154,8 +183,13 @@ POST bodies: send `Content-Type: application/json` with `{}` when the client has
 
 ## Test status
 
-`cd tests/e2e && npx playwright test --reporter=line` → **27 passed, 1 failed**
-(28 total, chromium).
+```sh
+cd tests/e2e && npm install && npx playwright install chromium   # first time
+npx playwright test --reporter=line
+```
+
+Latest run: **25 passed, 1 failed, 2 skipped** (28 total, chromium; the skips
+are data-state guards on an almost-fully-decided corpus, not broken features).
 
 ## Honest limits
 
@@ -167,12 +201,11 @@ POST bodies: send `Content-Type: application/json` with `{}` when the client has
   redaction (out of MVP).
 - `pages/` PNGs must match ingested stems or the canvas background 404s
   (boxes still paint).
-- **Known issue:** `tests/e2e/specs/01-review-interface.spec.ts` — "accept (a)
-  flips suggestion status to accepted" — fails against the current boot: it
-  picks a pending suggestion via the API, opens its page, then times out
-  waiting for that suggestion's row to appear in `#q-list` (`toBeVisible`
-  timeout, element not found). Not yet root-caused; the other 27 e2e specs
-  pass clean.
+- **Known issue:** `tests/e2e/specs/06-confidence-display.spec.ts` — "band
+  filters hide and show suggestions" — when toggling a band empties the queue,
+  the UI does not render the `#q-list .empty-q` placeholder the spec expects.
+  Cosmetic (filtering itself works); surfaces only on a nearly-fully-decided
+  corpus.
 - `run.sh` is a thin wrapper (env/path resolution + fresh DB) that delegates
   straight to `server/app.sql`, which does all schema/ingest/route/serve
   ordering — use `make run` or `run.sh` and it'll always match `app.sql`.
