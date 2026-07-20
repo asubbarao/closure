@@ -1,306 +1,127 @@
--- routes/geo.sql — address minimap (visual grouping, not real geography).
---
--- GET /api/cases/:id/addresses
---   Standardized address-like entities for a case with deterministic map_x/map_y
---   in unit square [0,1]². No geocoder, no external API, no map library.
---
--- GET /api/cases/:id/addresses/:entity_id/suggestions
---   Suggestion rows for one address entity (click-filter target).
---
--- GET /ui/geo?case=ID  — standalone panel shell (optional).
---
--- Dependencies: entities, v_suggestions, documents, app_templates.
--- Honesty: positions are city-anchor + hash jitter — label as such in the UI.
+-- routes/geo.sql — address minimap (schematic, not real geography).
+-- city-anchor + hash jitter; addrust_parse for city/state/zip (no string hacks).
+-- Routes: /api/cases/:id/addresses, /geo, /addresses/:entity_id/suggestions, /ui/geo.
+-- Params VARCHAR (case_no / uuid). Shared body lives in v_address_map once.
 
--- ── Case address dots ─────────────────────────────────────────────────────
-CREATE OR REPLACE ROUTE api_case_addresses GET '/api/cases/:id/addresses' AS
+INSTALL us_address_standardizer FROM community; LOAD us_address_standardizer;
+
+-- One map for all cases; routes filter case_id = $id.
+CREATE OR REPLACE VIEW v_address_map AS
 WITH city_anchor AS (
-    SELECT 'Portland' AS city, 0.28 AS cx, 0.30 AS cy, 0.10 AS half UNION ALL
-    SELECT 'Salem',    0.32, 0.48, 0.09 UNION ALL
-    SELECT 'Eugene',   0.30, 0.68, 0.09 UNION ALL
-    SELECT 'Bend',     0.62, 0.52, 0.09 UNION ALL
-    SELECT 'Unknown',  0.50, 0.50, 0.12
+    SELECT * FROM (VALUES
+        ('Portland', 0.28, 0.30, 0.10),
+        ('Salem',    0.32, 0.48, 0.09),
+        ('Eugene',   0.30, 0.68, 0.09),
+        ('Bend',     0.62, 0.52, 0.09),
+        ('Unknown',  0.50, 0.50, 0.12)
+    ) AS t(city, cx, cy, half)
 ),
-addr_entities AS (
+addr AS (
     SELECT
-        e.id AS entity_id,
+        cast(e.id AS VARCHAR) AS entity_id,
         e.case_id,
         e.kind,
         e.canonical_text,
-        CASE
-            WHEN position('STREET' IN upper(e.kind)) > 0 THEN true
-            ELSE false
-        END AS is_street_fp
+        position('STREET' IN upper(e.kind)) > 0 AS is_street_fp,
+        addrust_parse(e.canonical_text) AS parsed
     FROM entities e
-    WHERE e.case_id = $id::INTEGER
-      AND (
-            position('ADDRESS' IN upper(e.kind)) > 0
-         OR position('STREET' IN upper(e.kind)) > 0
-      )
+    WHERE position('ADDRESS' IN upper(e.kind)) > 0
+       OR position('STREET'  IN upper(e.kind)) > 0
 ),
-subject_city AS (
+resolved AS (
     SELECT
-        case_id,
-        CASE
-            WHEN position('PORTLAND' IN upper(canonical_text)) > 0 THEN 'Portland'
-            WHEN position('SALEM'    IN upper(canonical_text)) > 0 THEN 'Salem'
-            WHEN position('EUGENE'   IN upper(canonical_text)) > 0 THEN 'Eugene'
-            WHEN position('BEND'     IN upper(canonical_text)) > 0 THEN 'Bend'
-            ELSE 'Unknown'
-        END AS city,
-        CASE
-            WHEN position(' OR ' IN upper(canonical_text)) > 0
-              OR position(', OR' IN upper(canonical_text)) > 0 THEN 'OR'
-            ELSE ''
-        END AS state
-    FROM addr_entities
-    WHERE position('ADDRESS' IN upper(kind)) > 0
+        entity_id, case_id, kind, canonical_text, is_street_fp,
+        CASE upper(parsed.city)
+            WHEN 'PORTLAND' THEN 'Portland'
+            WHEN 'SALEM'    THEN 'Salem'
+            WHEN 'EUGENE'   THEN 'Eugene'
+            WHEN 'BEND'     THEN 'Bend'
+        END AS parsed_city,
+        parsed.state AS parsed_state,
+        parsed.zip  AS parsed_zip
+    FROM addr
 ),
-enriched AS (
-    SELECT
-        a.entity_id,
-        a.case_id,
-        a.kind,
-        a.canonical_text,
-        a.is_street_fp,
-        CASE
-            WHEN position('ADDRESS' IN upper(a.kind)) > 0 THEN
-                CASE
-                    WHEN position('PORTLAND' IN upper(a.canonical_text)) > 0 THEN 'Portland'
-                    WHEN position('SALEM'    IN upper(a.canonical_text)) > 0 THEN 'Salem'
-                    WHEN position('EUGENE'   IN upper(a.canonical_text)) > 0 THEN 'Eugene'
-                    WHEN position('BEND'     IN upper(a.canonical_text)) > 0 THEN 'Bend'
-                    ELSE 'Unknown'
-                END
-            ELSE coalesce(sc.city, 'Unknown')
-        END AS city,
-        CASE
-            WHEN position('ADDRESS' IN upper(a.kind)) > 0 THEN
-                CASE
-                    WHEN position(' OR ' IN upper(a.canonical_text)) > 0
-                      OR position(', OR' IN upper(a.canonical_text)) > 0 THEN 'OR'
-                    ELSE ''
-                END
-            ELSE coalesce(sc.state, '')
-        END AS state,
-        -- ZIP when present at end of standardized subject address.
-        -- regexp_extract returns '' on no match; nullif restores absent = NULL
-        -- (the NULL-retaining direction, not a key trick).
-        nullif(regexp_extract(a.canonical_text, '(\\d{5})$', 1), '') AS zip
-    FROM addr_entities a
-    LEFT JOIN subject_city sc ON sc.case_id = a.case_id
+-- STREET-only rows inherit a case-level subject city when they lack locality.
+case_city AS (
+    SELECT case_id,
+           any_value(parsed_city)  AS city,
+           any_value(parsed_state) AS state
+    FROM resolved
+    WHERE NOT is_street_fp AND parsed_city IS NOT NULL
+    GROUP BY case_id
 ),
-jitter AS (
+placed AS (
     SELECT
-        e.*,
-        ca.cx,
-        ca.cy,
-        ca.half,
-        ((hash(e.canonical_text) % 10000) / 5000.0) - 1.0 AS jx,
-        ((hash(e.canonical_text || chr(1) || 'y') % 10000) / 5000.0) - 1.0 AS jy
-    FROM enriched e
-    JOIN city_anchor ca ON ca.city = e.city
+        r.entity_id, r.case_id, r.kind, r.canonical_text, r.is_street_fp,
+        coalesce(r.parsed_city, cc.city, 'Unknown') AS city,
+        coalesce(r.parsed_state, cc.state, '') AS state,
+        r.parsed_zip AS zip,
+        a.cx, a.cy, a.half,
+        ((hash(r.canonical_text) % 10000) / 5000.0) - 1.0 AS jx,
+        ((hash(r.canonical_text || chr(1) || 'y') % 10000) / 5000.0) - 1.0 AS jy
+    FROM resolved r
+    LEFT JOIN case_city cc ON cc.case_id = r.case_id
+    JOIN city_anchor a ON a.city = coalesce(r.parsed_city, cc.city, 'Unknown')
 ),
 stats AS (
     SELECT
         s.entity_id,
-        count(*)::BIGINT AS suggestion_count,
-        count(*) FILTER (WHERE s.status = 'pending')::BIGINT AS pending_count,
-        count(*) FILTER (WHERE s.status = 'accepted')::BIGINT AS accepted_count,
-        count(*) FILTER (WHERE s.status = 'rejected')::BIGINT AS rejected_count,
-        min(s.document_id)::INTEGER AS first_document_id,
-        min(s.page_no)::INTEGER AS first_page_no
+        count(*) AS suggestion_count,
+        count(*) FILTER (WHERE s.status = 'pending')  AS pending_count,
+        count(*) FILTER (WHERE s.status = 'accepted') AS accepted_count,
+        count(*) FILTER (WHERE s.status = 'rejected') AS rejected_count,
+        min(s.document_id) AS first_document_id,
+        min(s.page_no)     AS first_page_no
     FROM v_suggestions s
-    JOIN documents d ON d.id = s.document_id
-    WHERE d.case_id = $id::INTEGER
-      AND s.entity_id IS NOT NULL
+    WHERE s.entity_id IS NOT NULL
     GROUP BY s.entity_id
 )
 SELECT
-    j.entity_id,
-    j.case_id,
-    j.kind,
-    j.canonical_text,
-    j.city,
-    j.state,
-    j.zip,
-    j.is_street_fp,
-    least(0.96, greatest(0.04, j.cx + j.jx * j.half))::DOUBLE AS map_x,
-    least(0.96, greatest(0.04, j.cy + j.jy * j.half))::DOUBLE AS map_y,
-    coalesce(st.suggestion_count, 0)::BIGINT AS suggestion_count,
-    coalesce(st.pending_count, 0)::BIGINT AS pending_count,
-    coalesce(st.accepted_count, 0)::BIGINT AS accepted_count,
-    coalesce(st.rejected_count, 0)::BIGINT AS rejected_count,
+    p.entity_id, p.case_id, p.kind, p.canonical_text,
+    p.city, p.state, p.zip, p.is_street_fp,
+    least(0.96, greatest(0.04, p.cx + p.jx * p.half)) AS map_x,
+    least(0.96, greatest(0.04, p.cy + p.jy * p.half)) AS map_y,
+    coalesce(st.suggestion_count, 0) AS suggestion_count,
+    coalesce(st.pending_count, 0)    AS pending_count,
+    coalesce(st.accepted_count, 0)   AS accepted_count,
+    coalesce(st.rejected_count, 0)   AS rejected_count,
     st.first_document_id,
     st.first_page_no,
-    -- Explicit honesty flag for clients / audit.
     true AS is_schematic,
     'city-anchor + hash jitter; not geocoded' AS placement_method
-FROM jitter j
-LEFT JOIN stats st ON st.entity_id = j.entity_id
-ORDER BY j.is_street_fp, j.canonical_text, j.entity_id;
+FROM placed p
+LEFT JOIN stats st ON st.entity_id = p.entity_id;
 
--- ── Suggestions for one address entity (filter target) ────────────────────
+CREATE OR REPLACE ROUTE api_case_addresses GET '/api/cases/:id/addresses' AS
+SELECT * FROM v_address_map
+WHERE case_id = $id
+ORDER BY is_street_fp, canonical_text, entity_id;
+
+CREATE OR REPLACE ROUTE api_case_geo GET '/api/cases/:id/geo' AS
+SELECT * FROM v_address_map
+WHERE case_id = $id
+ORDER BY is_street_fp, canonical_text, entity_id;
+
 CREATE OR REPLACE ROUTE api_case_address_suggestions GET '/api/cases/:id/addresses/:entity_id/suggestions' AS
 SELECT
-    s.id,
-    s.document_id,
-    d.filename,
-    s.page_no,
+    s.id, s.document_id, d.filename, s.page_no,
     s.x0, s.y0, s.x1, s.y1,
-    s.text,
-    s.context,
-    s.confidence,
-    s.flag_tag,
-    s.reason,
-    s.entity_id,
-    s.source,
-    s.status,
-    s.band,
-    s.kind,
-    s.entity_text
+    s.text, s.context, s.confidence, s.flag_tag, s.reason,
+    s.entity_id, s.source, s.status, s.band, s.kind, s.entity_text
 FROM v_suggestions s
 JOIN documents d ON d.id = s.document_id
-WHERE d.case_id = $id::INTEGER
-  AND s.entity_id = $entity_id::INTEGER
+WHERE d.case_id = $id
+  AND s.entity_id = $entity_id
 ORDER BY s.document_id, s.page_no, s.id;
 
--- Integration alias: same schematic address dots as /addresses.
-CREATE OR REPLACE ROUTE api_case_geo GET '/api/cases/:id/geo' AS
-WITH city_anchor AS (
-    SELECT 'Portland' AS city, 0.28 AS cx, 0.30 AS cy, 0.10 AS half UNION ALL
-    SELECT 'Salem',    0.32, 0.48, 0.09 UNION ALL
-    SELECT 'Eugene',   0.30, 0.68, 0.09 UNION ALL
-    SELECT 'Bend',     0.62, 0.52, 0.09 UNION ALL
-    SELECT 'Unknown',  0.50, 0.50, 0.12
-),
-addr_entities AS (
-    SELECT
-        e.id AS entity_id,
-        e.case_id,
-        e.kind,
-        e.canonical_text,
-        CASE
-            WHEN position('STREET' IN upper(e.kind)) > 0 THEN true
-            ELSE false
-        END AS is_street_fp
-    FROM entities e
-    WHERE e.case_id = $id::INTEGER
-      AND (
-            position('ADDRESS' IN upper(e.kind)) > 0
-         OR position('STREET' IN upper(e.kind)) > 0
-      )
-),
-subject_city AS (
-    SELECT
-        case_id,
-        CASE
-            WHEN position('PORTLAND' IN upper(canonical_text)) > 0 THEN 'Portland'
-            WHEN position('SALEM'    IN upper(canonical_text)) > 0 THEN 'Salem'
-            WHEN position('EUGENE'   IN upper(canonical_text)) > 0 THEN 'Eugene'
-            WHEN position('BEND'     IN upper(canonical_text)) > 0 THEN 'Bend'
-            ELSE 'Unknown'
-        END AS city,
-        CASE
-            WHEN position(' OR ' IN upper(canonical_text)) > 0
-              OR position(', OR' IN upper(canonical_text)) > 0 THEN 'OR'
-            ELSE ''
-        END AS state
-    FROM addr_entities
-    WHERE position('ADDRESS' IN upper(kind)) > 0
-),
-enriched AS (
-    SELECT
-        a.entity_id,
-        a.case_id,
-        a.kind,
-        a.canonical_text,
-        a.is_street_fp,
-        CASE
-            WHEN position('ADDRESS' IN upper(a.kind)) > 0 THEN
-                CASE
-                    WHEN position('PORTLAND' IN upper(a.canonical_text)) > 0 THEN 'Portland'
-                    WHEN position('SALEM'    IN upper(a.canonical_text)) > 0 THEN 'Salem'
-                    WHEN position('EUGENE'   IN upper(a.canonical_text)) > 0 THEN 'Eugene'
-                    WHEN position('BEND'     IN upper(a.canonical_text)) > 0 THEN 'Bend'
-                    ELSE 'Unknown'
-                END
-            ELSE coalesce(sc.city, 'Unknown')
-        END AS city,
-        CASE
-            WHEN position('ADDRESS' IN upper(a.kind)) > 0 THEN
-                CASE
-                    WHEN position(' OR ' IN upper(a.canonical_text)) > 0
-                      OR position(', OR' IN upper(a.canonical_text)) > 0 THEN 'OR'
-                    ELSE ''
-                END
-            ELSE coalesce(sc.state, '')
-        END AS state,
-        -- regexp_extract '' on no match → NULL (NULL-retaining direction).
-        nullif(regexp_extract(a.canonical_text, '(\\d{5})$', 1), '') AS zip
-    FROM addr_entities a
-    LEFT JOIN subject_city sc ON sc.case_id = a.case_id
-),
-jitter AS (
-    SELECT
-        e.*,
-        ca.cx,
-        ca.cy,
-        ca.half,
-        ((hash(e.canonical_text) % 10000) / 5000.0) - 1.0 AS jx,
-        ((hash(e.canonical_text || chr(1) || 'y') % 10000) / 5000.0) - 1.0 AS jy
-    FROM enriched e
-    JOIN city_anchor ca ON ca.city = e.city
-),
-stats AS (
-    SELECT
-        s.entity_id,
-        count(*)::BIGINT AS suggestion_count,
-        count(*) FILTER (WHERE s.status = 'pending')::BIGINT AS pending_count,
-        count(*) FILTER (WHERE s.status = 'accepted')::BIGINT AS accepted_count,
-        count(*) FILTER (WHERE s.status = 'rejected')::BIGINT AS rejected_count,
-        min(s.document_id)::INTEGER AS first_document_id,
-        min(s.page_no)::INTEGER AS first_page_no
-    FROM v_suggestions s
-    JOIN documents d ON d.id = s.document_id
-    WHERE d.case_id = $id::INTEGER
-      AND s.entity_id IS NOT NULL
-    GROUP BY s.entity_id
-)
-SELECT
-    j.entity_id,
-    j.case_id,
-    j.kind,
-    j.canonical_text,
-    j.city,
-    j.state,
-    j.zip,
-    j.is_street_fp,
-    least(0.96, greatest(0.04, j.cx + j.jx * j.half))::DOUBLE AS map_x,
-    least(0.96, greatest(0.04, j.cy + j.jy * j.half))::DOUBLE AS map_y,
-    coalesce(st.suggestion_count, 0)::BIGINT AS suggestion_count,
-    coalesce(st.pending_count, 0)::BIGINT AS pending_count,
-    coalesce(st.accepted_count, 0)::BIGINT AS accepted_count,
-    coalesce(st.rejected_count, 0)::BIGINT AS rejected_count,
-    st.first_document_id,
-    st.first_page_no,
-    true AS is_schematic,
-    'city-anchor + hash jitter; not geocoded' AS placement_method
-FROM jitter j
-LEFT JOIN stats st ON st.entity_id = j.entity_id
-ORDER BY j.is_street_fp, j.canonical_text, j.entity_id;
-
--- ── Standalone panel page ─────────────────────────────────────────────────
 CREATE OR REPLACE ROUTE ui_geo_panel GET '/ui/geo'
-  PARAM case_id INTEGER DEFAULT 1
+  PARAM case_id VARCHAR DEFAULT ''
 AS
 SELECT tera_render(
     (SELECT content FROM app_templates WHERE name = 'geo_panel.html'),
     {
-        'case_id': coalesce($case_id::INTEGER, 1),
-        'case': {
-            'id': coalesce($case_id::INTEGER, 1)
-        },
+        'case_id': $case_id,
+        'case': { 'id': $case_id },
         'standalone': true
     }::JSON
 ) AS html;

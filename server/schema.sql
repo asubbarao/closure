@@ -13,6 +13,9 @@
 --   4. suggestions is STRUCTURAL ONLY this pass — empty until the seeding
 --      step. No fabricated confidence scores.
 
+--#I suppose we can't "derive" these? if we can, it's always better to CTAS/Replace and a bit tedious to define the ddl, but its okay if we have to. 
+--#make all things verbose, OI mean page_no is okay, height_t is okay, i geuss the coords are oky but maybe put them in a coords arr/map/whatever json idont care 
+
 CREATE SEQUENCE IF NOT EXISTS seq_document;
 CREATE SEQUENCE IF NOT EXISTS seq_entity;
 CREATE SEQUENCE IF NOT EXISTS seq_suggestion;
@@ -96,6 +99,7 @@ CREATE TABLE IF NOT EXISTS audit_events (
 );
 
 CREATE OR REPLACE VIEW v_suggestions AS
+       --#way too 'prescriptive' we want a set of elegant views and tables. 
 SELECT s.*,
        e.kind,
        e.canonical_text AS entity_text,
@@ -113,9 +117,12 @@ SELECT s.*,
 FROM suggestions s
 LEFT JOIN entities e ON e.id = s.entity_id;
 
+--#delete. definitely none of this kind of stuff. there are other ways to do itsplink etc. 
 CREATE OR REPLACE MACRO qnorm(t) AS lower(trim(t, '.,;:()"'''));
 
 CREATE OR REPLACE VIEW v_grams AS
+       --# yeah idk what this is but I do know its codesmell and we don't need or want it. replace it with a placeholder 
+       --# which explains what wer're trying to do. do this for ll page.s if u dont know how to do something if i say no on it, then remove it w/placehlder, and explanation what is trying to achieved and i can sketch the query
 WITH base AS (
     SELECT document_id, page_no, seq, word, x0, y0, x1, y1,
            lead(word, 1) OVER w AS word1, lead(x1, 1) OVER w AS x1_1,
@@ -127,6 +134,10 @@ WITH base AS (
     FROM words
     WINDOW w AS (PARTITION BY document_id, page_no ORDER BY seq)
 )
+       
+       --#not a fan of this. something is wrong. a single extract cte and defining the concat string will save characters across all. 
+       
+       --#what is this? some kind of like nlp thing? i fso, delete it entirely, splink_udfs, and rapidfuzz, should be sufficient
 SELECT document_id, page_no, seq, 1 AS n, qnorm(word) AS text_norm,
        word AS text_raw, x0, y0, x1, y1
 FROM base
@@ -146,6 +157,10 @@ SELECT document_id, page_no, seq, 4,
 FROM base WHERE word3 IS NOT NULL
        AND abs(y0_1 - y0) < 2 AND abs(y0_2 - y0) < 2 AND abs(y0_3 - y0) < 2;
 
+
+
+
+--#I don't like this at all, absolute worst antipattenr. all available in DESCIRBE SUMMARIZE and has ugly inner subselect, just no. completely remove. 
 CREATE OR REPLACE VIEW v_document_stats AS
 SELECT
     d.id AS document_id,

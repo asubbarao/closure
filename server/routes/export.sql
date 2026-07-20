@@ -14,6 +14,8 @@
 --
 -- Boot-baked export_sql_case_N() macros are RETIRED (see _export_macros.sql).
 
+    --#dont want these macros, its ridiculous. the dataschema was not created properly, relaly. this should all be just tables. kind of ridiculoous. delete this whole thing problbaly. 
+    
 -- Live export. `sql` and `is_blocked` must be foldable (route params).
 CREATE OR REPLACE MACRO export_case_live(cid, sql, is_blocked, act) AS TABLE
 WITH

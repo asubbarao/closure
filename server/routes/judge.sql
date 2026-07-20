@@ -1,12 +1,5 @@
--- routes/judge.sql — judge-ensemble confidence breakdown API.
---
--- Purpose: on-demand 2–3 judge votes for a suggestion (verdict/score/reason).
--- Dependencies: v_judge_votes, v_judge_panel (from server/judge.sql).
--- No mutations.
+-- routes/judge.sql — per-suggestion judge votes + panel summary JSON.
 
--- GET /api/suggestions/:id/judges
--- One row per judge vote, with panel summary columns repeated for convenience.
--- Column names become JSON keys for the review UI.
 CREATE OR REPLACE ROUTE api_suggestion_judges GET '/api/suggestions/:id/judges' AS
 SELECT
     j.suggestion_id,
@@ -29,6 +22,6 @@ SELECT
         ELSE 'flagged'
     END AS judge_band
 FROM v_judge_votes j
-JOIN v_judge_panel p ON p.suggestion_id = j.suggestion_id
-WHERE j.suggestion_id = $id::INTEGER
+JOIN v_judge_panel p ON cast(p.suggestion_id AS VARCHAR) = cast(j.suggestion_id AS VARCHAR)
+WHERE cast(j.suggestion_id AS VARCHAR) = $id
 ORDER BY j.judge_id;
