@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Closure — Confidence levels · CASE 24-000117</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F4F5F6; --surface:#FFFFFF; --surface-2:#F9FAFB;
+  --ink:#191B1E; --sub:#5A5F66; --mut:#878C93; --ink-inv:#FFFFFF;
+  --line:#E4E6E9; --line-strong:#C9CCD1;
+  --amber-fill:rgba(252,196,25,.32); --amber-fill-strong:rgba(252,196,25,.55);
+  --amber-edge:#D99A06; --amber-text:#8A6A00; --amber-bg:#FFFBEE;
+  --red:#C03221; --red-soft:rgba(192,50,33,.07); --red-mid:rgba(192,50,33,.16); --red-text:#A02A1C;
+  --ok:#2F7D46; --ok-soft:rgba(47,125,70,.10);
+  --cur:#1D63ED; --cur-soft:rgba(29,99,237,.08);
+  --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --r-sm:5px; --r-md:8px; --r-lg:12px;
+  --shadow-panel:0 1px 3px rgba(25,27,30,.08),0 4px 12px rgba(25,27,30,.06);
+  --shadow-page:0 0 0 1px var(--line),0 2px 6px rgba(25,27,30,.07),0 12px 32px rgba(25,27,30,.10);
+  --shadow-float:0 8px 28px rgba(25,27,30,.22),0 0 0 1px var(--line-strong);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased;font-feature-settings:"tnum"}
+
+.top{display:flex;align-items:center;gap:14px;height:52px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0}
+.brand{font-weight:700;font-size:15px;flex-shrink:0}.brand span{color:var(--amber-edge)}
+.top-div{width:1px;height:20px;background:var(--line);flex-shrink:0}
+.crumb{display:flex;align-items:baseline;gap:7px;min-width:0}
+.crumb .case{font-family:var(--mono);font-size:11.5px;color:var(--sub)}
+.crumb .sep{color:var(--mut)}
+.crumb .doc{font-weight:600;font-size:13px}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.who{font-size:12.5px;color:var(--sub)}.who b{color:var(--ink);font-weight:600}
+.btn{font:inherit;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+
+.body-wrap{display:flex;flex:1;min-height:0}
+
+/* Left: model legend */
+.legend{width:300px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow-y:auto}
+.leg-head{padding:18px 18px 12px;border-bottom:1px solid var(--line)}
+.leg-head h1{font-size:16px;font-weight:700;letter-spacing:-.01em}
+.leg-head p{font-size:12px;color:var(--sub);margin-top:6px;line-height:1.55}
+
+.band-card{padding:16px 18px;border-bottom:1px solid var(--line)}
+.band-card.hi{border-left:3px solid var(--ink)}
+.band-card.mid{border-left:3px solid var(--amber-edge);background:var(--amber-bg)}
+.band-card.lo{border-left:3px solid var(--red);background:var(--red-soft)}
+.bc-top{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
+.bc-name{font-size:13px;font-weight:700;letter-spacing:.02em}
+.bc-range{font-family:var(--mono);font-size:12px;font-weight:700}
+.bc-range.h{color:var(--ink)}.bc-range.m{color:var(--amber-text)}.bc-range.l{color:var(--red)}
+.bc-count{margin-left:auto;font-family:var(--mono);font-size:18px;font-weight:700;line-height:1}
+.bc-count.m{color:var(--amber-text)}.bc-count.l{color:var(--red)}
+.bc-body{font-size:12px;color:var(--sub);line-height:1.55}
+.bc-body b{color:var(--ink);font-weight:600}
+.bc-action{margin-top:8px;font-size:11.5px;font-weight:600;color:var(--ink)}
+.bc-action.m{color:var(--amber-text)}.bc-action.l{color:var(--red-text)}
+.bc-action kbd{font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:4px;padding:1px 5px;margin-left:4px}
+
+.scale-wrap{padding:16px 18px;border-bottom:1px solid var(--line)}
+.scale-label{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin-bottom:10px}
+.scale{height:10px;border-radius:5px;display:flex;overflow:hidden;background:var(--line)}
+.sc-h{background:var(--ink);width:55%}.sc-m{background:var(--amber-edge);width:27%}.sc-l{background:var(--red);width:18%}
+.scale-ticks{display:flex;justify-content:space-between;margin-top:6px;font-family:var(--mono);font-size:10px;color:var(--mut)}
+.scale-ticks .tick-mid{color:var(--amber-text)}.scale-ticks .tick-lo{color:var(--red)}
+
+.rule-box{margin:16px 18px;padding:12px 14px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-md);font-size:12px;color:var(--sub);line-height:1.55}
+.rule-box b{color:var(--ink);font-weight:600}
+.rule-box .rule-title{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin-bottom:6px}
+
+/* Center: canvas with band-colored marks */
+.stage{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;overflow-y:auto;padding:20px 24px 40px;background:var(--bg)}
+.stage-head{width:680px;display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.stage-head h2{font-size:13px;font-weight:700}
+.stage-head .sh-sub{font-family:var(--mono);font-size:11px;color:var(--sub);margin-left:auto}
+.pgbtn{width:26px;height:26px;border-radius:var(--r-sm);border:1px solid var(--line-strong);background:var(--surface);color:var(--sub);cursor:pointer;font-size:13px}
+
+.pdf-page{
+  position:relative;width:680px;min-height:720px;
+  background:#fff;border-radius:3px;box-shadow:var(--shadow-page);
+  font-family:"Courier New",Courier,monospace;font-size:10.5px;line-height:1.55;color:#111;
+  padding:48px 56px 44px;flex-shrink:0;
+}
+.lh{text-align:center;margin-bottom:16px;border-bottom:2px solid #111;padding-bottom:10px}
+.lh .dept{font-size:10px;font-weight:bold;letter-spacing:.08em;text-transform:uppercase}
+.lh .title{font-size:13px;font-weight:bold;letter-spacing:.04em;margin:3px 0}
+.lh .sub{font-size:9.5px;color:#444}
+.fields{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;margin-bottom:2px}
+.field{border:1px solid #999;padding:4px 7px;margin:-1px 0 0 -1px}
+.field.s3{grid-column:span 3}
+.flabel{font-size:8px;font-weight:bold;letter-spacing:.06em;text-transform:uppercase;color:#555;display:block;margin-bottom:1px}
+.fval{font-size:10.5px}
+.sec{font-size:9px;font-weight:bold;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid #999;margin:14px 0 8px;padding-bottom:2px}
+.narr{font-size:10.5px;line-height:1.65;text-align:justify}
+.narr p{margin-bottom:8px;text-indent:2em}
+.pf{position:absolute;bottom:22px;left:56px;right:56px;display:flex;justify-content:space-between;font-size:8.5px;color:#777;border-top:1px solid #ccc;padding-top:6px}
+
+.mark{position:absolute;border-radius:2px;cursor:pointer;z-index:10}
+.mark.pending{background:var(--amber-fill);outline:1.5px solid var(--amber-edge)}
+.mark.flagged{background:rgba(192,50,33,.16);outline:2px dashed var(--red)}
+.mark.accepted{background:var(--ink)}
+.mark.current{outline:2.5px solid var(--cur);outline-offset:2px}
+.mark-tag{position:absolute;left:0;top:-22px;white-space:nowrap;font-family:var(--mono);font-size:10px;font-weight:700;background:var(--ink);color:#fff;padding:2px 8px;border-radius:4px;z-index:20}
+.mark-tag.hi{background:var(--ink)}
+.mark-tag.mid{background:var(--amber-edge);color:#fff}
+.mark-tag.lo{background:var(--red)}
+.mark-tag b{opacity:.9}
+
+/* Right: queue by band */
+.queue{width:360px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--line);display:flex;flex-direction:column}
+.q-head{padding:14px 16px 0;flex-shrink:0}
+.q-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+.q-top h2{font-size:14px;font-weight:700}
+.q-top .pc{font-family:var(--mono);font-size:11.5px;color:var(--amber-text);font-weight:700}
+
+.bands{display:flex;gap:5px;margin-bottom:10px}
+.band{flex:1;text-align:center;cursor:pointer;padding:8px 2px 7px;border:1px solid var(--line);border-radius:var(--r-md)}
+.band.on{border-color:var(--ink);background:var(--surface-2)}
+.band.mid.on{border-color:var(--amber-edge);background:var(--amber-bg)}
+.band.low.on{border-color:var(--red);background:var(--red-soft)}
+.band .bv{font-family:var(--mono);font-size:16px;font-weight:700;display:block;line-height:1.1}
+.band .bl{font-size:9.5px;font-weight:700;letter-spacing:.04em;color:var(--mut);margin-top:2px}
+.band.mid .bv{color:var(--amber-text)}.band.low .bv{color:var(--red)}
+
+.q-list{overflow-y:auto;flex:1;padding:2px 10px 12px}
+.eg{display:flex;align-items:baseline;gap:8px;padding:12px 6px 5px;border-bottom:1px solid var(--line);margin-bottom:3px}
+.eg b{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut)}
+.eg .ek{font-family:var(--mono);font-size:11px;color:var(--sub);margin-left:auto}
+
+.sugg{display:flex;align-items:center;gap:9px;padding:9px 8px;border-radius:var(--r-md);cursor:pointer;border:1px solid transparent;margin-bottom:2px}
+.sugg:hover{background:var(--bg)}
+.sugg.current{border-color:var(--cur);background:var(--cur-soft)}
+.sugg.fr{background:var(--red-soft);border-color:transparent}
+.sugg.fr.current{border-color:var(--red)}
+.sw{width:7px;height:26px;border-radius:2px;flex-shrink:0}
+.sw.pending{background:var(--amber-edge)}.sw.flagged{background:transparent;border:1.5px dashed var(--red)}
+.sw.hi{background:var(--ink)}
+.st{flex:1;min-width:0}
+.val{font-family:var(--mono);font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctx{font-size:11.5px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.ctx em{font-style:normal;background:var(--amber-fill);border-radius:2px;padding:0 1px}
+.rationale{font-size:11px;color:var(--red-text);margin-top:3px;line-height:1.4;white-space:normal}
+.sm{text-align:right;flex-shrink:0}
+.conf{font-family:var(--mono);font-size:13px;font-weight:700}
+.conf.h{color:var(--ink)}.conf.m{color:var(--amber-text)}.conf.l{color:var(--red)}
+.pgr{font-family:var(--mono);font-size:10px;color:var(--mut)}
+.band-pill{font-size:9px;font-weight:700;letter-spacing:.04em;padding:1px 6px;border-radius:8px;margin-top:3px;display:inline-block}
+.band-pill.h{background:var(--ink);color:#fff}
+.band-pill.m{background:var(--amber-fill-strong);color:var(--amber-text)}
+.band-pill.l{background:var(--red-mid);color:var(--red-text)}
+
+/* Why card inline in queue for flagged */
+.why-inline{
+  margin:4px 0 10px;
+  padding:12px;
+  background:var(--surface);
+  border:1px solid var(--red);
+  border-radius:var(--r-md);
+  box-shadow:var(--shadow-panel);
+}
+.why-inline .wi-title{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;margin-bottom:6px}
+.why-inline .wi-icon{width:18px;height:18px;border-radius:50%;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
+.why-inline p{font-size:12px;color:var(--sub);line-height:1.55}
+.why-inline p b{font-family:var(--mono);color:var(--ink);font-weight:600}
+.why-actions{display:flex;gap:6px;margin-top:10px}
+.wbtn{flex:1;font:inherit;font-weight:700;font-size:12px;padding:7px 0;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);cursor:pointer;color:var(--ink);text-align:center}
+.wbtn.reject-btn{background:var(--red);border-color:var(--red);color:#fff}
+.wbtn kbd{font-family:var(--mono);font-size:10px;opacity:.7;margin-left:4px}
+
+.keys{border-top:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:7px 14px;font-size:11.5px;color:var(--sub);flex-shrink:0}
+.keys span{display:inline-flex;gap:5px;align-items:center}
+kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:4px;padding:1px 6px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">Closure<span>.</span></div>
+  <div class="top-div"></div>
+  <div class="crumb">
+    <span class="case">CASE 24-000117</span>
+    <span class="sep">/</span>
+    <span class="doc">Confidence model — triage bands</span>
+  </div>
+  <div class="top-right">
+    <span class="who">Reviewing as <b>A. Subbarao</b></span>
+    <button class="btn">Audit log</button>
+    <button class="btn primary">Export redacted…</button>
+  </div>
+</header>
+
+<div class="body-wrap">
+
+  <aside class="legend">
+    <div class="leg-head">
+      <h1>How confidence works</h1>
+      <p>Every suggestion carries a numeric score. Scores collapse into three triage bands — each maps to a different decision mode.</p>
+    </div>
+
+    <div class="band-card hi">
+      <div class="bc-top">
+        <span class="bc-name">HIGH</span>
+        <span class="bc-range h">≥ 90</span>
+        <span class="bc-count">27</span>
+      </div>
+      <div class="bc-body">Pattern match is unambiguous — SSN format, full subject name in a field labeled Subject. <b>Safe for bulk-verify.</b></div>
+      <div class="bc-action">Decision mode: Accept all via <kbd>e</kbd></div>
+    </div>
+
+    <div class="band-card mid">
+      <div class="bc-top">
+        <span class="bc-name">REVIEW</span>
+        <span class="bc-range m">60 – 89</span>
+        <span class="bc-count m">12</span>
+      </div>
+      <div class="bc-body">Confidence lowered for a reason shown on the row — partial match, ambiguous context, or a pattern that sometimes fires on non-PII. <b>Look once, then decide.</b></div>
+      <div class="bc-action m">Decision mode: One glance + <kbd>a</kbd> / <kbd>r</kbd></div>
+    </div>
+
+    <div class="band-card lo">
+      <div class="bc-top">
+        <span class="bc-name">FLAGGED</span>
+        <span class="bc-range l">&lt; 60</span>
+        <span class="bc-count l">5</span>
+      </div>
+      <div class="bc-body">Context disagrees with the pattern. Case citations, officer names, street names that share a surname. <b>Always require individual judgment.</b> Excluded from bulk accept. Export blocked until resolved.</div>
+      <div class="bc-action l">Decision mode: Read rationale · never auto-accept</div>
+    </div>
+
+    <div class="scale-wrap">
+      <div class="scale-label">This document · score distribution</div>
+      <div class="scale"><div class="sc-h"></div><div class="sc-m"></div><div class="sc-l"></div></div>
+      <div class="scale-ticks">
+        <span>100</span>
+        <span class="tick-mid">90</span>
+        <span class="tick-mid">60</span>
+        <span class="tick-lo">0</span>
+      </div>
+    </div>
+
+    <div class="rule-box">
+      <div class="rule-title">Design rule</div>
+      A number alone is not enough — every row shows the score <b>and</b> its band color so a reviewer sees <em>how</em> high or <em>how</em> flagged without a tooltip. 95 and 60 are not adjacent shades of amber; they live in different decision modes.
+    </div>
+  </aside>
+
+  <main class="stage">
+    <div class="stage-head">
+      <button class="pgbtn">‹</button>
+      <h2>incident_report_2024-0117 · PAGE 7 / 10</h2>
+      <span class="sh-sub">3 bands visible · current: Nienow v. Ohio · 58</span>
+      <button class="pgbtn">›</button>
+    </div>
+
+    <div class="pdf-page">
+      <div class="lh">
+        <div class="dept">Carissaton Police Department</div>
+        <div class="title">INCIDENT REPORT — CASE NO. 24-000117</div>
+        <div class="sub">CONFIDENTIAL — For authorized use only. Redact before public release.</div>
+      </div>
+
+      <div class="sec">Legal References &amp; Prior Case Law</div>
+      <div class="narr">
+        <p>Counsel for the subject cited the holding in Nienow v. Ohio, 494 U.S. 112 (1990), for the proposition that identification procedures used at the scene may taint subsequent in-court identification. This officer is not a legal expert; the citation is recorded for prosecutorial review only.</p>
+        <p>Subject Yasmine Nienow was advised that prior case law does not alter Miranda obligations. Det. C. Nienow #9418 completed the rights advisement form IR-MIR-24. Social security number 280-96-9531 was re-verified against the booking card.</p>
+        <p>No further legal discussion was had with the subject. The citation to Nienow v. Ohio is preserved in the case file as an exhibit for the prosecutor's office and is not itself personally identifying information about the subject of this report.</p>
+      </div>
+
+      <!-- HIGH: Yasmine Nienow 95 -->
+      <div class="mark pending" style="left:100px;top:268px;width:92px;height:14px">
+        <span class="mark-tag hi">PERSON · <b>95</b></span>
+      </div>
+      <!-- HIGH: SSN 97 -->
+      <div class="mark pending" style="left:248px;top:302px;width:84px;height:14px">
+        <span class="mark-tag hi" style="top:-22px">SSN · <b>97</b></span>
+      </div>
+      <!-- REVIEW: DOB-like mid (not on this page as primary) — Det partial -->
+      <!-- FLAGGED current: Nienow v. Ohio 58 -->
+      <div class="mark flagged current" style="left:268px;top:184px;width:98px;height:15px">
+        <span class="mark-tag lo">FLAGGED · <b>58</b></span>
+      </div>
+      <!-- FLAGGED: Det. C. Nienow 64 -->
+      <div class="mark flagged" style="left:56px;top:285px;width:98px;height:14px">
+        <span class="mark-tag lo" style="top:auto;bottom:-20px">OFFICER · <b>64</b></span>
+      </div>
+      <!-- Second citation -->
+      <div class="mark flagged" style="left:148px;top:352px;width:98px;height:14px">
+        <span class="mark-tag lo" style="top:auto;bottom:-20px">CITATION · <b>52</b></span>
+      </div>
+
+      <div class="pf">
+        <span>Carissaton PD · Form IR-24 · Rev 03/2023</span>
+        <span>PAGE 7 OF 10</span>
+        <span>CASE 24-000117</span>
+      </div>
+    </div>
+  </main>
+
+  <aside class="queue">
+    <div class="q-head">
+      <div class="q-top"><h2>By confidence band</h2><span class="pc">5 flagged open</span></div>
+      <div class="bands">
+        <div class="band"><span class="bv">27</span><span class="bl">HIGH ≥90</span></div>
+        <div class="band mid"><span class="bv">12</span><span class="bl">REVIEW</span></div>
+        <div class="band low on"><span class="bv">5</span><span class="bl">FLAGGED</span></div>
+      </div>
+    </div>
+
+    <div class="q-list">
+      <div class="eg"><b>Flagged — individual judgment</b><span class="ek">&lt;60</span></div>
+
+      <div class="sugg fr current">
+        <span class="sw flagged"></span>
+        <div class="st">
+          <div class="val">Nienow v. Ohio</div>
+          <div class="ctx">…holding in <em>Nienow v. Ohio</em>, 494 U.S. 112…</div>
+        </div>
+        <div class="sm">
+          <div class="conf l">58</div>
+          <div class="band-pill l">FLAGGED</div>
+          <div class="pgr">p.7</div>
+        </div>
+      </div>
+
+      <div class="why-inline">
+        <div class="wi-title"><span class="wi-icon">?</span> Likely a false positive</div>
+        <p>Matched the <b>PERSON</b> pattern via surname "Nienow", but surrounding context is a <b>case citation</b> ("v. Ohio", U.S. reporter). Confidence lowered to <b>58</b>.</p>
+        <div class="why-actions">
+          <button class="wbtn reject-btn">Reject <kbd>r</kbd></button>
+          <button class="wbtn">Keep <kbd>a</kbd></button>
+        </div>
+      </div>
+
+      <div class="sugg fr">
+        <span class="sw flagged"></span>
+        <div class="st">
+          <div class="val">Det. C. Nienow</div>
+          <div class="ctx">…completed by <em>Det. C. Nienow</em> #9418…</div>
+          <div class="rationale">Surname matches SUBJECT — is reporting officer</div>
+        </div>
+        <div class="sm">
+          <div class="conf l">64</div>
+          <div class="band-pill l">FLAGGED</div>
+          <div class="pgr">p.7</div>
+        </div>
+      </div>
+
+      <div class="sugg fr">
+        <span class="sw flagged"></span>
+        <div class="st">
+          <div class="val">Nienow v. Ohio</div>
+          <div class="ctx">…citation to <em>Nienow v. Ohio</em> is preserved…</div>
+          <div class="rationale">Second citation hit · same mechanism</div>
+        </div>
+        <div class="sm">
+          <div class="conf l">52</div>
+          <div class="band-pill l">FLAGGED</div>
+          <div class="pgr">p.7</div>
+        </div>
+      </div>
+
+      <div class="eg" style="margin-top:10px"><b>HIGH — bulk candidates</b><span class="ek">≥90</span></div>
+      <div class="sugg">
+        <span class="sw hi"></span>
+        <div class="st">
+          <div class="val">Yasmine Nienow</div>
+          <div class="ctx">…Subject <em>Yasmine Nienow</em> was advised…</div>
+        </div>
+        <div class="sm">
+          <div class="conf h">95</div>
+          <div class="band-pill h">HIGH</div>
+          <div class="pgr">p.7</div>
+        </div>
+      </div>
+      <div class="sugg">
+        <span class="sw hi"></span>
+        <div class="st">
+          <div class="val">280-96-9531</div>
+          <div class="ctx">…number <em>280-96-9531</em> was re-verified…</div>
+        </div>
+        <div class="sm">
+          <div class="conf h">97</div>
+          <div class="band-pill h">HIGH</div>
+          <div class="pgr">p.7</div>
+        </div>
+      </div>
+
+      <div class="eg" style="margin-top:10px"><b>REVIEW — look once</b><span class="ek">60–89</span></div>
+      <div class="sugg">
+        <span class="sw pending"></span>
+        <div class="st">
+          <div class="val">12/23/1999</div>
+          <div class="ctx">…DOB field · format match, short token…</div>
+        </div>
+        <div class="sm">
+          <div class="conf m">82</div>
+          <div class="band-pill m">REVIEW</div>
+          <div class="pgr">p.3</div>
+        </div>
+      </div>
+      <div class="sugg">
+        <span class="sw pending"></span>
+        <div class="st">
+          <div class="val">Nienow Street</div>
+          <div class="ctx">…intersection of <em>Nienow Street</em>…</div>
+        </div>
+        <div class="sm">
+          <div class="conf m">71</div>
+          <div class="band-pill m">REVIEW</div>
+          <div class="pgr">p.4</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="keys">
+      <span><kbd>j</kbd><kbd>k</kbd> next / prev</span>
+      <span><kbd>a</kbd> accept</span>
+      <span><kbd>r</kbd> reject</span>
+      <span><kbd>e</kbd> entity, case-wide</span>
+      <span><kbd>n</kbd> add missed</span>
+      <span><kbd>u</kbd> undo</span>
+    </div>
+  </aside>
+
+</div>
+</body>
+</html>

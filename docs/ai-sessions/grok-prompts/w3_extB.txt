@@ -1,0 +1,16 @@
+Survey task for /Users/aloksubbarao/personal/closure + the quackapi platform.
+WRITE ONLY docs/ext-survey-platform.md (+ optional tiny spikes under
+spikes/ext-platform/). Assess these DuckDB community extensions for the app/
+platform (install each, check v1.5.4 osx_arm64 signed, read functions, judge
+honestly — most should be "no"):
+  duck_diff (diffing tables — decision-log diffs? corpus regression checks?),
+  duck_lineage (data lineage — audit story?), duckorch (orchestration),
+  duck_hunt (simple CI/CD in DuckDB — could it run our route smoke tests?),
+  query_condition_cache, otlp (traces/observability for quackapi requests?),
+  read_lines (+ note: may need LOAD scalarfs / a scalarfs URI wrapper),
+  markdown (render docs/ in-app?), nsv, rawduck, netquack, dns, urlpattern
+  (route patterns?), duckpgq (graph queries — entity relationship graphs across
+  documents?), duckthink, ggsql (charts — dashboard stats?), nanoarrow, overture.
+For each: verdict + one-line why + mechanism if useful. SPIKE the top 2 (working
+SQL). Rank the "integrate now" list. Special attention: duck_diff and duck_hunt
+per the owner's hunch, and ggsql for dashboard charts.

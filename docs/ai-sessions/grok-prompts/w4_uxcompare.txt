@@ -1,0 +1,20 @@
+Overall UX comparison review. READ + RUN anything; WRITE ONLY
+/Users/aloksubbarao/personal/closure/docs/ux-compare.md.
+
+1. Walk the CLOSURE app end-to-end as a reviewer:
+   boot /Users/aloksubbarao/personal/closure with
+   /Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned closure.db -c ".read server/app.sql"
+   (kill any :8117 listener, rm closure.db first; note other agents may be
+   editing — if boot breaks, retry once, then review whatever serves). Walk:
+   dashboard → library → review → decisions → flagged/why-card → bulk → add-
+   missed → undo/history → export. Judge it purely as UX: speed of triage,
+   clarity, dead ends, affordance quality, keyboard+click parity.
+2. Then run each clean-room app (/Users/aloksubbarao/personal/closure-cleanroom/
+   attempt-1,2,3: npm install/build/start) and walk the same flows. One-way: do
+   not modify them, do not show them closure.
+3. Deliver docs/ux-compare.md: per-flow comparison (closure vs best cleanroom) —
+   who does it better and WHY (specific interactions, not vibes); the ranked list
+   of UX improvements closure should adopt (from cleanroom or your own judgment),
+   each with the concrete interaction change + file hints; and the shortlist of
+   things closure does better (keep + emphasize). Focus: throughput for 1000+
+   suggestions. Blunt and specific.

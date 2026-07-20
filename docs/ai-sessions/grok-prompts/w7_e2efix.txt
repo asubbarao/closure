@@ -1,0 +1,21 @@
+Work in /Users/aloksubbarao/personal/closure. The app boots green (13/13 routes
+200) but 3 Playwright e2e specs FAIL after recent UX edits — fix the ROOT CAUSE
+(prefer fixing the app if it's a real regression; only adjust a test if it's
+genuine selector/data drift, and say which). Boot: kill :8117 listener; rm -f
+closure.db closure.db.wal; /Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned closure.db -c ".read server/app.sql" ; wait for :8117.
+FAILING (run: cd tests/e2e && npx playwright test):
+1. specs/01-review-interface.spec.ts:56 — "keyboard j/k navigates the queue
+   cursor". 
+2. specs/01-review-interface.spec.ts:130 — "accept (a) flips suggestion status to
+   accepted". THIS IS THE CORE INTERACTION — keyboard 'a' MUST accept the current
+   suggestion and the status must flip (verify via /api re-GET). If the wave-4
+   review.js / review.html edits broke the keyboard handler or the current-cursor
+   wiring, FIX THE APP.
+3. specs/11-provenance.spec.ts:127 — "case library surfaces provenance panel when
+   feature is live". Make the provenance panel actually mount in the library
+   view, or the spec pass honestly if the feature is intentionally elsewhere.
+Read static/review.js + server/templates/review.html to find why j/k/a broke
+(selector rename? handler not bound? cursor state lost?). Keyboard AND click must
+both work. Do NOT regress the 24 passing specs.
+VERIFY: full suite green (npx playwright test → 0 failed). Report each root cause
++ fix + the final pass count.

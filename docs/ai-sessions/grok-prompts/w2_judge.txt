@@ -1,0 +1,21 @@
+FIRST read: /private/tmp/claude-501/-Users-aloksubbarao-personal/f15dcc22-ec83-4ec6-a926-096108b96135/scratchpad/contract.md , then /Users/aloksubbarao/personal/closure/docs/detection-design.md
+and the existing module /Users/aloksubbarao/personal/closure/server/judge.sql.
+Work in /Users/aloksubbarao/personal/closure. The server was just restructured:
+routes live in server/routes/*.sql, composed by server/app.sql; templates in
+server/templates/, JS in static/. Run cmd: /Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned closure.db -c ".read server/app.sql" (port 8117; rm closure.db first;
+kill prior listener).
+YOU OWN ONLY: server/judge.sql (finish/fix it), a NEW server/routes/judge.sql,
+NEW template partial(s) under server/templates/ named judge_*.html, and NEW
+static/judge.js. You may add ONE .read line for each new sql file into
+server/app.sql (smallest possible diff there) and minimal include hooks into the
+review template ONLY if a partial can't self-mount via JS.
+BUILD: the judge-ensemble confidence surface —
+- each suggestion has 2-3 deterministic judge votes (verdict/score/one-line factor
+  reason) per detection-design.md; a view keyed by suggestion id.
+- UI on flagged items' why-card + queue rows: the 2-3 judges' votes (compact),
+  an agree/split/conflict badge, and a 60→95% confidence GRADIENT treatment on
+  scores (color ramp, not just bands). Humans don't read essays: one line per judge max.
+- a route GET /api/suggestions/:id/judges returning the breakdown.
+VERIFY: boot; curl the route for a flagged suggestion; confirm the UI markup
+renders the panel (curl the review page HTML and show the judge markup present).
+Report evidence.

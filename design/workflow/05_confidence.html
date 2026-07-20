@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Closure — Confidence triage · three postures</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_tokens.css">
+<style>
+:root{
+  --bg:#F4F5F6; --surface:#FFFFFF; --surface-2:#F9FAFB;
+  --ink:#191B1E; --sub:#5A5F66; --mut:#878C93;
+  --line:#E4E6E9; --line-strong:#C9CCD1;
+  --amber-fill:rgba(252,196,25,.32); --amber-fill-strong:rgba(252,196,25,.55);
+  --amber-edge:#D99A06; --amber-text:#8A6A00; --amber-bg:#FFFBEE;
+  --red:#C03221; --red-soft:rgba(192,50,33,.07); --red-mid:rgba(192,50,33,.16); --red-text:#A02A1C;
+  --ok:#2F7D46; --ok-soft:rgba(47,125,70,.10);
+  --cur:#1D63ED; --cur-soft:rgba(29,99,237,.08);
+  --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --r-sm:5px; --r-md:8px; --r-lg:12px;
+  --shadow-card:0 1px 3px rgba(25,27,30,.08),0 8px 24px rgba(25,27,30,.08);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;font-feature-settings:"tnum";min-height:100vh}
+
+.top{display:flex;align-items:center;gap:14px;height:52px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:100}
+.brand{font-weight:700;font-size:15px}.brand span{color:var(--amber-edge)}
+.top-div{width:1px;height:20px;background:var(--line)}
+.crumb{font-family:var(--mono);font-size:11.5px;color:var(--sub)}.crumb b{color:var(--ink)}
+.top-right{margin-left:auto}
+.btn{font:inherit;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);cursor:pointer;text-decoration:none}
+
+.wrap{max-width:1100px;margin:0 auto;padding:28px 24px 80px}
+h1{font-size:22px;font-weight:700;letter-spacing:-.02em;margin-bottom:8px}
+.lead{font-size:14px;color:var(--sub);max-width:640px;line-height:1.55;margin-bottom:28px}
+.lead b{color:var(--ink)}
+
+.tabs{display:flex;gap:6px;margin-bottom:20px;border-bottom:1px solid var(--line);padding-bottom:0}
+.tab{font:inherit;font-size:13px;font-weight:600;padding:10px 16px;border:none;background:transparent;color:var(--sub);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab.on{color:var(--ink);border-bottom-color:var(--ink)}
+.tab .n{font-family:var(--mono);font-size:11px;font-weight:700;margin-left:6px;padding:2px 6px;border-radius:8px;background:var(--surface-2)}
+.tab.m .n{background:var(--amber-bg);color:var(--amber-text)}
+.tab.l .n{background:var(--red-mid);color:var(--red-text)}
+
+.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:28px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px 18px 16px;box-shadow:var(--shadow-card)}
+.card h2{font-size:13px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.card h2 .badge{font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px}
+.card.h h2 .badge{background:var(--surface-2);border:1px solid var(--line-strong)}
+.card.m h2 .badge{background:var(--amber-fill-strong);color:var(--amber-text)}
+.card.l h2 .badge{background:var(--red-mid);color:var(--red-text)}
+.card .range{font-family:var(--mono);font-size:11px;color:var(--mut);margin-bottom:12px}
+.card .posture{font-size:13px;color:var(--sub);line-height:1.5;margin-bottom:12px}
+.card .posture b{color:var(--ink)}
+.card ul{margin:0 0 12px 16px;color:var(--sub);font-size:12.5px}
+.card ul li{margin-bottom:4px}
+.card .bulk{font-size:12px;font-weight:600;padding:8px 10px;border-radius:var(--r-md);background:var(--surface-2);color:var(--sub)}
+.card.h .bulk{background:var(--ok-soft);color:var(--ok)}
+.card.m .bulk{background:var(--amber-bg);color:var(--amber-text)}
+.card.l .bulk{background:var(--red-soft);color:var(--red-text)}
+
+/* Live example: flagged why-card posture */
+.example{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-card);overflow:hidden}
+.ex-head{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;background:var(--surface-2)}
+.ex-head h3{font-size:14px;font-weight:700}
+.ex-head span{font-family:var(--mono);font-size:11.5px;color:var(--red-text);font-weight:700}
+.ex-body{display:grid;grid-template-columns:1fr 320px;min-height:320px}
+.page-sim{padding:24px 28px;font-family:"Courier New",Courier,monospace;font-size:11.5px;line-height:1.6;color:#111;background:#fff;border-right:1px solid var(--line)}
+.page-sim .hdr{text-align:center;font-size:9px;font-weight:bold;letter-spacing:.06em;text-transform:uppercase;border-bottom:1.5px solid #111;padding-bottom:8px;margin-bottom:14px}
+.page-sim p{margin-bottom:10px;text-align:justify}
+.mark-f{background:rgba(192,50,33,.14);outline:1.5px dashed var(--red);padding:0 2px;position:relative}
+.why{
+  margin:16px;padding:14px;background:var(--surface);border:1px solid var(--red);border-radius:var(--r-md);
+  box-shadow:0 8px 24px rgba(25,27,30,.12);
+}
+.why-h{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.why-h .ic{width:22px;height:22px;border-radius:50%;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.why-h b{font-size:13.5px}
+.why-body{font-size:13px;color:var(--sub);line-height:1.5;margin-bottom:12px}
+.why-body b{color:var(--ink);font-weight:600}
+.cmp{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px}
+.cmp th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);padding:4px 0;border-bottom:1px solid var(--line)}
+.cmp td{padding:6px 0;border-bottom:1px solid var(--line);color:var(--sub)}
+.cmp td:first-child{font-weight:600;color:var(--ink);width:40%}
+.why-actions{display:flex;gap:8px}
+.why-actions button{font:inherit;font-weight:700;font-size:12.5px;padding:8px 14px;border-radius:var(--r-md);cursor:pointer;flex:1}
+.why-actions .rej{background:var(--surface);border:1.5px solid var(--red);color:var(--red)}
+.why-actions .keep{background:var(--ink);border:1px solid var(--ink);color:#fff}
+
+.side-panel{padding:16px;background:var(--surface-2);border-left:1px solid var(--line)}
+.side-panel h4{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin-bottom:10px}
+.reject-all{padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);margin-bottom:12px}
+.reject-all p{font-size:12.5px;color:var(--sub);line-height:1.45;margin-bottom:10px}
+.reject-all p b{color:var(--ink);font-family:var(--mono);font-weight:600}
+.reject-all button{width:100%;font:inherit;font-weight:700;font-size:12.5px;padding:10px;border-radius:var(--r-md);border:1.5px solid var(--red);background:var(--red-soft);color:var(--red);cursor:pointer}
+.note{font-size:12px;color:var(--sub);line-height:1.5}
+.note b{color:var(--ink)}
+
+kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:4px;padding:1px 6px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">Closure<span>.</span></div>
+  <div class="top-div"></div>
+  <div class="crumb"><b>CASE 24-000117</b> · Confidence triage</div>
+  <div class="top-right"><a class="btn" href="01_review_stream.html">← Entity stream</a></div>
+</header>
+
+<div class="wrap">
+  <h1>Confidence is posture, not a badge</h1>
+  <p class="lead">95% and 60% do not mean “show a greener chip.” They change <b>what the reviewer does next</b>, how much context they need, and whether bulk is even allowed. Three bands map to three human modes.</p>
+
+  <div class="grid">
+    <div class="card h">
+      <h2><span class="badge">HIGH</span> Volume fire</h2>
+      <div class="range">≥ 90 · 1,102 suggestions · 22 open entities</div>
+      <p class="posture">Sample <b>1–2 contexts</b> on the decision card. Press <b>a</b>. Stay off the full PDF unless something looks wrong.</p>
+      <ul>
+        <li>Default stream order (burn first)</li>
+        <li>Entity accept is default</li>
+        <li>Eligible for band bulk after residual cleanup</li>
+      </ul>
+      <div class="bulk">Bulk: entity + band bulk OK</div>
+    </div>
+    <div class="card m">
+      <h2><span class="badge">REVIEW</span> Judgment</h2>
+      <div class="range">60–89 · 891 suggestions · 49 open entities</div>
+      <p class="posture">Read context + <b>page peek</b>. Officer names, witnesses, ambiguous tokens. Entity accept only after a glance.</p>
+      <ul>
+        <li>Second pass after HIGH empty</li>
+        <li>Split occurrence if contexts diverge</li>
+        <li>No band bulk</li>
+      </ul>
+      <div class="bulk">Bulk: entity only, after glance</div>
+    </div>
+    <div class="card l">
+      <h2><span class="badge">FLAGGED</span> Human required</h2>
+      <div class="range">&lt; 60 · 401 suggestions · 13 open entities</div>
+      <p class="posture"><b>Why-card</b> argues; you rule. Street vs person, citation vs subject. Never in bulk. Blocks export.</p>
+      <ul>
+        <li>Last pass / jump filter anytime</li>
+        <li>Reject-all-matching for pure FPs</li>
+        <li>Individual decision per context family</li>
+      </ul>
+      <div class="bulk">Bulk: banned — fails closed</div>
+    </div>
+  </div>
+
+  <div class="example">
+    <div class="ex-head">
+      <h3>Live FLAGGED posture · false positive</h3>
+      <span>41% · FLAGGED · Nienow Street</span>
+    </div>
+    <div class="ex-body">
+      <div class="page-sim">
+        <div class="hdr">Carissaton Police Department · Case 24-000117</div>
+        <p>Officers proceeded southbound along Carissaton Boulevard and approached the intersection of <span class="mark-f">Nienow Street</span> and 9th Avenue, where the initial call for service originated.</p>
+        <p>A witness reported observing the subject, Yasmine Nienow, at approximately this location at 09:38 hrs.</p>
+
+        <div class="why">
+          <div class="why-h"><div class="ic">?</div><b>Likely a false positive</b></div>
+          <div class="why-body">
+            Matched the <b>PERSON</b> pattern via surname “Nienow,” but surrounding context — <b>“intersection of … and 9th Avenue”</b> — is a street-address construction. Confidence lowered to <b>41</b>.
+          </div>
+          <table class="cmp">
+            <tr><th>Matched</th><th>vs Subject</th></tr>
+            <tr><td>Nienow Street · STREET</td><td>Yasmine Nienow · PERSON</td></tr>
+          </table>
+          <div class="why-actions">
+            <button class="rej" type="button">Reject  <kbd>r</kbd></button>
+            <button class="keep" type="button">Keep  <kbd>a</kbd></button>
+          </div>
+        </div>
+      </div>
+      <div class="side-panel">
+        <h4>Reject all matching</h4>
+        <div class="reject-all">
+          <p><b>"Nienow Street"</b> matched the PERSON pattern <b>18</b> times across <b>5</b> documents — always as a street name, never as the subject.</p>
+          <button type="button">Reject all 18 — log as “street name”</button>
+        </div>
+        <p class="note"><b>Not the same entity as Yasmine Nienow.</b> Accepting the person never lays ink on the street. FLAGGED stays out of band bulk. Export remains blocked until these 18 are decided.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,38 @@
+Work in /Users/aloksubbarao/personal/closure. Write and RUN Playwright e2e tests
+that prove the CORE redaction-review workflow works, driving the real running app.
+
+The app (DuckDB+quackapi) boots with:
+  /Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned closure.db -c ".read server/app.sql"
+and serves http://127.0.0.1:8117/ . Boot it (fresh: rm closure.db first; kill any
+listener on 8117), wait until "/" returns 200, then run the tests against it.
+
+You OWN a new directory tests/e2e/ ONLY (its own package.json + @playwright/test
++ playwright.config.ts + *.spec.ts). Do NOT touch server/, templates/, static/,
+or anything else — tests are separate dev tooling (node here is fine; it is NOT
+part of the app runtime). Keep node_modules inside tests/e2e/.
+
+Cover the assignment's CORE FLOWS as separate specs, each asserting real DOM/state
+against the live app (read the current templates/static to find selectors/URLs;
+if a flow's UI is missing or broken, WRITE THE TEST anyway and mark it failing so
+we know):
+1. Main review interface: open a document, see the AI suggestion queue + marks on
+   the page; navigate suggestions (keyboard j/k if present); accept one (a) and
+   assert its status flips (re-query /api or DOM).
+2. Reject a false positive: find a flagged suggestion (e.g. "Nienow Street"),
+   reject it, assert it's cleared; and the "reject all matching" bulk path clears
+   every matching instance.
+3. Add a missed redaction (false negative): the add-missed flow creates a manual
+   redaction (assert it appears, born accepted).
+4. Bulk accept/reject: bulk-accept an entity or a confidence band; assert many
+   statuses change with one action.
+5. Multi-document workflow: the case/library view lists multiple documents; open
+   another; entity decisions propagate across docs.
+6. Confidence display: suggestions show confidence values / bands (high/review/
+   flagged) and are filterable.
+7. Export + audit: export is BLOCKED while flagged items pending, and the audit
+   log records decisions.
+
+Deliver: tests/e2e/ that runs via a documented command (e.g. cd tests/e2e &&
+npx playwright test). Actually RUN it and report the pass/fail per spec with real
+output. Where a flow fails, report the exact gap (this is the punch-list for
+finishing the UX). Add a tests/e2e/README.md with the run command.

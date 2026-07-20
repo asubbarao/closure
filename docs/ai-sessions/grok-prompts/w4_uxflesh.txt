@@ -1,0 +1,21 @@
+Standing UX flesh-out round. FIRST read:  , docs/workflow-improvements.md,
+docs/punch-list.md P2s. Work in /Users/aloksubbarao/personal/closure. Run cmd:
+/Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned closure.db -c ".read server/app.sql" (own port: sed 8117->8136 into /tmp/boot_ux.sql, /tmp/ux.db). COORDINATE:
+another agent (w4funnel) owns review.html/review.js/routes/triage.sql RIGHT NOW —
+do NOT touch those three. YOU OWN: server/templates/case.html, home.html,
+bulk.html, add_missed.html, reject.html + their static/*.js (dashboard.js,
+bulk.js, addmissed.js, reject.js) and any new partials for them.
+MISSION: flesh out + polish these surfaces to the design reference's quality
+(/Users/aloksubbarao/Downloads/clozure-redaction-mocks.html tokens: IBM Plex,
+--ws #E9ECF0, --ink #1A2230, pend amber/acc blue/rej red/ok green):
+- INPUT PARITY: every keyboard action must have an obvious clickable equivalent
+  (buttons/menus), and vice versa; hover states, focus rings, disabled states.
+- The dashboard tells the funnel story at a glance (counts, coverage, what needs
+  me next) and every number is a link into the filtered view.
+- Bulk sheet: live counts on buttons, exceptions ergonomics, select-all-in-doc.
+- Add-missed + reject flows: tighten per copy.md strings; toasts consistent;
+  undo affordance visible everywhere a decision happens (the revert tool is a
+  headline feature — surface history entry point in the app bar).
+- Empty/edge states per design/copy.md.
+VERIFY: boot; walk each surface; every interactive element does something real
+(no dead buttons). Report the concrete changes + evidence.

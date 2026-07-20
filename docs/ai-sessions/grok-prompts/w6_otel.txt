@@ -1,0 +1,17 @@
+SINGULAR REQUIREMENT: a human thoroughly clears 1000+ AI redaction suggestions across 1000+ pages, fast — via a funnel (auto-pass high-confidence + bulk groups, then hand-review the grouped residual), catching false negatives, with a full audit trail + revert.
+Observability assessment (honest — this is a prototype). READ docs/ so far,
+server/, and check the 'otlp' DuckDB community extension + quackapi's request
+handling (/Users/aloksubbarao/personal/quackapi/src — does it expose timing/
+metrics hooks?). WRITE ONLY
+/Users/aloksubbarao/personal/closure/docs/observability.md.
+Answer plainly: does this app NEED OpenTelemetry / metrics, or is that overkill
+for a take-home prototype? Assess:
+- What would actually be worth measuring here (route latency, suggestion counts,
+  export timing, OCR fallbacks, judge throughput) and the CHEAPEST way to get it
+  in a one-DuckDB-process app (a metrics table + a /metrics route? the otlp ext?
+  quackapi timing?).
+- The honest recommendation: skip for the prototype (with a one-paragraph "in
+  prod I'd add otel + these spans" for the rationale), OR a tiny in-scope
+  addition that's genuinely worth it (e.g. a boot-stats/health route already
+  exists?). Do NOT gold-plate. If it's overkill, say so and give the prod-story
+  paragraph instead.

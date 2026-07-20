@@ -1,0 +1,31 @@
+You are working in the repo /Users/aloksubbarao/personal/closure — a take-home submission: an AI-powered PDF redaction review tool. One DuckDB process is the whole backend (database + HTTP server + renderer) via three extensions: pdf (community), tera (community), quackapi (local build). The frontend is tera-rendered HTML.
+
+YOUR TASK (G1): make the app boot from ONE SQL entrypoint and seed the AI suggestions.
+
+1. Create server/app.sql as the single entrypoint (the uvicorn-main:app equivalent). It must:
+   - INSTALL pdf FROM community; LOAD pdf; INSTALL tera FROM community; LOAD tera;
+   - LOAD '/Users/aloksubbarao/personal/quackapi/build/release/extension/quackapi/quackapi.duckdb_extension';
+   - .read server/schema.sql (if that file is still needed), server/ingest.sql, server/seed.sql, server/load_templates.sql, server/routes.sql — consolidate/trim as needed; fewer files is better if it stays readable.
+   - Finish with: FROM quackapi_serve(8117, static_dir := '.');  (static_dir was just added to quackapi and works — files under the repo root are served for unrouted GETs, e.g. /web/pages/<doc>/p1.png).
+   - DELETE run.sh. The documented run command becomes exactly:
+     cd /Users/aloksubbarao/personal/closure && /Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned closure.db -c ".read server/app.sql"
+     (also try the homebrew /opt/homebrew/bin/duckdb v1.5.4 with -unsigned loading that same quackapi extension file; if it works, document THAT as the primary command since reviewers have homebrew duckdb. Report which worked.)
+   - The database file closure.db is a build artifact: app.sql starts by deriving everything fresh (all CTAS), so re-running is always clean. rm closure.db beforehand should never be necessary — use CREATE OR REPLACE everywhere.
+
+2. Create server/seed.sql — the "AI" (the assignment explicitly allows hardcoded/mixed-quality suggestions; no ML). Derive a target list from samples/identities.json per case:
+   - subject name, SSN, DOB, phone (high confidence 90s), first-3-words of address (93), witness names (94) and phones (95)
+   - false-positive bait, low confidence with a reason: fp_street (71, reason: matched PERSON pattern on the surname but context is a street address), first 3 words of fp_citation (58, published case citation), and any officer whose surname equals the subject surname (64, officer of record, not the subject).
+   - Match each target phrase against the words table (real read_pdf_words boxes, already ingested by server/ingest.sql): consecutive words on the same visual line (y0 within 2pt) whose lowercase punctuation-trimmed forms equal the target tokens. Merged bbox = min x0/y0, max x1/y1 of the run. Store a context snippet (±6 surrounding words).
+   - The corpus deliberately contains a spaced SSN ("280 96 9531" in supplemental_report) and a misspelled witness ("Robyn Prce" in interview_transcript) — your matcher MUST NOT find those (it only knows canonical forms). They are the planted false negatives.
+   - Deterministic small per-instance confidence jitter (hash-based ±2) so instances differ.
+   - Suggestions/entities tables via CTAS. The ONLY mutable table is the append-only decisions log (id, ts, actor, status, suggestion_id, reason) with a sequence default; status projection view: latest decision wins, manual-source suggestions default 'accepted', ai default 'pending'.
+
+HARD RULES (the repo owner is strict):
+- Pure CTAS for all derived data. NEVER "INSERT INTO ... SELECT" for setup, NEVER VALUES lists, NEVER SET VARIABLE, NEVER hand-typed names/SSNs — everything derives from samples/identities.json, samples/manifest.json, and the PDFs.
+- INSERT is allowed ONLY in HTTP mutation handlers writing the decisions log.
+- Do not touch design/ or samples/. Do not create bash wrappers.
+- Verify by actually running the boot command and querying: suggestion counts per document (expect roughly: consolidated_case_file ~300+, incident_report ~40, others ~20-40), zero matches for '280 96 9531' and 'Prce'. Also curl http://127.0.0.1:8117/api/stats while it runs.
+- server/ingest.sql currently uses SET VARIABLE data_dir + INSERT INTO + temp tables — REWRITE it to pure CTAS reading 'samples/*.pdf', 'samples/identities.json', 'samples/manifest.json' directly (relative paths from repo root; the server runs from repo root).
+- If server/schema.sql becomes redundant after the CTAS rewrite (tables created by ingest itself), delete it and remove the .read.
+
+When done, print a summary: files changed, the exact working run command, the per-document suggestion counts, and proof the two false negatives are absent.

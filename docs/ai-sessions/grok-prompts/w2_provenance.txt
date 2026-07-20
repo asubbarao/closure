@@ -1,0 +1,16 @@
+FIRST read: /private/tmp/claude-501/-Users-aloksubbarao-personal/f15dcc22-ec83-4ec6-a926-096108b96135/scratchpad/contract.md , then the proven spike at
+/Users/aloksubbarao/personal/closure/spikes/provenance/ (what pdf_revisions
+returns + the ready-to-wire SQL). Server restructured: routes in server/routes/.
+Run cmd: /Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned closure.db -c ".read server/app.sql"
+YOU OWN ONLY: NEW server/provenance.sql (views/macros), NEW server/routes/provenance.sql,
+NEW template partial provenance_*.html, minimal .read lines in app.sql, and the
+smallest hook into the export/dashboard template to mount the panel.
+BUILD chain-of-custody:
+- at ingest: record per-source-PDF fingerprint (hash) + pdf_revisions count (CTAS
+  derived table).
+- route GET /api/cases/:id/provenance: per document — source fingerprint, revision
+  count, a re-check flag (does the file still match its ingest fingerprint NOW).
+- after export: lineage rows (source fingerprint -> exported file fingerprint,
+  ts) surfaced on the export/dashboard panel ("chain of custody" card).
+VERIFY: boot; curl the provenance route (show real fingerprints); alter a copy of
+a source pdf and show the re-check flag flips on that copy. Report evidence.

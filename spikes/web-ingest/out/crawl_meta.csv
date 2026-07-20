@@ -1,0 +1,46 @@
+url,status,content_type,html_doc,error,response_time_ms
+http://127.0.0.1:8765/incident_report_24-000117.html,200,text/html,"<!DOCTYPE html>
+<html lang=""en"">
+<head>
+  <meta charset=""utf-8""/>
+  <title>Incident Report 24-000117</title>
+</head>
+<body>
+  <header>
+    <h1>Portland Police Bureau — Incident Report</h1>
+    <p class=""meta"">Case No. 24-000117 · Report date 2024-01-17</p>
+  </header>
+  <main>
+    <section id=""subject"">
+      <h2>Subject</h2>
+      <dl>
+        <dt>Name</dt><dd>Magnolia Cronin</dd>
+        <dt>Date of Birth</dt><dd>08/16/1979</dd>
+        <dt>SSN</dt><dd>271-72-1446</dd>
+        <dt>Address</dt><dd>776 Maple St, Portland, OR 97205</dd>
+        <dt>Phone</dt><dd>(613) 235-3301</dd>
+      </dl>
+    </section>
+    <section id=""narrative"">
+      <h2>Narrative</h2>
+      <p>
+        On 2024-01-17 officers contacted Magnolia Cronin at 776 Maple St.
+        Subject provided SSN 271-72-1446 and phone (613) 235-3301.
+        Witness Marques Cruickshank corroborated the timeline.
+      </p>
+      <p>
+        Citation reference Cronin v. Ohio, 494 U.S. 541 (1990) is not PII.
+        Street name Cronin Street is a false-positive plant.
+      </p>
+    </section>
+    <section id=""officers"">
+      <h2>Reporting officers</h2>
+      <ul>
+        <li>Ofc. M. Mayer #3178</li>
+        <li>Det. N. Cronin #4453</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
+",,0

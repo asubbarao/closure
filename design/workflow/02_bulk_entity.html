@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Closure — Entity bulk · Yasmine Nienow · case-wide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_tokens.css">
+<style>
+:root{
+  --bg:#F4F5F6; --surface:#FFFFFF; --surface-2:#F9FAFB;
+  --ink:#191B1E; --sub:#5A5F66; --mut:#878C93;
+  --line:#E4E6E9; --line-strong:#C9CCD1;
+  --amber-fill:rgba(252,196,25,.32); --amber-fill-strong:rgba(252,196,25,.55);
+  --amber-edge:#D99A06; --amber-text:#8A6A00; --amber-bg:#FFFBEE;
+  --red:#C03221; --red-soft:rgba(192,50,33,.07); --red-mid:rgba(192,50,33,.16); --red-text:#A02A1C;
+  --ok:#2F7D46; --ok-soft:rgba(47,125,70,.10);
+  --cur:#1D63ED; --cur-soft:rgba(29,99,237,.08);
+  --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --r-sm:5px; --r-md:8px; --r-lg:12px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:var(--sans);font-size:13.5px;line-height:1.5;color:var(--ink);
+  min-height:100vh;background:rgba(25,27,30,.50);
+  display:flex;align-items:center;justify-content:center;padding:28px;
+  -webkit-font-smoothing:antialiased;font-feature-settings:"tnum";
+}
+.sheet{
+  width:980px;max-height:92vh;background:var(--surface);border-radius:16px;
+  box-shadow:0 32px 96px rgba(25,27,30,.45);display:flex;flex-direction:column;overflow:hidden;
+}
+.sh-head{padding:22px 28px 0;flex-shrink:0}
+.sh-eyebrow{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);margin-bottom:5px}
+.sh-title-row{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+.sh-title-row h1{font-size:23px;font-weight:700;letter-spacing:-.02em}
+.sh-title-row .ek{font-size:11.5px;color:var(--mut)}
+.sh-title-row .close{margin-left:auto;color:var(--mut);font-size:22px;cursor:pointer;line-height:1;text-decoration:none}
+.sh-title-row .close:hover{color:var(--ink)}
+.tally{display:flex;flex-wrap:wrap;gap:0;margin:10px 0 14px;font-size:13px}
+.tally-item{padding:0 16px 0 0;margin-right:16px;border-right:1px solid var(--line);color:var(--sub)}
+.tally-item:last-child{border-right:none}
+.tally-item b{font-family:var(--mono);color:var(--ink);font-weight:700}
+.tally-item.warn b{color:var(--red)}
+.tally-item.ok b{color:var(--ok)}
+.scope-row{display:flex;gap:8px;margin-bottom:14px}
+.scope{font:inherit;font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:99px;border:1px solid var(--line);background:var(--surface-2);color:var(--sub);cursor:pointer}
+.scope.on{border-color:var(--ink);background:var(--ink);color:#fff}
+.scope .n{font-family:var(--mono);margin-left:4px;opacity:.85}
+
+.action-bar{
+  display:flex;align-items:center;gap:10px;padding:12px 28px;
+  background:var(--bg);border-top:1px solid var(--line);border-bottom:1px solid var(--line);flex-shrink:0;
+}
+.action-bar .sel-info{font-size:13px;color:var(--sub);margin-right:auto}
+.action-bar .sel-info b{color:var(--ink);font-weight:600}
+.propagates{
+  display:inline-block;margin-left:8px;font-size:11px;color:var(--ok);font-weight:600;
+  background:var(--ok-soft);padding:2px 8px;border-radius:8px;
+}
+.btn{font:inherit;font-weight:700;font-size:13px;padding:9px 18px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);cursor:pointer;color:var(--ink);white-space:nowrap}
+.btn.accept-btn{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn.accept-btn:hover{background:#000}
+.btn.reject-btn{color:var(--red);border-color:var(--red)}
+.btn.reject-btn:hover{background:var(--red-soft)}
+
+.flag-callout{
+  display:flex;align-items:center;gap:10px;padding:9px 28px;
+  background:var(--amber-bg);border-bottom:1px solid var(--amber-edge);
+  font-size:12.5px;color:var(--amber-text);flex-shrink:0;
+}
+.flag-callout .fc-icon{
+  width:18px;height:18px;border-radius:50%;background:var(--amber-edge);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;
+}
+.flag-callout b{font-family:var(--mono);font-weight:600}
+
+.sheet-body{overflow-y:auto;flex:1}
+.doc-group{border-bottom:1px solid var(--line)}
+.dg-head{
+  display:flex;align-items:center;gap:10px;padding:11px 28px;
+  background:var(--surface-2);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20;
+}
+.dg-filename{font-weight:700;font-size:13.5px}
+.dg-meta{font-family:var(--mono);font-size:11px;color:var(--mut)}
+.dg-select-all{margin-left:auto;font-size:12px;font-weight:600;color:var(--cur);cursor:pointer}
+
+.inst{
+  display:flex;align-items:center;gap:12px;padding:10px 28px;
+  border-bottom:1px solid var(--line);cursor:pointer;
+}
+.inst:hover{background:var(--bg)}
+.inst.flagged-exc{background:var(--red-soft)}
+.inst input[type=checkbox]{accent-color:var(--ink);width:15px;height:15px;flex-shrink:0}
+.inst.flagged-exc input{opacity:.35;pointer-events:none}
+.inst-ctx{flex:1;min-width:0;font-size:13px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inst-ctx em{font-style:normal;background:var(--amber-fill);border-radius:2px;padding:0 2px;font-family:var(--mono);font-size:12px;color:var(--ink);font-weight:500}
+.inst-pg{font-family:var(--mono);font-size:10.5px;color:var(--mut);flex-shrink:0;min-width:36px;text-align:right}
+.inst-conf{font-family:var(--mono);font-size:12px;font-weight:700;flex-shrink:0;width:28px;text-align:right}
+.inst-conf.h{color:var(--ink)}.inst-conf.m{color:var(--amber-text)}.inst-conf.l{color:var(--red)}
+.excl-tag{font-size:10px;font-weight:700;color:var(--red-text);background:var(--red-mid);padding:2px 6px;border-radius:4px;flex-shrink:0}
+
+.sh-foot{
+  padding:12px 28px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--sub);
+  background:var(--surface-2);flex-shrink:0;line-height:1.5;
+}
+.sh-foot b{color:var(--ink);font-weight:600}
+kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:4px;padding:1px 6px}
+.back{position:fixed;top:16px;left:16px;font:600 12.5px var(--sans);color:#fff;text-decoration:none;opacity:.85}
+.back:hover{opacity:1}
+</style>
+</head>
+<body>
+<a class="back" href="01_review_stream.html">← Review stream</a>
+
+<div class="sheet" role="dialog" aria-label="Entity bulk review">
+  <div class="sh-head">
+    <div class="sh-eyebrow">Entity bulk · multi-file</div>
+    <div class="sh-title-row">
+      <h1>Yasmine Nienow</h1>
+      <span class="ek">PERSON · SUBJECT OF CASE 24-000117</span>
+      <a class="close" href="01_review_stream.html" aria-label="Close">×</a>
+    </div>
+    <div class="tally">
+      <div class="tally-item"><b>47</b> suggestions across <b>12</b> documents</div>
+      <div class="tally-item ok"><b>47</b> selected to accept</div>
+      <div class="tally-item"><b>0</b> already decided</div>
+      <div class="tally-item warn"><b>0</b> excluded — flagged</div>
+    </div>
+    <div class="scope-row">
+      <button class="scope on" type="button">Entire case<span class="n">47</span></button>
+      <button class="scope" type="button">This document only<span class="n">8</span></button>
+    </div>
+  </div>
+
+  <div class="action-bar">
+    <div class="sel-info">
+      <b>47</b> selected
+      <span class="propagates">Propagates to 12 files</span>
+    </div>
+    <button class="btn accept-btn" type="button">Accept 47 — lay the ink</button>
+    <button class="btn reject-btn" type="button">Reject selected</button>
+  </div>
+
+  <div class="flag-callout">
+    <div class="fc-icon">!</div>
+    <span><b>0</b> flagged items excluded from bulk accept — they require individual decisions. Related but different strings (<b>Nienow Street</b>, <b>Det. C. Nienow</b>) are separate entities and never auto-included.</span>
+  </div>
+
+  <div class="sheet-body">
+    <div class="doc-group">
+      <div class="dg-head">
+        <span class="dg-filename">incident_report_2024-0117.pdf</span>
+        <span class="dg-meta">8 suggestions · 10 pp</span>
+        <span class="dg-select-all">Select all in file</span>
+      </div>
+      <div class="inst">
+        <input type="checkbox" checked>
+        <div class="inst-ctx">…involved party as <em>Yasmine Nienow</em>, DOB 12/23/1999, who had allegedly…</div>
+        <span class="inst-pg">p.3</span>
+        <span class="inst-conf h">98</span>
+      </div>
+      <div class="inst">
+        <input type="checkbox" checked>
+        <div class="inst-ctx">Subject — Full Legal Name: Nienow, <em>Yasmine</em> Danielle</div>
+        <span class="inst-pg">p.1</span>
+        <span class="inst-conf h">97</span>
+      </div>
+      <div class="inst">
+        <input type="checkbox" checked>
+        <div class="inst-ctx">…contact with the subject… confirmed identity… <em>Yasmine Nienow</em>…</div>
+        <span class="inst-pg">p.3</span>
+        <span class="inst-conf h">96</span>
+      </div>
+      <div class="inst">
+        <input type="checkbox" checked>
+        <div class="inst-ctx">…Ms. <em>Nienow</em> was advised of her rights in accordance with Miranda…</div>
+        <span class="inst-pg">p.4</span>
+        <span class="inst-conf h">94</span>
+      </div>
+    </div>
+
+    <div class="doc-group">
+      <div class="dg-head">
+        <span class="dg-filename">consolidated_case_file.pdf</span>
+        <span class="dg-meta">14 suggestions · 110 pp</span>
+        <span class="dg-select-all">Select all in file</span>
+      </div>
+      <div class="inst">
+        <input type="checkbox" checked>
+        <div class="inst-ctx">Subject <em>Yasmine Nienow</em> was advised of her rights…</div>
+        <span class="inst-pg">p.41</span>
+        <span class="inst-conf h">96</span>
+      </div>
+      <div class="inst">
+        <input type="checkbox" checked>
+        <div class="inst-ctx">Booking name: <em>NIENOW, YASMINE D</em></div>
+        <span class="inst-pg">p.2</span>
+        <span class="inst-conf h">99</span>
+      </div>
+      <div class="inst">
+        <input type="checkbox" checked>
+        <div class="inst-ctx">…victim interview of <em>Yasmine Nienow</em> conducted at District 4…</div>
+        <span class="inst-pg">p.67</span>
+        <span class="inst-conf h">95</span>
+      </div>
+    </div>
+
+    <div class="doc-group">
+      <div class="dg-head">
+        <span class="dg-filename">interview_transcript_C.pdf</span>
+        <span class="dg-meta">9 suggestions · 10 pp</span>
+        <span class="dg-select-all">Select all in file</span>
+      </div>
+      <div class="inst">
+        <input type="checkbox" checked>
+        <div class="inst-ctx">Q: When did you last see <em>Yasmine Nienow</em>?</div>
+        <span class="inst-pg">p.2</span>
+        <span class="inst-conf h">97</span>
+      </div>
+      <div class="inst">
+        <input type="checkbox" checked>
+        <div class="inst-ctx">A: I called <em>Yasmine</em> around nine, then she left Maple…</div>
+        <span class="inst-pg">p.5</span>
+        <span class="inst-conf h">91</span>
+      </div>
+    </div>
+
+    <div class="doc-group">
+      <div class="dg-head">
+        <span class="dg-filename">+ 9 more documents</span>
+        <span class="dg-meta">16 suggestions selected</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="sh-foot">
+    Every bulk action writes <b>one audit event per suggestion</b> — who, what, when, prior state.
+    Button count is the contract: <b>Accept 47</b> must equal selected rows. Undo with <kbd>u</kbd> restores all 47 to pending.
+  </div>
+</div>
+</body>
+</html>

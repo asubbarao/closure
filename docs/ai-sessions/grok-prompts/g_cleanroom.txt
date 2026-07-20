@@ -1,0 +1,63 @@
+You are building a take-home submission FROM SCRATCH. Your working directory is
+your ONLY workspace — do not read or reference anything outside it. FIRST read
+the file ASSIGNMENT.txt in your directory THOROUGHLY, top to bottom — it is the
+complete brief and it defines exactly what is being evaluated. Re-read it before
+you make stack and scope decisions. Build the whole thing inside this directory.
+
+WORKING DIRECTORY: {DIR}
+
+HYPERFOCUS: the two things that matter above all else are (1) a genuinely
+WORKING APP — it runs, it's clickable, every interaction actually does something,
+end to end, no dead buttons or stub screens — and (2) exceptional UX. This is a
+redaction-review WORKFLOW tool: a reviewer must blaze through many AI suggestions
+with minimal friction (keyboard-driven, fast triage, obvious state, zero
+confusion). Spend your effort on the interaction design and on making it truly
+work — not on infrastructure, config, or data. If you must trade off, always
+choose "the workflow feels great and works" over breadth or backend polish.
+
+Deliver a REAL, RUNNABLE, working prototype that satisfies the assignment — an
+AI-powered PDF redaction review tool for law enforcement. It must actually run
+and be fully clickable in a browser.
+
+THE PRODUCT IS SIMPLE — do not over-build it. The core loop:
+  1. A PDF with AI-suggested redactions, each carrying a CONFIDENCE score.
+  2. The reviewer works through them in a fast, bulk-capable workflow.
+  3. FALSE POSITIVE handling = remove the suggestion (it should NOT be redacted).
+  4. FALSE NEGATIVE handling = the reviewer ADDS a new redaction the AI missed.
+  5. THE REDACTION ITSELF = the accepted items actually get blacked out / redacted.
+  6. Confidence is shown clearly (e.g. 95% vs 60%) and drives triage/bulk.
+  7. An AUDIT TRAIL records who approved/rejected/added what and when (legal
+     compliance) and is viewable.
+That's the whole thing. Nail this loop, make it feel great and bulk-friendly,
+and make the redaction actually happen. Everything else is secondary.
+
+REQUIREMENTS:
+- TypeScript is required. You have FREE REIN on the rest of the stack (framework,
+  bundler, server, database) — choose what makes the best, most professional,
+  actually-working app. Pick a serverless/embedded DB or equivalent (the
+  assignment allows sqlite or similar) and model the data thoughtfully.
+- Implement the full workflow, not static screens: a main review interface to go
+  through AI suggestions fast (keyboard-friendly), quickly REJECT false positives,
+  ADD missed redactions (false negatives) and bulk-apply them, BULK accept/reject
+  similar items, a MULTI-DOCUMENT workflow, and clear CONFIDENCE display (e.g.
+  95% vs 60%). Include an audit trail (who approved what, when).
+- DO NOT GENERATE FAKE DATA. The sample data (documents, cases, AI suggestions
+  with their confidences, planted false positives/negatives) will be PROVIDED TO
+  YOU LATER. Build the app and its data layer against a clean, well-typed data
+  CONTRACT / fixture interface, with at most a tiny illustrative stub to make it
+  run — do NOT invest in fabricating realistic corpora. Design so the real data
+  drops in by populating that contract. No real ML needed; real PDF parsing
+  optional, not required.
+- ASK QUESTIONS: at the TOP of your final report, list clarifying questions and
+  the assumptions you made. Do not block — pick the best reasonable default and
+  proceed to a working app, but surface what you'd want confirmed.
+- Make it genuinely usable and visually polished: this is graded on UX taste,
+  workflow intuitiveness, code quality/organization, and TESTS (especially
+  frontend tests). Write meaningful tests.
+- Provide a README with exact run instructions. It MUST run with a simple,
+  standard command sequence. VERIFY it actually builds and runs before you finish
+  (install deps, build, start, hit it). Report what you proved.
+
+Keep the code clean, well-organized, and typed (no `any`). Commit-quality. When
+done, print: the stack you chose and why, the file tree, the run command, and the
+evidence that it builds/runs/tests pass.

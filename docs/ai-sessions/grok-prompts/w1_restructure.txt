@@ -1,0 +1,20 @@
+FIRST read: /Users/aloksubbarao/personal/closure/docs/code-quality.md (the
+structure plan) and the shared contract: /private/tmp/claude-501/-Users-aloksubbarao-personal/f15dcc22-ec83-4ec6-a926-096108b96135/scratchpad/contract.md
+Work in /Users/aloksubbarao/personal/closure. You are THE EXCLUSIVE writer of
+server/** and static/** this wave — restructure for professional code quality
+WITHOUT changing behavior:
+1. Split server/routes.sql into per-resource modules: server/routes/pages.sql
+   (HTML page routes + render macros), routes/documents.sql, routes/suggestions.sql,
+   routes/decisions.sql, routes/search.sql, routes/export.sql — each header-
+   commented, one concern each.
+2. Isolate PDF I/O as a module (server/pdf_io.sql): the macros/views that touch
+   pdf_info/read_pdf_words/pdf_redact live there; routes call them.
+3. app.sql = composition root only (extensions, .read modules in order, serve).
+   Apply docs/code-quality.md's layout where sensible (scripts/, config at top).
+4. Follow the repo SQL rules (contract): CTAS for derived data, no SET VARIABLE,
+   no VALUES, INSERT only in mutation handlers as INSERT ... BY NAME.
+5. VERIFY ZERO REGRESSION: boot fresh (/Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned closure.db -c ".read server/app.sql"); every route that returned 200
+   before still returns 200 (sweep /, /cases/1, /documents/1, /documents/3,
+   /cases/1/library, /ui/bulk?entity=1, /ui/reject?doc=1, /ui/add-missed?doc=1,
+   all /api/* incl. POST decision persisting). Fix anything you break.
+Report the new tree, the route sweep results, and any behavior you had to touch.

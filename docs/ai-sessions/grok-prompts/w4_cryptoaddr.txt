@@ -1,0 +1,20 @@
+THE SINGULAR REQUIREMENT of this product: a human must THOROUGHLY get through 800-3000 AI suggestions across 1000+ pages, fast. The funnel: ~3k suggestions -> high-confidence auto-pass + easy bulk groups clear ~2200 -> the human hand-reviews only the residual ~800, GROUPED (names, addresses, patterns) for batch judgment, while also catching false negatives. Everything must serve throughput + auditability.
+FIRST read: /private/tmp/claude-501/-Users-aloksubbarao-personal/f15dcc22-ec83-4ec6-a926-096108b96135/scratchpad/contract.md , docs/ext-survey-detection.md (crypto + us_address_standardizer
+sections), spikes/provenance/. Work in /Users/aloksubbarao/personal/closure.
+Run cmd: /Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned closure.db -c ".read server/app.sql" (own port: sed 8117->8132, /tmp/cryptoaddr.db).
+YOU OWN: server/provenance.sql, server/routes/provenance.sql,
+server/remainder_scan.sql, server/routes/remainder.sql.
+INTEGRATE the two "integrate now" verdicts:
+1. crypto: replace/upgrade the chain-of-custody fingerprints with proper
+   crypto-ext hashes (sha256 of file bytes) at ingest, working-copy, and export;
+   surfaces in the provenance panel + re-check flag.
+2. us_address_standardizer: (a) canonicalize address entities (one entity per
+   standardized address, variants grouped — feeds the funnel's grouping), and
+   (b) address-shaped residual detection in the remainder scan (standardizer
+   recognizes address forms the regex misses).
+Also confirm rapidfuzz stays central to the FN story (misspellings) — it is
+already wired in remainder_scan; extend to fuzzy-group entity VARIANTS (same
+person spelled two ways groups under one canonical entity for bulk).
+VERIFY: boot; show crypto hashes in provenance; show a standardized-address
+entity grouping variants; show an address residual hit; show a fuzzy-grouped
+name variant. Report evidence.

@@ -1,0 +1,41 @@
+dict_size,method,iter,elapsed_ms,hits,notes
+10000,hash_join,1,3.000,61310,grams JOIN dict ON text_norm
+10000,hash_join,2,3.000,61310,grams JOIN dict ON text_norm
+10000,hash_join,3,3.000,61310,grams JOIN dict ON text_norm
+10000,hash_join,4,3.000,61310,grams JOIN dict ON text_norm
+10000,hash_join,5,2.000,61310,grams JOIN dict ON text_norm
+10000,hash_semijoin,1,2.000,61310,WHERE text_norm IN (SELECT FROM dict)
+10000,hash_semijoin,2,2.000,61310,WHERE text_norm IN (SELECT FROM dict)
+10000,hash_semijoin,3,2.000,61310,WHERE text_norm IN (SELECT FROM dict)
+10000,hash_semijoin,4,2.000,61310,WHERE text_norm IN (SELECT FROM dict)
+10000,hash_semijoin,5,2.000,61310,WHERE text_norm IN (SELECT FROM dict)
+10000,marisa_build_only,1,3.000,36104,SELECT octet_length(marisa_trie(text_norm)) FROM dict
+10000,marisa_build_only,2,3.000,36104,SELECT octet_length(marisa_trie(text_norm)) FROM dict
+10000,marisa_build_only,3,3.000,36104,SELECT octet_length(marisa_trie(text_norm)) FROM dict
+10000,marisa_build_plus_lookup,1,483.000,61310,inline marisa_trie + lookup (no reuse)
+10000,marisa_build_plus_lookup,2,494.000,61310,inline marisa_trie + lookup (no reuse)
+10000,marisa_lookup,1,485.000,61310,"marisa_lookup(prebuilt_trie, text_norm) [build excluded]"
+10000,marisa_lookup,2,482.000,61310,"marisa_lookup(prebuilt_trie, text_norm) [build excluded]"
+10000,marisa_lookup,3,479.000,61310,"marisa_lookup(prebuilt_trie, text_norm) [build excluded]"
+10000,marisa_lookup,4,482.000,61310,"marisa_lookup(prebuilt_trie, text_norm) [build excluded]"
+10000,marisa_lookup,5,483.000,61310,"marisa_lookup(prebuilt_trie, text_norm) [build excluded]"
+100000,hash_join,1,8.000,69410,grams JOIN dict ON text_norm
+100000,hash_join,2,8.000,69410,grams JOIN dict ON text_norm
+100000,hash_join,3,8.000,69410,grams JOIN dict ON text_norm
+100000,hash_join,4,8.000,69410,grams JOIN dict ON text_norm
+100000,hash_join,5,8.000,69410,grams JOIN dict ON text_norm
+100000,hash_semijoin,1,8.000,69410,WHERE text_norm IN (SELECT FROM dict)
+100000,hash_semijoin,2,8.000,69410,WHERE text_norm IN (SELECT FROM dict)
+100000,hash_semijoin,3,9.000,69410,WHERE text_norm IN (SELECT FROM dict)
+100000,hash_semijoin,4,8.000,69410,WHERE text_norm IN (SELECT FROM dict)
+100000,hash_semijoin,5,8.000,69410,WHERE text_norm IN (SELECT FROM dict)
+100000,marisa_build_only,1,25.000,296440,SELECT octet_length(marisa_trie(text_norm)) FROM dict
+100000,marisa_build_only,2,25.000,296440,SELECT octet_length(marisa_trie(text_norm)) FROM dict
+100000,marisa_build_only,3,24.000,296440,SELECT octet_length(marisa_trie(text_norm)) FROM dict
+100000,marisa_build_plus_lookup,1,513.000,69410,inline marisa_trie + lookup (no reuse)
+100000,marisa_build_plus_lookup,2,509.000,69410,inline marisa_trie + lookup (no reuse)
+100000,marisa_lookup,1,488.000,69410,"marisa_lookup(prebuilt_trie, text_norm) [build excluded]"
+100000,marisa_lookup,2,486.000,69410,"marisa_lookup(prebuilt_trie, text_norm) [build excluded]"
+100000,marisa_lookup,3,489.000,69410,"marisa_lookup(prebuilt_trie, text_norm) [build excluded]"
+100000,marisa_lookup,4,488.000,69410,"marisa_lookup(prebuilt_trie, text_norm) [build excluded]"
+100000,marisa_lookup,5,485.000,69410,"marisa_lookup(prebuilt_trie, text_norm) [build excluded]"

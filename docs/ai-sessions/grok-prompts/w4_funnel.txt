@@ -1,0 +1,20 @@
+THE SINGULAR REQUIREMENT of this product: a human must THOROUGHLY get through 800-3000 AI suggestions across 1000+ pages, fast. The funnel: ~3k suggestions -> high-confidence auto-pass + easy bulk groups clear ~2200 -> the human hand-reviews only the residual ~800, GROUPED (names, addresses, patterns) for batch judgment, while also catching false negatives. Everything must serve throughput + auditability.
+FIRST read: /private/tmp/claude-501/-Users-aloksubbarao-personal/f15dcc22-ec83-4ec6-a926-096108b96135/scratchpad/contract.md and docs/workflow-improvements.md and docs/punch-list.md in
+/Users/aloksubbarao/personal/closure. Run cmd: /Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned closure.db -c ".read server/app.sql" (verify on your own port:
+sed 8117->8131 into /tmp/boot_funnel.sql and use /tmp/funnel.db).
+YOU OWN: server/routes/triage.sql (NEW), server/templates/review.html + any new
+partials triage_*.html, static/review.js, minimal .read in app.sql.
+BUILD THE TRIAGE FUNNEL as the review surface's organizing principle:
+1. A funnel header: total -> auto-passable (high-conf >= threshold + bulk-eligible
+   groups) -> residual needing human eyes. One button: "Accept all N high-
+   confidence" (excludes flagged, obviously). Threshold adjustable (slider or
+   presets) with live counts.
+2. The residual queue GROUPED for batch judgment: by entity, by kind, by repeated
+   pattern — group headers with accept/reject-group actions and per-instance
+   exceptions. The reviewer's unit of work is the GROUP, not the row.
+3. Apply docs/workflow-improvements.md's top ranked fixes (scope-selection
+   ergonomics etc.).
+4. Keyboard-first throughout; progress = "N of 3k resolved, M residual left".
+VERIFY: boot; with the current corpus prove the funnel math (counts add up), the
+one-button high-conf pass works and excludes flagged, group actions fan out with
+one audit batch each. Report evidence + before/after suggestion counts.

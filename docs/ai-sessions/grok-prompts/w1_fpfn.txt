@@ -1,0 +1,27 @@
+FIRST read the shared contract: /private/tmp/claude-501/-Users-aloksubbarao-personal/f15dcc22-ec83-4ec6-a926-096108b96135/scratchpad/contract.md
+Work in /Users/aloksubbarao/personal/closure. You OWN samples/gen/**, samples/*.pdf,
+samples/identities.json, samples/manifest.json, samples/messy/**, and
+scripts/generate-samples.sh. Do NOT edit server/, templates/, static/, docs/.
+
+MISSION: sample-data generation done the SMART way (this repo is graded on code
+quality; nothing bespoke or hand-typed):
+1. Pure DuckDB generator (samples/gen/generate.sql + thin scripts/generate-samples.sh
+   wrapper): fakeit for identities, the pdf extension's write_pdf / COPY (FORMAT pdf)
+   for the PDFs. NO python, NO typst — delete generate.py/report.typ if still present.
+   Parameterized: N cases, docs per case (arg/env), NOT hardcoded to one case.
+2. FALSE POSITIVES/NEGATIVES ARISE FROM THE DATA, NOT A PLANTS TABLE: the
+   generated narratives must (a) reuse roster surnames as street names, case
+   citations, and officers-of-record (the detector will over-match these at low
+   confidence — FPs), and (b) write some real PII in VARIANT forms the canonical
+   matcher misses (SSN with spaces/dots, a misspelled witness name, dotted
+   phone) — FNs, later caught by the remainder-scan. The app must NEVER read an
+   answer key at runtime; manifest.json exists only as TEST ground truth.
+3. MESSY PDFs under samples/messy/ (image-only/scanned, encrypted, truncated,
+   rotated, CJK) with a manifest of what each stresses.
+4. VERIFY end-to-end: run scripts/generate-samples.sh fresh; pdf_info the outputs;
+   prove via read_pdf_words that the variant-form PII strings exist in the PDFs;
+   boot the app (/Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned closure.db -c ".read server/app.sql") and confirm ingest+seed still work (boot summary counts)
+   and that the detector does NOT match the variant forms.
+Keep identities.json/manifest.json schema compatible with server/ingest.sql +
+server/seed.sql (read them first; do not edit them). Report generation command,
+params, counts, and the FP/FN proof.

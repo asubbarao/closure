@@ -1,0 +1,17 @@
+Head-to-head tradeoff analysis. READ anything; WRITE ONLY
+/Users/aloksubbarao/personal/closure/docs/tradeoff-analysis.md.
+COMPARE the shipped app (/Users/aloksubbarao/personal/closure — one DuckDB
+process: quackapi HTTP + pdf ext + tera; boot it:
+/Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned closure.db -c ".read server/app.sql"
+:8117) AGAINST the three clean-room control implementations
+(/Users/aloksubbarao/personal/closure-cleanroom/attempt-1,2,3 — Next.js/React/TS;
+build+run each; read docs/review-cleanroom.md first for prior findings).
+Assess BOTH directions honestly, axis by axis with evidence (run things, count
+things): working end-to-end completeness vs the assignment's flows; throughput
+UX for 1000+ suggestions (the singular requirement); real PDF handling (words/
+coords/redaction/scans) vs simulated; code quality + structure; tests; deploy/
+run simplicity (clone->run); memory/scale behavior on large docs; risk (unsigned
+ext, single-writer) vs conventional-stack risk; and "what a grader would think"
+for each. Include a scoring table, a verdict (which to submit and why), and the
+best 3-5 things worth porting from the cleanroom apps into the DuckDB app (with
+file pointers). No home-team bias — if the cleanroom wins an axis, say it.

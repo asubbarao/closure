@@ -1,0 +1,33 @@
+Harden the REDACTION correctness of the app at /Users/aloksubbarao/personal/closure.
+This is a legal redaction tool — the #1 real-world failure is a black box that
+covers text but leaves it extractable. YOU OWN: server/pdf_io.sql, server/routes/export.sql,
+server/pdf_store.sql, and a NEW docs/redaction-safety.md. Boot: $RUN (own port:
+sed 8117->8151, /tmp/redsafe.db). The community pdf ext (INSTALL pdf FROM community)
+has pdf_redact(input, output, LIST({page,x,y,w,h})) — a TABLE function (call in
+FROM; box list must be materialized, not an inline subquery).
+
+PROVE + HARDEN (write each result into docs/redaction-safety.md):
+1. TRUE REMOVAL (verified already: redact 'X' -> read_pdf_words finds 0). Confirm
+   for MULTI-word spans, MULTI-page, MULTIPLE boxes at once, and overlapping boxes.
+   Also verify the text is gone from the raw PDF bytes, not just from read_pdf_words
+   (grep the output file for the plaintext; pdf_to_png the region shows a bar).
+2. COORDINATE CORRECTNESS: read_pdf_words is TOP-LEFT origin; pdf_redact expects
+   its box space (confirm which — earlier work found bottom-left: y = pageHeight - y1).
+   Prove a redaction lands EXACTLY on the target word (pdf_to_png before/after,
+   or re-extract and confirm ONLY the target vanished, neighbors intact). The app
+   must convert in exactly ONE place — verify server/pdf_io.sql does it right.
+3. THE MODEL (the author's design): the append-only decision log is source of
+   truth; the redacted PDF is a PURE PROJECTION regenerated in ONE bulk pdf_redact
+   pass over ALL accepted boxes — never incremental edits to the PDF. Confirm
+   export + working-copy do exactly this (regenerate from source each time, not
+   mutate). If not, fix it.
+4. SCANNED/IMAGE PDFS: pdf_redact on an image-only page — does it still cover the
+   region (raster redaction)? A scan's PII is pixels; confirm the box burns into
+   the image, and document the OCR-find + raster-redact path.
+5. EDGE CASES + SAFETY RAILS: empty box list (no-op, don't corrupt), box outside
+   page bounds, 0-area box, redacting an already-redacted file, huge box count.
+   Add guards. Confirm the export "blocked while flagged" path writes NOTHING.
+6. FINAL PROOF: full export of a case -> for EVERY accepted suggestion string,
+   read_pdf over the output finds 0 occurrences; a rejected/kept string still
+   present. One assertion query that proves the whole export is clean.
+Report the safety matrix + any bug you fixed. This is graded correctness — be thorough.

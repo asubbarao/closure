@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Closure — Audit trail · CASE 24-000117</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F4F5F6; --surface:#FFFFFF; --surface-2:#F9FAFB;
+  --ink:#191B1E; --sub:#5A5F66; --mut:#878C93; --ink-inv:#FFFFFF;
+  --line:#E4E6E9; --line-strong:#C9CCD1;
+  --amber-fill:rgba(252,196,25,.32); --amber-fill-strong:rgba(252,196,25,.55);
+  --amber-edge:#D99A06; --amber-text:#8A6A00; --amber-bg:#FFFBEE;
+  --red:#C03221; --red-soft:rgba(192,50,33,.07); --red-mid:rgba(192,50,33,.16); --red-text:#A02A1C;
+  --ok:#2F7D46; --ok-soft:rgba(47,125,70,.10);
+  --cur:#1D63ED; --cur-soft:rgba(29,99,237,.08);
+  --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --r-sm:5px; --r-md:8px; --r-lg:12px;
+  --shadow-panel:0 1px 3px rgba(25,27,30,.08),0 4px 12px rgba(25,27,30,.06);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;font-feature-settings:"tnum";min-height:100vh}
+
+.top{display:flex;align-items:center;gap:14px;height:52px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:100}
+.brand{font-weight:700;font-size:15px;flex-shrink:0}.brand span{color:var(--amber-edge)}
+.top-div{width:1px;height:20px;background:var(--line);flex-shrink:0}
+.crumb{display:flex;align-items:baseline;gap:7px;min-width:0}
+.crumb .case{font-family:var(--mono);font-size:11.5px;color:var(--sub)}
+.crumb .sep{color:var(--mut)}
+.crumb .doc{font-weight:600;font-size:13px}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.who{font-size:12.5px;color:var(--sub)}.who b{color:var(--ink);font-weight:600}
+.btn{font:inherit;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn.ghost{border-color:transparent;color:var(--sub)}
+
+.wrap{max-width:1100px;margin:0 auto;padding:28px 24px 80px}
+
+.page-head{display:flex;align-items:flex-start;gap:24px;margin-bottom:20px}
+.page-head h1{font-size:22px;font-weight:700;letter-spacing:-.02em}
+.page-head .sub{font-size:13px;color:var(--sub);margin-top:5px;line-height:1.5;max-width:520px}
+.page-head .sub b{font-family:var(--mono);color:var(--ink);font-weight:600}
+.ph-stats{margin-left:auto;display:flex;gap:20px;flex-shrink:0;text-align:right}
+.stat .v{font-family:var(--mono);font-size:22px;font-weight:600;display:block;line-height:1.1}
+.stat .v.ok{color:var(--ok)}.stat .v.rej{color:var(--red)}.stat .v.add{color:var(--cur)}
+.stat .l{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin-top:3px}
+
+/* Integrity banner */
+.integrity{
+  display:flex;align-items:center;gap:12px;
+  padding:12px 16px;margin-bottom:18px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);
+  box-shadow:var(--shadow-panel);font-size:12.5px;color:var(--sub);
+}
+.integrity .hash{
+  font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);
+  background:var(--surface-2);padding:4px 10px;border-radius:var(--r-sm);border:1px solid var(--line);
+}
+.integrity .seal{margin-left:auto;display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ok);font-size:12px}
+.seal-dot{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+
+/* Filters */
+.filters{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:12px 14px;margin-bottom:14px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);
+}
+.f-label{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin-right:4px}
+.fchip{font:inherit;font-size:12px;font-weight:600;padding:5px 11px;border-radius:16px;border:1px solid var(--line-strong);background:var(--surface);color:var(--sub);cursor:pointer}
+.fchip.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.fchip.acc.on{background:var(--ok);border-color:var(--ok)}
+.fchip.rej.on{background:var(--red);border-color:var(--red)}
+.fchip.add.on{background:var(--cur);border-color:var(--cur)}
+.search{
+  margin-left:auto;display:flex;align-items:center;gap:8px;
+  padding:6px 12px;border:1px solid var(--line-strong);border-radius:var(--r-md);
+  background:var(--surface-2);min-width:220px;
+}
+.search input{
+  border:none;background:transparent;font:inherit;font-size:12.5px;color:var(--ink);outline:none;width:100%;
+}
+.search input::placeholder{color:var(--mut)}
+.search .sk{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line);padding:1px 5px;border-radius:3px}
+
+/* Log table card */
+.log-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-panel);overflow:hidden}
+
+.day-head{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 18px;background:var(--surface-2);border-bottom:1px solid var(--line);
+  font-size:12px;font-weight:700;color:var(--sub);
+  position:sticky;top:52px;z-index:5;
+}
+.day-head .dd{font-family:var(--mono);font-size:11.5px;color:var(--ink)}
+.day-head .dc{margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--mut)}
+
+.row{
+  display:grid;
+  grid-template-columns:56px 88px 1fr 120px 100px;
+  gap:12px;align-items:baseline;
+  padding:11px 18px;border-bottom:1px solid var(--line);
+  font-size:12.5px;
+}
+.row:last-child{border-bottom:none}
+.row:hover{background:var(--bg)}
+.row.highlight{background:var(--amber-bg)}
+
+.t{font-family:var(--mono);font-size:11.5px;color:var(--mut);font-weight:500}
+.verb{font-weight:700;font-size:12px;text-transform:lowercase}
+.verb.acc{color:var(--ok)}
+.verb.rej{color:var(--red)}
+.verb.add{color:var(--cur)}
+.verb.det{color:var(--sub)}
+.verb.exp{color:var(--ink)}
+.verb.und{color:var(--amber-text)}
+
+.body{color:var(--sub);min-width:0;line-height:1.45}
+.body b{font-family:var(--mono);font-weight:600;color:var(--ink);font-size:12px}
+.body .detail{color:var(--mut);font-size:12px}
+.doc-chip{font-family:var(--mono);font-size:10.5px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.actor{font-size:12px;font-weight:600;color:var(--ink);text-align:right}
+
+/* Chain / prior state micro */
+.prior{
+  grid-column:2 / -1;
+  margin-top:-4px;margin-bottom:2px;padding:0 0 8px 0;
+  font-family:var(--mono);font-size:10.5px;color:var(--mut);
+  display:none;
+}
+.row:hover .prior,.row.expanded .prior{display:block}
+.prior b{color:var(--sub);font-weight:600}
+
+/* Footer integrity */
+.log-foot{
+  padding:14px 18px;background:var(--surface-2);border-top:1px solid var(--line);
+  display:flex;align-items:center;gap:16px;font-size:12px;color:var(--sub);
+}
+.log-foot b{font-family:var(--mono);color:var(--ink);font-weight:600}
+.log-foot .export-log{margin-left:auto;font-weight:600;color:var(--cur);cursor:pointer}
+
+/* Side note */
+.side-note{
+  margin-top:18px;padding:14px 16px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);
+  font-size:12.5px;color:var(--sub);line-height:1.55;
+}
+.side-note strong{color:var(--ink);font-weight:600}
+.side-note code{font-family:var(--mono);font-size:11.5px;background:var(--surface-2);padding:1px 6px;border-radius:3px;border:1px solid var(--line)}
+
+.keys{margin-top:20px;display:flex;flex-wrap:wrap;gap:8px 16px;font-size:11.5px;color:var(--sub);justify-content:center}
+.keys span{display:inline-flex;gap:5px;align-items:center}
+kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:4px;padding:1px 6px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">Closure<span>.</span></div>
+  <div class="top-div"></div>
+  <div class="crumb">
+    <span class="case">CASE 24-000117</span>
+    <span class="sep">/</span>
+    <span class="doc">Audit trail</span>
+  </div>
+  <div class="top-right">
+    <span class="who">Reviewing as <b>A. Subbarao</b></span>
+    <button class="btn ghost">← Case dashboard</button>
+    <button class="btn primary" disabled title="Flagged items unresolved">Export redacted case…</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="page-head">
+    <div>
+      <h1>Decision log</h1>
+      <div class="sub">
+        Tamper-evident record of who decided what and when.
+        Written in the same vocabulary as the buttons that caused each entry —
+        <b>accepted</b>, <b>rejected</b>, <b>added</b> — never synonyms.
+      </div>
+    </div>
+    <div class="ph-stats">
+      <div class="stat"><span class="v">366</span><div class="l">Events today</div></div>
+      <div class="stat"><span class="v ok">320</span><div class="l">Accepted</div></div>
+      <div class="stat"><span class="v rej">46</span><div class="l">Rejected</div></div>
+      <div class="stat"><span class="v add">2</span><div class="l">Reviewer-added</div></div>
+    </div>
+  </div>
+
+  <div class="integrity">
+    <span style="font-weight:600;color:var(--ink)">Chain head</span>
+    <span class="hash">sha256:7c3a…f91e · block 366 · 2024-01-17T14:34:12Z</span>
+    <span style="color:var(--mut);font-size:12px">Append-only · prior hash links each event</span>
+    <span class="seal"><span class="seal-dot"></span> Integrity verified</span>
+  </div>
+
+  <div class="filters">
+    <span class="f-label">Filter</span>
+    <button class="fchip on">All</button>
+    <button class="fchip acc">Accepted</button>
+    <button class="fchip rej">Rejected</button>
+    <button class="fchip add">Added missed</button>
+    <button class="fchip">Entity bulk</button>
+    <button class="fchip">Export</button>
+    <button class="fchip">A. Subbarao</button>
+    <div class="search">
+      <input type="text" placeholder="Search object text…" value="">
+      <span class="sk">/</span>
+    </div>
+  </div>
+
+  <div class="log-card">
+
+    <div class="day-head">
+      <span class="dd">2024-01-17</span>
+      <span>Session · A. Subbarao · desktop · case 24-000117</span>
+      <span class="dc">366 events · last 14:34</span>
+    </div>
+
+    <!-- Rows follow copy.md: {hh:mm} {verb} {object} — {detail} · {actor} -->
+    <div class="row highlight expanded">
+      <span class="t">14:34</span>
+      <span class="verb add">added</span>
+      <span class="body">missed redaction on <b>incident_report_2024-0117 p.6</b> — <b>"(266) 458-3812"</b> <span class="detail">(phone, reviewer-added · reason: missed by AI)</span></span>
+      <span class="doc-chip">incident_report…</span>
+      <span class="actor">A. Subbarao</span>
+      <div class="prior">prior: none · born accepted · scope: this instance only · event_id evt_0x7c3a</div>
+    </div>
+
+    <div class="row">
+      <span class="t">14:32</span>
+      <span class="verb acc">accepted</span>
+      <span class="body">entity <b>Robyn Price</b> case-wide — <b>31</b> instances across <b>5</b> documents <span class="detail">· lay the ink</span></span>
+      <span class="doc-chip">5 documents</span>
+      <span class="actor">A. Subbarao</span>
+      <div class="prior">prior: pending ×31 · bulk entity · event_id evt_0x7c2f…7c4d (31 linked)</div>
+    </div>
+
+    <div class="row">
+      <span class="t">14:31</span>
+      <span class="verb rej">rejected</span>
+      <span class="body"><b>"Nienow Street"</b> ×9 — matched PERSON, is a street name <span class="detail">· reason: not PII · 3 documents</span></span>
+      <span class="doc-chip">3 documents</span>
+      <span class="actor">A. Subbarao</span>
+      <div class="prior">prior: pending · confidence 71 · pattern PERSON · event_id evt_0x7c1a…7c22</div>
+    </div>
+
+    <div class="row">
+      <span class="t">14:28</span>
+      <span class="verb add">added</span>
+      <span class="body">missed redaction <b>supplemental_report_A p.4</b> — <b>"280 96 9531"</b> <span class="detail">(spaced SSN variant · find &amp; redact all · 7 matches)</span></span>
+      <span class="doc-chip">supplemental…</span>
+      <span class="actor">A. Subbarao</span>
+      <div class="prior">prior: none · born accepted · scope: case-wide matches · event_id evt_0x7bf1</div>
+    </div>
+
+    <div class="row">
+      <span class="t">14:26</span>
+      <span class="verb acc">accepted</span>
+      <span class="body"><b>"5024 Island Ton, Carissaton"</b> — address entity case-wide · <b>27</b> instances <span class="detail">· lay the ink</span></span>
+      <span class="doc-chip">4 documents</span>
+      <span class="actor">A. Subbarao</span>
+    </div>
+
+    <div class="row">
+      <span class="t">14:24</span>
+      <span class="verb acc">accepted</span>
+      <span class="body"><b>"280-96-9531"</b> on <b>incident_report_2024-0117 p.3</b> <span class="detail">· SSN · confidence 97 · prior: pending</span></span>
+      <span class="doc-chip">incident_report…</span>
+      <span class="actor">A. Subbarao</span>
+    </div>
+
+    <div class="row">
+      <span class="t">14:23</span>
+      <span class="verb und">restored</span>
+      <span class="body">to pending — <b>"12/23/1999"</b> <span class="detail">· undo of accept · within undo window</span></span>
+      <span class="doc-chip">incident_report…</span>
+      <span class="actor">A. Subbarao</span>
+      <div class="prior">undo of evt_0x7bd0 · prior state restored: pending</div>
+    </div>
+
+    <div class="row">
+      <span class="t">14:22</span>
+      <span class="verb acc">accepted</span>
+      <span class="body"><b>"12/23/1999"</b> on <b>incident_report_2024-0117 p.3</b> <span class="detail">· DOB · confidence 82</span></span>
+      <span class="doc-chip">incident_report…</span>
+      <span class="actor">A. Subbarao</span>
+    </div>
+
+    <div class="row">
+      <span class="t">14:18</span>
+      <span class="verb acc">accepted</span>
+      <span class="body">entity <b>Yasmine Nienow</b> — partial bulk · <b>41</b> of 128 selected <span class="detail">· 5 flagged excluded from bulk</span></span>
+      <span class="doc-chip">5 documents</span>
+      <span class="actor">A. Subbarao</span>
+    </div>
+
+    <div class="row">
+      <span class="t">14:12</span>
+      <span class="verb rej">rejected</span>
+      <span class="body"><b>"Nienow v. Ohio"</b> on <b>consolidated_case_file p.71</b> <span class="detail">· reason: case citation · not PII · confidence 55</span></span>
+      <span class="doc-chip">consolidated…</span>
+      <span class="actor">A. Subbarao</span>
+    </div>
+
+    <div class="row">
+      <span class="t">14:05</span>
+      <span class="verb acc">accepted</span>
+      <span class="body">HIGH band bulk-verify on <b>case_summary</b> — <b>18</b> suggestions ≥90 <span class="detail">· document signed off</span></span>
+      <span class="doc-chip">case_summary</span>
+      <span class="actor">A. Subbarao</span>
+    </div>
+
+    <div class="row">
+      <span class="t">13:58</span>
+      <span class="verb acc">accepted</span>
+      <span class="body">HIGH band bulk-verify on <b>interview_transcript_C</b> — <b>29</b> suggestions ≥90</span>
+      <span class="doc-chip">interview…</span>
+      <span class="actor">A. Subbarao</span>
+    </div>
+
+    <div class="row">
+      <span class="t">13:51</span>
+      <span class="verb acc">accepted</span>
+      <span class="body">HIGH band bulk-verify on <b>supplemental_report_A</b> — <b>28</b> suggestions ≥90</span>
+      <span class="doc-chip">supplemental…</span>
+      <span class="actor">A. Subbarao</span>
+    </div>
+
+    <div class="row">
+      <span class="t">13:40</span>
+      <span class="verb det">detected</span>
+      <span class="body"><b>487</b> suggestions · <b>11</b> entities · <b>5</b> documents · model v2.4 <span class="detail">· AI detection completed in 1.4 s</span></span>
+      <span class="doc-chip">case-wide</span>
+      <span class="actor">system</span>
+    </div>
+
+    <div class="row">
+      <span class="t">13:39</span>
+      <span class="verb det">imported</span>
+      <span class="body">case opened — <b>5</b> documents · 150 pages · samples/*.pdf</span>
+      <span class="doc-chip">case-wide</span>
+      <span class="actor">A. Subbarao</span>
+    </div>
+
+    <div class="log-foot">
+      <span>Showing <b>15</b> of <b>366</b> events</span>
+      <span>·</span>
+      <span>Oldest first within session · newest at top</span>
+      <span class="export-log">Export log as CSV →</span>
+    </div>
+  </div>
+
+  <div class="side-note">
+    <strong>Legal compliance model.</strong> Each decision is an append-only event: actor, verb, object (quoted verbatim),
+    timestamp (UTC), document/page, prior state, and confidence when relevant. Undo writes a new event that restores
+    prior state — it never rewrites history. After export, undo is refused:
+    <code>Can't undo — already exported. Add a new decision instead.</code>
+  </div>
+
+  <div class="keys">
+    <span><kbd>/</kbd> focus search</span>
+    <span><kbd>j</kbd><kbd>k</kbd> next / prev event</span>
+    <span><kbd>Enter</kbd> expand prior state</span>
+    <span><kbd>Esc</kbd> back to dashboard</span>
+  </div>
+
+</div>
+</body>
+</html>

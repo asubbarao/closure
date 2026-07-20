@@ -1,0 +1,157 @@
+{
+  "timings": [
+    {
+      "dict_size": 10000,
+      "method": "hash_join",
+      "ms_min": 2.0,
+      "ms_max": 3.0,
+      "ms_median": 3.0,
+      "ms_mean": 2.8,
+      "n_iters": 5,
+      "hits": 61310,
+      "x_vs_hash_join": 1.0,
+      "vs_join": "baseline"
+    },
+    {
+      "dict_size": 10000,
+      "method": "hash_semijoin",
+      "ms_min": 2.0,
+      "ms_max": 2.0,
+      "ms_median": 2.0,
+      "ms_mean": 2.0,
+      "n_iters": 5,
+      "hits": 61310,
+      "x_vs_hash_join": 0.67,
+      "vs_join": "faster"
+    },
+    {
+      "dict_size": 10000,
+      "method": "marisa_build_only",
+      "ms_min": 3.0,
+      "ms_max": 3.0,
+      "ms_median": 3.0,
+      "ms_mean": 3.0,
+      "n_iters": 3,
+      "hits": 36104,
+      "x_vs_hash_join": 1.0,
+      "vs_join": "roughly_equal"
+    },
+    {
+      "dict_size": 10000,
+      "method": "marisa_build_plus_lookup",
+      "ms_min": 483.0,
+      "ms_max": 494.0,
+      "ms_median": 488.5,
+      "ms_mean": 488.5,
+      "n_iters": 2,
+      "hits": 61310,
+      "x_vs_hash_join": 162.83,
+      "vs_join": "slower"
+    },
+    {
+      "dict_size": 10000,
+      "method": "marisa_lookup",
+      "ms_min": 479.0,
+      "ms_max": 485.0,
+      "ms_median": 482.0,
+      "ms_mean": 482.2,
+      "n_iters": 5,
+      "hits": 61310,
+      "x_vs_hash_join": 160.67,
+      "vs_join": "slower"
+    },
+    {
+      "dict_size": 100000,
+      "method": "hash_join",
+      "ms_min": 8.0,
+      "ms_max": 8.0,
+      "ms_median": 8.0,
+      "ms_mean": 8.0,
+      "n_iters": 5,
+      "hits": 69410,
+      "x_vs_hash_join": 1.0,
+      "vs_join": "baseline"
+    },
+    {
+      "dict_size": 100000,
+      "method": "hash_semijoin",
+      "ms_min": 8.0,
+      "ms_max": 9.0,
+      "ms_median": 8.0,
+      "ms_mean": 8.2,
+      "n_iters": 5,
+      "hits": 69410,
+      "x_vs_hash_join": 1.0,
+      "vs_join": "roughly_equal"
+    },
+    {
+      "dict_size": 100000,
+      "method": "marisa_build_only",
+      "ms_min": 24.0,
+      "ms_max": 25.0,
+      "ms_median": 25.0,
+      "ms_mean": 24.667,
+      "n_iters": 3,
+      "hits": 296440,
+      "x_vs_hash_join": 3.12,
+      "vs_join": "slower"
+    },
+    {
+      "dict_size": 100000,
+      "method": "marisa_build_plus_lookup",
+      "ms_min": 509.0,
+      "ms_max": 513.0,
+      "ms_median": 511.0,
+      "ms_mean": 511.0,
+      "n_iters": 2,
+      "hits": 69410,
+      "x_vs_hash_join": 63.88,
+      "vs_join": "slower"
+    },
+    {
+      "dict_size": 100000,
+      "method": "marisa_lookup",
+      "ms_min": 485.0,
+      "ms_max": 489.0,
+      "ms_median": 488.0,
+      "ms_mean": 487.2,
+      "n_iters": 5,
+      "hits": 69410,
+      "x_vs_hash_join": 61.0,
+      "vs_join": "slower"
+    }
+  ],
+  "correctness": [
+    {
+      "dict_size": 10000,
+      "hash_join_hits": 61310,
+      "hash_semijoin_hits": 61310,
+      "marisa_lookup_hits": 61310,
+      "all_agree": true
+    },
+    {
+      "dict_size": 100000,
+      "hash_join_hits": 69410,
+      "hash_semijoin_hits": 69410,
+      "marisa_lookup_hits": 69410,
+      "all_agree": true
+    }
+  ],
+  "corpus": {
+    "n_words": 464390,
+    "n_grams": 1674380,
+    "n_grams_uniq": 6743,
+    "n_dict_10k": 10000,
+    "n_dict_100k": 100000,
+    "word_repeats": 10,
+    "plant_phrases": 200,
+    "trie_10k_bytes": 36104,
+    "trie_100k_bytes": 296440,
+    "dict_10k_text_bytes": "135598",
+    "dict_100k_text_bytes": "1346459",
+    "grams_text_bytes": "25094020",
+    "duckdb_version": "v1.5.3",
+    "threads": 4,
+    "memory_limit": "3.7 GiB"
+  }
+}

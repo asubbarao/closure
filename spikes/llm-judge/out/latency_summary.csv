@@ -1,0 +1,4 @@
+judge_key,model,call_path,n,avg_ms,min_ms,max_ms,n_agree_expected,n_agree_det,pct_agree_expected,pct_agree_det
+llama32_ai_classify,llama3.2:3b,ai_classify,11,,,,7,7,63.6,63.6
+llama32_foia,llama3.2:3b,http_generate,11,333.5,289.582542,390.023208,9,9,81.8,81.8
+qwen25_brief,qwen2.5:7b,http_generate,11,465.7,375.499292,566.833958,11,11,100.0,100.0

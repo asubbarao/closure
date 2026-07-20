@@ -1,0 +1,387 @@
+[
+  {
+    "suggestion_id": 146,
+    "pick": "flagged_citation",
+    "text": "Feeney v. Ohio,",
+    "kind": "CITATION \u00b7 NOT PII",
+    "context": "location Feeney Street and legal reference Feeney v. Ohio, 387 U.S. 93 (1990). Continuing activity",
+    "seed_confidence": 59,
+    "flag_tag": "false_positive",
+    "seed_reason": "published case citation",
+    "band": "flagged",
+    "panel_signal": "agree",
+    "panel_confidence": 11,
+    "judge_band": "flagged",
+    "det_majority": "keep",
+    "votes": [
+      {
+        "judge_name": "Pattern",
+        "verdict": "keep",
+        "score": 89,
+        "reason": "citation form, not subject PII"
+      },
+      {
+        "judge_name": "Context",
+        "verdict": "keep",
+        "score": 91,
+        "reason": "citation wording in surrounding text"
+      },
+      {
+        "judge_name": "Prior",
+        "verdict": "keep",
+        "score": 87,
+        "reason": "citation prior: keep"
+      }
+    ]
+  },
+  {
+    "suggestion_id": 74,
+    "pick": "flagged_citation",
+    "text": "Schmidt v. Ohio,",
+    "kind": "CITATION \u00b7 NOT PII",
+    "context": "the subject raised the applicability of Schmidt v. Ohio, 424 U.S. 146 (1990), with respect",
+    "seed_confidence": 56,
+    "flag_tag": "false_positive",
+    "seed_reason": "published case citation",
+    "band": "flagged",
+    "panel_signal": "agree",
+    "panel_confidence": 11,
+    "judge_band": "flagged",
+    "det_majority": "keep",
+    "votes": [
+      {
+        "judge_name": "Pattern",
+        "verdict": "keep",
+        "score": 89,
+        "reason": "citation form, not subject PII"
+      },
+      {
+        "judge_name": "Context",
+        "verdict": "keep",
+        "score": 91,
+        "reason": "citation wording in surrounding text"
+      },
+      {
+        "judge_name": "Prior",
+        "verdict": "keep",
+        "score": 87,
+        "reason": "citation prior: keep"
+      }
+    ]
+  },
+  {
+    "suggestion_id": 21,
+    "pick": "flagged_citation",
+    "text": "Doyle v. Ohio,",
+    "kind": "CITATION \u00b7 NOT PII",
+    "context": "the subject raised the applicability of Doyle v. Ohio, 461 U.S. 199 (1990), with respect",
+    "seed_confidence": 58,
+    "flag_tag": "false_positive",
+    "seed_reason": "published case citation",
+    "band": "flagged",
+    "panel_signal": "agree",
+    "panel_confidence": 9,
+    "judge_band": "flagged",
+    "det_majority": "keep",
+    "votes": [
+      {
+        "judge_name": "Pattern",
+        "verdict": "keep",
+        "score": 91,
+        "reason": "citation form, not subject PII"
+      },
+      {
+        "judge_name": "Context",
+        "verdict": "keep",
+        "score": 93,
+        "reason": "citation wording in surrounding text"
+      },
+      {
+        "judge_name": "Prior",
+        "verdict": "keep",
+        "score": 89,
+        "reason": "citation prior: keep"
+      }
+    ]
+  },
+  {
+    "suggestion_id": 118,
+    "pick": "street_fp",
+    "text": "Feeney Street",
+    "kind": "STREET NAME \u00b7 NOT PII",
+    "context": "officer also noted FP bait location Feeney Street and legal reference Feeney v. Ohio,",
+    "seed_confidence": 69,
+    "flag_tag": "false_positive",
+    "seed_reason": "matched PERSON pattern on the surname but context is a street address",
+    "band": "review",
+    "panel_signal": "agree",
+    "panel_confidence": 14,
+    "judge_band": "flagged",
+    "det_majority": "keep",
+    "votes": [
+      {
+        "judge_name": "Pattern",
+        "verdict": "keep",
+        "score": 82,
+        "reason": "street label, not a person"
+      },
+      {
+        "judge_name": "Context",
+        "verdict": "keep",
+        "score": 94,
+        "reason": "citation wording in surrounding text"
+      },
+      {
+        "judge_name": "Prior",
+        "verdict": "keep",
+        "score": 81,
+        "reason": "street-name prior \u00b7 3 docs (often FP bait)"
+      }
+    ]
+  },
+  {
+    "suggestion_id": 65,
+    "pick": "street_fp",
+    "text": "Schmidt Street",
+    "kind": "STREET NAME \u00b7 NOT PII",
+    "context": "involved parties near the intersection of Schmidt Street and 9th Avenue. The area was",
+    "seed_confidence": 69,
+    "flag_tag": "false_positive",
+    "seed_reason": "matched PERSON pattern on the surname but context is a street address",
+    "band": "review",
+    "panel_signal": "agree",
+    "panel_confidence": 18,
+    "judge_band": "flagged",
+    "det_majority": "keep",
+    "votes": [
+      {
+        "judge_name": "Pattern",
+        "verdict": "keep",
+        "score": 81,
+        "reason": "street label, not a person"
+      },
+      {
+        "judge_name": "Context",
+        "verdict": "keep",
+        "score": 87,
+        "reason": "street-name context, not subject"
+      },
+      {
+        "judge_name": "Prior",
+        "verdict": "keep",
+        "score": 79,
+        "reason": "street-name prior \u00b7 2 docs (often FP bait)"
+      }
+    ]
+  },
+  {
+    "suggestion_id": 108,
+    "pick": "officer_fp",
+    "text": "Det. R. Feeney #8086",
+    "kind": "OFFICER \u00b7 NOT SUBJECT PII",
+    "context": "On this date the reporting officer Det. R. Feeney #8086 reviewed body-worn camera footage and logged",
+    "seed_confidence": 66,
+    "flag_tag": "false_positive",
+    "seed_reason": "officer of record, not the subject",
+    "band": "review",
+    "panel_signal": "agree",
+    "panel_confidence": 26,
+    "judge_band": "flagged",
+    "det_majority": "keep",
+    "votes": [
+      {
+        "judge_name": "Pattern",
+        "verdict": "keep",
+        "score": 75,
+        "reason": "officer line, weak person pattern"
+      },
+      {
+        "judge_name": "Context",
+        "verdict": "keep",
+        "score": 83,
+        "reason": "officer/badge context"
+      },
+      {
+        "judge_name": "Prior",
+        "verdict": "keep",
+        "score": 65,
+        "reason": "officer prior: usually not subject PII"
+      }
+    ]
+  },
+  {
+    "suggestion_id": 113,
+    "pick": "true_ssn",
+    "text": "300-71-4366",
+    "kind": "SSN",
+    "context": "on file: name Hilbert Feeney; SSN 300-71-4366; date of birth 09/14/1997; address 6396",
+    "seed_confidence": 98,
+    "flag_tag": null,
+    "seed_reason": null,
+    "band": "high",
+    "panel_signal": "agree",
+    "panel_confidence": 96,
+    "judge_band": "high",
+    "det_majority": "redact",
+    "votes": [
+      {
+        "judge_name": "Pattern",
+        "verdict": "redact",
+        "score": 96,
+        "reason": "hard SSN digit pattern"
+      },
+      {
+        "judge_name": "Context",
+        "verdict": "redact",
+        "score": 94,
+        "reason": "SSN kind \u2014 context does not override"
+      },
+      {
+        "judge_name": "Prior",
+        "verdict": "redact",
+        "score": 98,
+        "reason": "SSN prior: almost always redact"
+      }
+    ]
+  },
+  {
+    "suggestion_id": 110,
+    "pick": "true_dob",
+    "text": "09/14/1997",
+    "kind": "DATE OF BIRTH",
+    "context": "to the subject Hilbert Feeney (DOB 09/14/1997) of 6396 Maple St, Portland, OR",
+    "seed_confidence": 94,
+    "flag_tag": null,
+    "seed_reason": null,
+    "band": "high",
+    "panel_signal": "agree",
+    "panel_confidence": 92,
+    "judge_band": "high",
+    "det_majority": "redact",
+    "votes": [
+      {
+        "judge_name": "Pattern",
+        "verdict": "redact",
+        "score": 91,
+        "reason": "DOB pattern match"
+      },
+      {
+        "judge_name": "Context",
+        "verdict": "redact",
+        "score": 92,
+        "reason": "DOB kind \u2014 context does not override"
+      },
+      {
+        "judge_name": "Prior",
+        "verdict": "redact",
+        "score": 93,
+        "reason": "DOB prior: redact"
+      }
+    ]
+  },
+  {
+    "suggestion_id": 109,
+    "pick": "true_person",
+    "text": "Hilbert Feeney",
+    "kind": "PERSON \u00b7 SUBJECT",
+    "context": "The activity pertains to the subject Hilbert Feeney (DOB 09/14/1997) of 6396 Maple St,",
+    "seed_confidence": 95,
+    "flag_tag": null,
+    "seed_reason": null,
+    "band": "high",
+    "panel_signal": "agree",
+    "panel_confidence": 81,
+    "judge_band": "review",
+    "det_majority": "redact",
+    "votes": [
+      {
+        "judge_name": "Pattern",
+        "verdict": "redact",
+        "score": 86,
+        "reason": "person-name token shape"
+      },
+      {
+        "judge_name": "Context",
+        "verdict": "redact",
+        "score": 72,
+        "reason": "subject/witness context nearby"
+      },
+      {
+        "judge_name": "Prior",
+        "verdict": "redact",
+        "score": 86,
+        "reason": "person prior \u00b7 corroborated across 3 docs"
+      }
+    ]
+  },
+  {
+    "suggestion_id": 117,
+    "pick": "true_phone",
+    "text": "(315) 287-4003",
+    "kind": "PHONE \u00b7 WITNESS",
+    "context": "record Mabel Hilll remains reachable at (315) 287-4003. The reporting officer also noted FP",
+    "seed_confidence": 93,
+    "flag_tag": null,
+    "seed_reason": null,
+    "band": "high",
+    "panel_signal": "agree",
+    "panel_confidence": 95,
+    "judge_band": "high",
+    "det_majority": "redact",
+    "votes": [
+      {
+        "judge_name": "Pattern",
+        "verdict": "redact",
+        "score": 93,
+        "reason": "hard phone digit pattern"
+      },
+      {
+        "judge_name": "Context",
+        "verdict": "redact",
+        "score": 95,
+        "reason": "phone kind \u2014 context does not override"
+      },
+      {
+        "judge_name": "Prior",
+        "verdict": "redact",
+        "score": 96,
+        "reason": "phone prior \u00b7 seen in 3 doc(s)"
+      }
+    ]
+  },
+  {
+    "suggestion_id": 111,
+    "pick": "true_address",
+    "text": "6396 Maple St,",
+    "kind": "ADDRESS \u00b7 SUBJECT",
+    "context": "subject Hilbert Feeney (DOB 09/14/1997) of 6396 Maple St, Portland, OR 97205. Subject identifiers on",
+    "seed_confidence": 93,
+    "flag_tag": null,
+    "seed_reason": null,
+    "band": "high",
+    "panel_signal": "agree",
+    "panel_confidence": 89,
+    "judge_band": "review",
+    "det_majority": "redact",
+    "votes": [
+      {
+        "judge_name": "Pattern",
+        "verdict": "redact",
+        "score": 89,
+        "reason": "address-shaped span"
+      },
+      {
+        "judge_name": "Context",
+        "verdict": "redact",
+        "score": 91,
+        "reason": "address field context"
+      },
+      {
+        "judge_name": "Prior",
+        "verdict": "redact",
+        "score": 87,
+        "reason": "address prior: redact"
+      }
+    ]
+  }
+]

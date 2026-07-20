@@ -1,0 +1,36 @@
+step,status,wall_ms,n,n2,mem_mb,spill_mb,detail,error_msg,recorded_at
+generate_monster,ok,753.0,5000,28549485,1.267578125,0.0,path=samples/stress/monster.pdf size_mb=27.23,,2026-07-19 16:54:41.737307
+generate_mid100,ok,17.0,131,669455,1.662109375,0.0,size_mb=0.64,,2026-07-19 16:54:41.764303
+generate_glob_folder,ok,18.0,40,371224,2.373046875,0.0,files=40 total_pages=80 total_mb=0.35,,2026-07-19 16:54:41.783237
+info_monster,ok,1.0,5000,28549485,2.29296875,0.0,size_mb=27.23 encrypted=false,,2026-07-19 16:54:41.818043
+extract_words_ctas,ok,8221.0,3097000,5000,240.935546875,0.0,memory_limit=512MB pages=1-5000 base_table_mb=0.25,,2026-07-19 16:54:50.045289
+extract_stream_count,ok,1.0,3097000,5000,241.185546875,0.0,count(*) FROM read_pdf_words (no CTAS),,2026-07-19 16:54:50.053131
+extract_page_range_mid,ok,0.0,630,2500,241.185546875,0.0,"read_pdf_words(monster, first_page:=2500, last_page:=2500)",,2026-07-19 16:54:58.256668
+extract_pdf_to_png_one_page,ok,164.0,2509,2500,241.203125,0.0,"pdf_to_png(monster, page=2500, dpi=72)",,2026-07-19 16:54:58.438585
+page_words_filter,ok,1.0,630,2500,241.619140625,0.0,WHERE page_no = mid-doc,,2026-07-19 16:54:58.444605
+page_list_tera_shape,ok,2.0,630,2500,241.751953125,0.0,list(struct_pack) ONE page — review-route shape,,2026-07-19 16:54:58.44741
+all_words_count,ok,0.0,3097000,5000,241.580078125,0.0,count(*) over full words table,,2026-07-19 16:54:58.448722
+all_words_list_pack,expected_fail_isolated,,,,,,see break_b1_all_list.sql — list(struct) ALL pages under 512MB,Out of Memory Error: failed to pin block … (488.0 MiB/488.2 MiB used) — measured 2026-07-19,2026-07-19 16:54:58.455314
+break_all_list_pack,expected_fail_isolated,,,,,,Run tests/stress/break_b1_all_list.sql in a fresh 512MB session,Out of Memory Error: failed to pin block of size 256.0 KiB (488.0 MiB/488.2 MiB used),2026-07-19 16:54:58.456217
+break_pdf_to_png_one_page,ok,167.0,2509,2500,241.501953125,0.0,"pdf_to_png(monster, page=2500, dpi=72)",,2026-07-19 16:54:58.623793
+break_pdf_to_text_whole,ok,4090.0,21492223,,241.51953125,0.0,pdf_to_text(monster) full document VARCHAR,,2026-07-19 16:55:02.714308
+break_read_words_page_range,ok,0.0,630,1,241.51953125,0.0,"read_pdf_words(monster, first_page:=2500, last_page:=2500)",,2026-07-19 16:55:02.715723
+break_pdf_redact_one_box,ok,305.0,5000,1,242.29296875,0.0,pdf_redact one box on page 2500 of monster,,2026-07-19 16:55:03.037013
+fail_encrypted_with_password,ok,18.0,16,1,242.833984375,0.0,password:=s3cret extracts words; is_encrypted=true,,2026-07-19 16:55:03.05786
+fail_encrypted_no_password,expected_fail,0.0,,,,,App implication: ingest of password PDFs aborts the whole glob unless password is supplied per file. Need pre-check is_encrypted + user prompt or skip with ignore_errors if available.,IO Error: read_pdf: '…encrypted.pdf' is encrypted; supply the correct password via password := '...',2026-07-19 16:55:03.068644
+fail_no_text_layer,ok,1584.0,0,0,242.458984375,0.0,"empty_no_ocr=0 empty_default=0 gfx_no_ocr=0 gfx_ocr=0 — silent empty, not error. Scanned PII invisible to word-box redaction without OCR+image text.",,2026-07-19 16:55:04.653975
+fail_malformed_xref,expected_fail,0.0,,,,,Broken catalog/pages graph: no readable pages.,IO Error: read_pdf: '…malformed.pdf' has no readable pages (empty or unreadable document),2026-07-19 16:55:04.656341
+fail_not_a_pdf,expected_fail,0.0,,,,,Same class as truncated — misnamed .pdf fails hard.,IO Error: read_pdf: could not open '…not_a_pdf.pdf' (corrupt or not a PDF),2026-07-19 16:55:04.656341
+fail_truncated,expected_fail,0.0,,,,,App implication: one bad file in samples/*.pdf glob aborts entire ingest unless isolated. Pre-validate with pdf_info per file or catch and skip.,IO Error: read_pdf: could not open '…truncated.pdf' (corrupt or not a PDF),2026-07-19 16:55:04.656341
+fail_cjk_mojibake,ok,3.0,18,5,242.513671875,0.0,write_pdf uses Helvetica — CJK becomes mojibake (n_cjk_intact=0). ASCII tokens survive. sample_head=¥‹Ł“ªª„ª §…––⁄“Ø SSN 999-88-7777 ‚›Łfl §……‚ ”¥ 1990„·115¥ Œ‚ ⁄‚ ·ºƒ: Œ„† Mixed: Alice Chen –– and …‚,Not an error: silent wrong text. App implication: non-Latin PII generated via write_pdf/COPY FORMAT pdf is unreliable; real CJK case PDFs from other producers may work if embedded fonts exist.,2026-07-19 16:55:04.659609
+fail_rotated_coords,ok,11.0,16,16,242.607421875,0.0,"words preserved (16=16); axes swap: base min(x,y)=(54.0,46.8) rot min(x,y)=(721.9,54.0); pdf_info still reports 612.0x792.0 (media box). Redaction boxes must use post-rotate word coords, not pre-rotate.",,2026-07-19 16:55:04.671865
+fail_form_fields,ok,1294.0,1,0,243.064453125,0.0,"pdf_form_fields sees ssn_field=[123-45-6789]; ssn_in_words=1; after pdf_redact box: field value still [123-45-6789], words_after=0. Word-box redaction does NOT clear AcroForm /V.",,2026-07-19 16:55:05.967626
+fail_annotations,ok,4.0,1,5,242.900390625,0.0,pdf_annotations.contents=[Confidential: DOB 1985-03-22] NOT present in read_pdf_words (pii_in_words=0). App implication: sticky-note / comment PII is invisible to word-box detection and redaction.,,2026-07-19 16:55:05.973128
+glob_ingest_1_file_mid100,ok,244.0,68662,131,251.0,0.0,files=1 pages=131 size_mb=0.64,,2026-07-19 16:55:06.219024
+glob_ingest_5_files,ok,6.0,635,5,251.146484375,0.0,files=5 pages=5,,2026-07-19 16:55:06.227884
+glob_ingest_20_files,ok,22.0,2540,20,252.90234375,0.0,files=20,,2026-07-19 16:55:06.251631
+glob_ingest_40_files,ok,165.0,41080,40,258.939453125,0.0,files=40 pages_sum=80 — near-linear in file count for small files,,2026-07-19 16:55:06.417076
+glob_info_stress_root,ok,0.0,16,175626,259.056640625,0.0,pdf_info samples/stress/*.pdf → files=16 total_pages=175626 total_mb=920.4,,2026-07-19 16:55:06.431858
+huge_pdf_info_512mb,ok,0.0,130419,743861670,260.193359375,0.0,size_mb=709.40 — DuckDB pool mem_mb is NOT process RSS,,2026-07-19 16:55:06.749814
+huge_read_words_page1_512mb,ok,1.0,401,1,259.943359375,0.0,first_page:=1 last_page:=1 under memory_limit=512MB,,2026-07-19 16:55:06.924044
+huge_pdf_to_png_mid_512mb,ok,1.0,2509,65000,259.943359375,0.0,pdf_to_png page 65000 dpi 72,,2026-07-19 16:55:07.10222

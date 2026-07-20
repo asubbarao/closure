@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IncidentReport caseNo="24-000117" agency="Portland Police Bureau">
+  <Subject>
+    <Name>Magnolia Cronin</Name>
+    <DOB>08/16/1979</DOB>
+    <SSN>271-72-1446</SSN>
+    <Address>776 Maple St, Portland, OR 97205</Address>
+    <Phone>(613) 235-3301</Phone>
+  </Subject>
+  <Narrative>
+    Officers contacted Magnolia Cronin. SSN 271-72-1446 recorded on scene.
+    Witness Marques Cruickshank interviewed. False positive plant: Cronin Street.
+  </Narrative>
+  <Officers>
+    <Officer>Ofc. M. Mayer #3178</Officer>
+    <Officer>Det. N. Cronin #4453</Officer>
+  </Officers>
+</IncidentReport>

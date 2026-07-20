@@ -1,0 +1,5 @@
+Binder Error: Table function "pdf_revisions" does not support lateral join column parameters - cannot use column "f" in this context.
+The function only supports literals as parameters.
+
+LINE 17: ORDER BY f, revision_index;
+             ^

@@ -1,0 +1,32 @@
+Code-quality + repo-structure review for /Users/aloksubbarao/personal/closure
+(an AI PDF-redaction-review app; DuckDB is DB+HTTP+PDF+tera renderer; goes private
+to a company, graded on CODE QUALITY). READ anything; WRITE only
+/Users/aloksubbarao/personal/closure/docs/code-quality.md. Do NOT edit code
+(other agents are actively editing server/ — a write would clobber them). Produce
+a concrete plan I will apply later.
+
+STUDY FOR CONVENTIONS:
+- The Vori corporate repos for how a professional codebase is organized:
+  /Users/aloksubbarao/Vori/backend and /Users/aloksubbarao/Vori/composer
+  (read their top-level layout, module/dir structure, config, README, test
+  layout, naming). Extract the patterns worth emulating.
+- The current closure repo: server/*.sql, templates/, static/, samples/, docs/,
+  and how it boots.
+
+DELIVER docs/code-quality.md:
+1. PROPER PDF HANDLING (key): how should PDFs be handled in this repo the way a
+   real fastapi/fastify/node app would — a clear storage layer separating INPUT
+   (source PDFs), WORKING (in-progress), and OUTPUT (redacted exports); where they
+   live in the tree; how the app references them; how messy/large PDFs are handled
+   (streaming, guards). Propose the concrete directory layout + the boundary/
+   "service" that owns PDF I/O (even in SQL, isolate it as a module).
+2. PROFESSIONAL REPO STRUCTURE: propose the target tree — separation of concerns
+   (schema / ingest / detection / routes-by-resource / render / boot), config,
+   scripts, tests, docs, README — modeled on the Vori repos. Note what's currently
+   monolithic (e.g. routes.sql) and how to split it.
+3. CODE-QUALITY CHECKLIST: naming, comments, no dead code, no hardcoded specifics,
+   consistent SQL style (CTAS, no INSERT-for-setup, no SET VARIABLE), typed
+   outputs, error handling in routes, and a tests story (SQL smoke + playwright).
+4. A prioritized "apply before submission" punch-list (small vs structural).
+Be concrete, cite the Vori patterns you're borrowing and the closure files to
+change. This becomes the integration/refactor spec.

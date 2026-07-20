@@ -1,0 +1,31 @@
+FIRST read the shared build contract in full: /private/tmp/claude-501/-Users-aloksubbarao-personal/f15dcc22-ec83-4ec6-a926-096108b96135/scratchpad/contract.md
+Work in /Users/aloksubbarao/personal/closure.
+
+YOU ARE THE REJECT-FLOW GROK (false-positive flow, reject screen in the design
+reference). You own ONLY: server/templates/reject.html and static/reject.js.
+Served at GET /ui/reject?doc=<id>&sug=<id> (route exists). Do NOT edit .sql or
+other templates.
+
+The reviewer clears AI false positives (e.g. "Nienow Street" — the subject's
+surname reused as a street name; matched 8x across the case). Build:
+- the page canvas = real PNG with the current flagged mark highlighted (dashed
+  red).
+- a WHY-CARD popover anchored at the mark: title "Likely a false positive", the
+  suggestion's reason text (from the data), and buttons Reject (r) / Keep (a).
+  These POST /api/suggestions/:id/decision.
+- a "Reject all matching" panel: shows the same text's occurrence count across
+  the case ("'Nienow Street' matched the PERSON pattern N times across D
+  documents — always as a street address, never as the subject"), with a single
+  button "Reject all N — log as 'street name'" that fans out via
+  /api/entities/:id/decision (or a loop over the matching suggestion ids) and
+  writes an audit reason. Use GET /api/cases/:id/suggestions to find matches.
+- an undo toast after any reject.
+Strings from design/copy.md.
+
+VERIFY: boot, open http://127.0.0.1:8117/ui/reject?doc=1 , confirm the why-card
+shows the reason, Reject fires the POST, and "Reject all N" clears every matching
+instance (show the response + a re-query proving they flipped). Do not touch
+design/ or samples/.
+
+
+VERIFY-PORT NOTE: other agents may hold :8117. Boot your OWN instance on port 8125: run  sed "s/8117/8125/" server/app.sql > /tmp/boot_reject.sql  then  /Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned /tmp/reject.db -c ".read /tmp/boot_reject.sql" &  and curl/open http://127.0.0.1:8125 . Kill it when done.

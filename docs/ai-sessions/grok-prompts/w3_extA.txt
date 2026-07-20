@@ -1,0 +1,14 @@
+Survey task for /Users/aloksubbarao/personal/closure (the DuckDB-is-the-backend
+redaction app). WRITE ONLY docs/ext-survey-detection.md (+ optional tiny spikes
+under spikes/ext-detection/). Assess these DuckDB community extensions for
+GENUINE usefulness to detection/data-quality in THIS app — install each
+(INSTALL x FROM community), check v1.5.4 osx_arm64 signed availability, read its
+functions, and judge honestly (most should be "no"):
+  ai (LLM calls in SQL — could this power the judge ensemble or real suggestion
+  scoring? assess cost/latency/api-key story), fuzzycomplete, semantic_views,
+  us_address_standardizer, inflector, mlpack, stochastic, datasketches,
+  bitfilters, hashfuncs, crypto (fingerprints for chain-of-custody!),
+  json_schema, vindex (+ core vss) for embedding-based similarity.
+For each: verdict (integrate now / spike later / no) + one-line why + the exact
+mechanism if useful. SPIKE the top 2 with real value (working SQL in spikes/).
+Rank the final "integrate now" list.

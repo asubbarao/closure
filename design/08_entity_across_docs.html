@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Closure — Entity across documents · Yasmine Nienow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F4F5F6; --surface:#FFFFFF; --surface-2:#F9FAFB;
+  --ink:#191B1E; --sub:#5A5F66; --mut:#878C93; --ink-inv:#FFFFFF;
+  --line:#E4E6E9; --line-strong:#C9CCD1;
+  --amber-fill:rgba(252,196,25,.32); --amber-fill-strong:rgba(252,196,25,.55);
+  --amber-edge:#D99A06; --amber-text:#8A6A00; --amber-bg:#FFFBEE;
+  --red:#C03221; --red-soft:rgba(192,50,33,.07); --red-mid:rgba(192,50,33,.16); --red-text:#A02A1C;
+  --ok:#2F7D46; --ok-soft:rgba(47,125,70,.10);
+  --cur:#1D63ED; --cur-soft:rgba(29,99,237,.08);
+  --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --r-sm:5px; --r-md:8px; --r-lg:12px;
+  --shadow-panel:0 1px 3px rgba(25,27,30,.08),0 4px 12px rgba(25,27,30,.06);
+  --shadow-float:0 8px 28px rgba(25,27,30,.22),0 0 0 1px var(--line-strong);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;font-feature-settings:"tnum";min-height:100vh}
+
+.top{display:flex;align-items:center;gap:14px;height:52px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:100}
+.brand{font-weight:700;font-size:15px;flex-shrink:0}.brand span{color:var(--amber-edge)}
+.top-div{width:1px;height:20px;background:var(--line);flex-shrink:0}
+.crumb{display:flex;align-items:baseline;gap:7px;min-width:0}
+.crumb .case{font-family:var(--mono);font-size:11.5px;color:var(--sub)}
+.crumb .sep{color:var(--mut)}
+.crumb .doc{font-weight:600;font-size:13px}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.who{font-size:12.5px;color:var(--sub)}.who b{color:var(--ink);font-weight:600}
+.btn{font:inherit;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn.ghost{border-color:transparent;color:var(--sub)}
+.btn.accent{background:var(--cur);border-color:var(--cur);color:#fff}
+
+.wrap{max-width:1180px;margin:0 auto;padding:28px 24px 80px}
+
+/* Entity hero */
+.hero{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-panel);padding:24px 28px;margin-bottom:22px}
+.hero-top{display:flex;align-items:flex-start;gap:20px}
+.hero-left{flex:1;min-width:0}
+.hero-eyebrow{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);margin-bottom:6px}
+.hero h1{font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1.15}
+.hero .kind{font-size:12.5px;color:var(--sub);margin-top:6px}
+.hero .kind b{font-family:var(--mono);font-weight:600;color:var(--ink)}
+
+.hero-stats{display:flex;gap:0;flex-shrink:0}
+.hs{padding:0 20px;border-left:1px solid var(--line);text-align:center;min-width:88px}
+.hs:first-child{border-left:none}
+.hs .v{font-family:var(--mono);font-size:22px;font-weight:700;display:block;line-height:1.1}
+.hs .v.warn{color:var(--amber-text)}.hs .v.ok{color:var(--ok)}.hs .v.alert{color:var(--red)}
+.hs .l{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin-top:4px}
+
+.prop-banner{
+  margin-top:18px;display:flex;align-items:center;gap:14px;
+  padding:12px 16px;background:var(--cur-soft);border:1px solid rgba(29,99,237,.25);
+  border-radius:var(--r-md);font-size:13px;color:var(--sub);
+}
+.prop-banner .pb-icon{
+  width:28px;height:28px;border-radius:50%;background:var(--cur);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;
+}
+.prop-banner b{color:var(--ink);font-weight:600}
+.prop-banner .pb-cta{margin-left:auto;flex-shrink:0}
+
+.model-line{margin-top:12px;font-size:12.5px;color:var(--sub);line-height:1.55}
+.model-line strong{color:var(--ink);font-weight:600}
+
+/* Layout: doc map + instance list */
+.cols{display:grid;grid-template-columns:280px 1fr;gap:22px;align-items:start}
+
+/* Document map */
+.doc-map{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-panel);overflow:hidden;position:sticky;top:68px}
+.dm-head{padding:12px 16px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);background:var(--surface-2);border-bottom:1px solid var(--line)}
+.dm-item{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer}
+.dm-item:last-child{border-bottom:none}
+.dm-item:hover{background:var(--bg)}
+.dm-item.active{background:var(--cur-soft);border-left:3px solid var(--cur);padding-left:13px}
+.dm-item .dn{font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dm-item .dm{font-family:var(--mono);font-size:10.5px;color:var(--mut);margin-top:2px}
+.dm-item .dc{margin-left:auto;text-align:right;flex-shrink:0}
+.dm-item .dc b{font-family:var(--mono);font-size:14px;font-weight:700;display:block;line-height:1.1}
+.dm-item .dc span{font-size:10px;color:var(--sub)}
+.dm-foot{padding:12px 16px;font-size:11.5px;color:var(--sub);line-height:1.5;background:var(--surface-2);border-top:1px solid var(--line)}
+.dm-foot b{color:var(--ink);font-family:var(--mono);font-weight:600}
+
+/* Instances panel */
+.inst-panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-panel);overflow:hidden}
+.ip-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.ip-head h2{font-size:14px;font-weight:700}
+.ip-head .ip-sub{font-family:var(--mono);font-size:11.5px;color:var(--sub)}
+.ip-head .filters{margin-left:auto;display:flex;gap:6px}
+.fchip{font:inherit;font-size:11.5px;font-weight:600;padding:5px 10px;border-radius:16px;border:1px solid var(--line-strong);background:var(--surface);color:var(--sub);cursor:pointer}
+.fchip.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.fchip.flag{color:var(--red-text);border-color:var(--red)}
+.fchip.flag.on{background:var(--red);border-color:var(--red);color:#fff}
+
+/* Doc section within instances */
+.doc-sec{border-bottom:1px solid var(--line)}
+.doc-sec:last-child{border-bottom:none}
+.ds-head{
+  display:flex;align-items:center;gap:10px;
+  padding:11px 18px;background:var(--bg);
+  border-bottom:1px solid var(--line);
+  position:sticky;top:52px;z-index:10;
+}
+.ds-name{font-weight:700;font-size:13px}
+.ds-meta{font-family:var(--mono);font-size:11px;color:var(--mut)}
+.ds-status{margin-left:auto;font-size:11.5px;font-weight:600}
+.ds-status.ok{color:var(--ok)}.ds-status.pend{color:var(--amber-text)}.ds-status.flag{color:var(--red)}
+
+.inst{
+  display:flex;align-items:center;gap:12px;
+  padding:11px 18px;border-bottom:1px solid var(--line);
+  cursor:pointer;transition:background 60ms;
+}
+.inst:last-child{border-bottom:none}
+.inst:hover{background:var(--bg)}
+.inst.prop-preview{background:var(--ok-soft)}
+.inst.flagged{background:var(--red-soft)}
+.inst.flagged:hover{background:var(--red-mid)}
+.inst.decided{opacity:.72}
+
+.istatus{
+  width:22px;height:22px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;border:1.5px solid var(--line-strong);color:var(--mut);
+}
+.istatus.acc{background:var(--ink);border-color:var(--ink);color:#fff}
+.istatus.pend{background:var(--amber-fill-strong);border-color:var(--amber-edge);color:var(--amber-text)}
+.istatus.flag{background:var(--red-mid);border-color:var(--red);color:var(--red);font-size:10px}
+.istatus.rej{background:transparent;border-color:var(--line-strong);color:var(--mut)}
+
+.ictx{flex:1;min-width:0}
+.ictx .line{font-size:13px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ictx .line em{font-style:normal;background:var(--amber-fill);border-radius:2px;padding:0 2px;font-family:var(--mono);font-size:12px;color:var(--ink);font-weight:500}
+.ictx .why{font-size:11px;color:var(--red-text);margin-top:2px}
+
+.ipg{font-family:var(--mono);font-size:11px;color:var(--mut);flex-shrink:0;min-width:32px;text-align:right}
+.iconf{font-family:var(--mono);font-size:12.5px;font-weight:700;flex-shrink:0;width:28px;text-align:right}
+.iconf.h{color:var(--ink)}.iconf.m{color:var(--amber-text)}.iconf.l{color:var(--red)}
+.itag{font-size:10px;font-weight:700;letter-spacing:.03em;padding:2px 8px;border-radius:8px;flex-shrink:0;white-space:nowrap}
+.itag.will{background:var(--ok-soft);color:var(--ok)}
+.itag.excl{background:var(--red-mid);color:var(--red-text);border:1px solid var(--red)}
+.itag.done{background:var(--ink);color:#fff}
+
+/* Action footer */
+.action-foot{
+  position:sticky;bottom:0;
+  display:flex;align-items:center;gap:12px;
+  padding:14px 18px;
+  background:var(--surface);
+  border-top:1px solid var(--line);
+  box-shadow:0 -4px 16px rgba(25,27,30,.06);
+}
+.action-foot .sum{flex:1;font-size:13px;color:var(--sub)}
+.action-foot .sum b{font-family:var(--mono);color:var(--ink);font-weight:700}
+.action-foot .sum .note{display:block;font-size:11.5px;margin-top:2px;color:var(--mut)}
+.btn-lg{font:inherit;font-weight:700;font-size:13.5px;padding:11px 20px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);cursor:pointer;color:var(--ink);white-space:nowrap}
+.btn-lg.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn-lg.danger{color:var(--red);border-color:var(--red)}
+
+.keys{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px 16px;font-size:11.5px;color:var(--sub);justify-content:center}
+.keys span{display:inline-flex;gap:5px;align-items:center}
+kbd{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:4px;padding:1px 6px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">Closure<span>.</span></div>
+  <div class="top-div"></div>
+  <div class="crumb">
+    <span class="case">CASE 24-000117</span>
+    <span class="sep">/</span>
+    <span class="doc">Entity · Yasmine Nienow · across 5 documents</span>
+  </div>
+  <div class="top-right">
+    <span class="who">Reviewing as <b>A. Subbarao</b></span>
+    <button class="btn ghost">← Case dashboard</button>
+    <button class="btn">Audit log</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="hero">
+    <div class="hero-top">
+      <div class="hero-left">
+        <div class="hero-eyebrow">Entity decision — multi-document</div>
+        <h1>Yasmine Nienow</h1>
+        <div class="kind">PERSON · <b>SUBJECT OF CASE 24-000117</b> · decide once · every instance stays visible</div>
+      </div>
+      <div class="hero-stats">
+        <div class="hs"><span class="v">128</span><div class="l">Instances</div></div>
+        <div class="hs"><span class="v">5</span><div class="l">Documents</div></div>
+        <div class="hs"><span class="v ok">86</span><div class="l">Accepted</div></div>
+        <div class="hs"><span class="v warn">32</span><div class="l">Pending</div></div>
+        <div class="hs"><span class="v alert">5</span><div class="l">Flagged excl.</div></div>
+      </div>
+    </div>
+
+    <div class="prop-banner">
+      <div class="pb-icon">↔</div>
+      <div>
+        Accepting this entity will propose redaction on <b>32 pending instances</b> across <b>all 5 documents</b>.
+        Flagged items stay out — they require individual judgment. Nothing is silent; each row below shows what will change.
+      </div>
+      <button class="btn accent pb-cta">Accept entity case-wide · <kbd style="color:#fff;background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.35)">e</kbd></button>
+    </div>
+
+    <div class="model-line">
+      <strong>Core model:</strong> the decision unit is the entity, not the page. “Should Yasmine Nienow be redacted?” is answered once;
+      the answer propagates to every document with per-instance visibility and individual undo. Related but different context
+      (Det. C. Nienow, Nienow v. Ohio, Nienow Street) is never bundled into this entity.
+    </div>
+  </div>
+
+  <div class="cols">
+
+    <aside class="doc-map">
+      <div class="dm-head">Where she appears</div>
+      <div class="dm-item active">
+        <div style="min-width:0;flex:1">
+          <div class="dn">incident_report_2024-0117</div>
+          <div class="dm">10 pp · focused</div>
+        </div>
+        <div class="dc"><b>18</b><span>4 pend</span></div>
+      </div>
+      <div class="dm-item">
+        <div style="min-width:0;flex:1">
+          <div class="dn">consolidated_case_file</div>
+          <div class="dm">110 pp · bulk of volume</div>
+        </div>
+        <div class="dc"><b>72</b><span>19 pend</span></div>
+      </div>
+      <div class="dm-item">
+        <div style="min-width:0;flex:1">
+          <div class="dn">supplemental_report_A</div>
+          <div class="dm">10 pp · signed off</div>
+        </div>
+        <div class="dc"><b>14</b><span style="color:var(--ok)">all decided</span></div>
+      </div>
+      <div class="dm-item">
+        <div style="min-width:0;flex:1">
+          <div class="dn">interview_transcript_C</div>
+          <div class="dm">10 pp · signed off</div>
+        </div>
+        <div class="dc"><b>16</b><span style="color:var(--ok)">all decided</span></div>
+      </div>
+      <div class="dm-item">
+        <div style="min-width:0;flex:1">
+          <div class="dn">case_summary</div>
+          <div class="dm">10 pp · signed off</div>
+        </div>
+        <div class="dc"><b>8</b><span style="color:var(--ok)">all decided</span></div>
+      </div>
+      <div class="dm-foot">
+        Propagation is <b>visible</b>, not silent. After <kbd>e</kbd>, every pending row below flips to “will accept” until you confirm — then one audit event per instance.
+      </div>
+    </aside>
+
+    <div class="inst-panel">
+      <div class="ip-head">
+        <h2>All instances</h2>
+        <span class="ip-sub">128 · filterable</span>
+        <div class="filters">
+          <button class="fchip on">All</button>
+          <button class="fchip">Pending 32</button>
+          <button class="fchip">Accepted 86</button>
+          <button class="fchip flag">Flagged excl. 5</button>
+        </div>
+      </div>
+
+      <!-- Doc 1 -->
+      <div class="doc-sec">
+        <div class="ds-head">
+          <span class="ds-name">incident_report_2024-0117</span>
+          <span class="ds-meta">18 instances · 10 pages</span>
+          <span class="ds-status pend">4 pending · will accept</span>
+        </div>
+
+        <div class="inst prop-preview">
+          <div class="istatus pend">·</div>
+          <div class="ictx"><div class="line">Subject — Full Legal Name: <em>Nienow, Yasmine Danielle</em></div></div>
+          <span class="ipg">p.3</span>
+          <span class="iconf h">95</span>
+          <span class="itag will">WILL ACCEPT</span>
+        </div>
+        <div class="inst prop-preview">
+          <div class="istatus pend">·</div>
+          <div class="ictx"><div class="line">…involved party as <em>Yasmine Nienow</em>, DOB 12/23/1999…</div></div>
+          <span class="ipg">p.3</span>
+          <span class="iconf h">95</span>
+          <span class="itag will">WILL ACCEPT</span>
+        </div>
+        <div class="inst decided">
+          <div class="istatus acc">✓</div>
+          <div class="ictx"><div class="line">…subject, <em>Yasmine Nienow</em>, at approximately this location…</div></div>
+          <span class="ipg">p.4</span>
+          <span class="iconf h">94</span>
+          <span class="itag done">ACCEPTED</span>
+        </div>
+        <div class="inst prop-preview">
+          <div class="istatus pend">·</div>
+          <div class="ictx"><div class="line">A second witness, <em>Yasmine Nienow</em>, was interviewed at 10:05…</div></div>
+          <span class="ipg">p.4</span>
+          <span class="iconf h">93</span>
+          <span class="itag will">WILL ACCEPT</span>
+        </div>
+        <div class="inst prop-preview">
+          <div class="istatus pend">·</div>
+          <div class="ictx"><div class="line">…Subject <em>Yasmine Nienow</em> was advised that prior case law…</div></div>
+          <span class="ipg">p.7</span>
+          <span class="iconf h">95</span>
+          <span class="itag will">WILL ACCEPT</span>
+        </div>
+        <div class="inst decided">
+          <div class="istatus acc">✓</div>
+          <div class="ictx"><div class="line">…booking photo of <em>Yasmine Nienow</em> attached as Exhibit C…</div></div>
+          <span class="ipg">p.9</span>
+          <span class="iconf h">96</span>
+          <span class="itag done">ACCEPTED</span>
+        </div>
+      </div>
+
+      <!-- Doc 2 - consolidated -->
+      <div class="doc-sec">
+        <div class="ds-head">
+          <span class="ds-name">consolidated_case_file</span>
+          <span class="ds-meta">72 instances · 110 pages · showing 6 of 19 pending</span>
+          <span class="ds-status pend">19 pending · will accept</span>
+        </div>
+
+        <div class="inst prop-preview">
+          <div class="istatus pend">·</div>
+          <div class="ictx"><div class="line">INDEX — Subject: <em>NIENOW, YASMINE D.</em> · Case 24-000117</div></div>
+          <span class="ipg">p.1</span>
+          <span class="iconf h">97</span>
+          <span class="itag will">WILL ACCEPT</span>
+        </div>
+        <div class="inst prop-preview">
+          <div class="istatus pend">·</div>
+          <div class="ictx"><div class="line">…arrest of <em>Yasmine Nienow</em> at 5024 Island Ton…</div></div>
+          <span class="ipg">p.12</span>
+          <span class="iconf h">94</span>
+          <span class="itag will">WILL ACCEPT</span>
+        </div>
+        <div class="inst prop-preview">
+          <div class="istatus pend">·</div>
+          <div class="ictx"><div class="line">…interview of <em>Yasmine Nienow</em> conducted 01/18/2024…</div></div>
+          <span class="ipg">p.44</span>
+          <span class="iconf h">95</span>
+          <span class="itag will">WILL ACCEPT</span>
+        </div>
+        <div class="inst prop-preview">
+          <div class="istatus pend">·</div>
+          <div class="ictx"><div class="line">…statement attributed to <em>Yasmine Nienow</em> (invoked counsel)…</div></div>
+          <span class="ipg">p.71</span>
+          <span class="iconf h">92</span>
+          <span class="itag will">WILL ACCEPT</span>
+        </div>
+        <div class="inst decided">
+          <div class="istatus acc">✓</div>
+          <div class="ictx"><div class="line">…prior contact with <em>Yasmine Nienow</em> on 11/02/2023…</div></div>
+          <span class="ipg">p.88</span>
+          <span class="iconf h">93</span>
+          <span class="itag done">ACCEPTED</span>
+        </div>
+        <div class="inst" style="justify-content:center;color:var(--cur);font-weight:600;font-size:12.5px;padding:10px">
+          Show 14 more pending in this document →
+        </div>
+      </div>
+
+      <!-- Excluded related entities callout -->
+      <div class="doc-sec">
+        <div class="ds-head">
+          <span class="ds-name">Excluded — related text, different entity</span>
+          <span class="ds-meta">not bundled into Yasmine Nienow</span>
+          <span class="ds-status flag">HUMAN REQUIRED</span>
+        </div>
+
+        <div class="inst flagged">
+          <div class="istatus flag">!</div>
+          <div class="ictx">
+            <div class="line">…holding in <em>Nienow v. Ohio</em>, 494 U.S. 112 (1990)…</div>
+            <div class="why">Case citation · matched PERSON via surname · not the subject</div>
+          </div>
+          <span class="ipg">p.7</span>
+          <span class="iconf l">58</span>
+          <span class="itag excl">EXCLUDED</span>
+        </div>
+        <div class="inst flagged">
+          <div class="istatus flag">!</div>
+          <div class="ictx">
+            <div class="line">Reporting Officer: <em>Det. C. Nienow</em> #9418</div>
+            <div class="why">Officer surname · not subject PII</div>
+          </div>
+          <span class="ipg">p.1</span>
+          <span class="iconf l">64</span>
+          <span class="itag excl">EXCLUDED</span>
+        </div>
+        <div class="inst decided" style="opacity:.55">
+          <div class="istatus rej">✕</div>
+          <div class="ictx">
+            <div class="line">…intersection of <em>Nienow Street</em> and 9th Avenue…</div>
+            <div class="why">Street name · already rejected ×9</div>
+          </div>
+          <span class="ipg">p.4</span>
+          <span class="iconf m">71</span>
+          <span class="itag" style="background:transparent;border:1px solid var(--line-strong);color:var(--sub)">REJECTED</span>
+        </div>
+      </div>
+
+      <div class="action-foot">
+        <div class="sum">
+          <b>32</b> instances selected to accept · <b>5</b> flagged excluded · <b>86</b> already decided
+          <span class="note">Every bulk action writes one audit event per instance — who, what, when, prior state.</span>
+        </div>
+        <button class="btn-lg danger">Reject selected</button>
+        <button class="btn-lg primary">Accept 32 — lay the ink</button>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="keys">
+    <span><kbd>e</kbd> accept entity case-wide</span>
+    <span><kbd>j</kbd><kbd>k</kbd> next / prev instance</span>
+    <span><kbd>a</kbd> accept instance</span>
+    <span><kbd>r</kbd> reject instance</span>
+    <span><kbd>u</kbd> undo</span>
+    <span><kbd>Esc</kbd> back to dashboard</span>
+  </div>
+
+</div>
+</body>
+</html>

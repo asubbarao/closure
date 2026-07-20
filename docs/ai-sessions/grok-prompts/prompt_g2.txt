@@ -1,0 +1,34 @@
+Repo: /Users/aloksubbarao/personal/closure — take-home: an AI-powered PDF redaction review tool (read "Alok_FDE_Fullstack Engineer Take-Home Assignment.txt" first). Frontend quality and workflow UX are the graded core.
+
+YOUR TASK (G2): build the REAL frontend app in web/ — a standalone React + Vite + TypeScript SPA. It must know NOTHING about the backend implementation; it talks only to the JSON API below through one typed client module (web/src/api/client.ts — the only file with URLs). In dev, vite proxies /api and /pages to http://127.0.0.1:8117.
+
+THE PRODUCT: a throughput workflow tool — a reviewer clears hundreds of AI redaction suggestions fast. NOT five separate panels. Two routes:
+  1. "/" case dashboard — case header stats (suggestions/pending/flagged/entities/signed-off), coverage bar (accepted/pending/rejected), export button with BLOCKED state + banner when flagged items remain, documents table (found counts, confidence breakdown mini-bars, status), entity panel (decide once propagates case-wide; pending/accepted pills; HUMAN REQUIRED tags on flagged entities), recent audit feed.
+  2. "/review/:docId" the review surface (the spine of the product):
+     - left rail: case documents with pending counts, active doc highlighted
+     - center: page canvas — the page PNG (/pages/<filename>/p<N>.png) with absolutely positioned marks at real PDF coordinates. Transform: page is width_pt×height_pt (PDF points, top-left origin); PNG displayed at fixed CSS width (e.g. 680px) → scale = 680/width_pt; mark at left=x0*scale, top=y0*scale, width=(x1-x0)*scale, height=(y1-y0)*scale. Write this as ONE tested utility (web/src/lib/geometry.ts).
+     - mark styles by status: pending=amber highlighter, accepted=solid ink-black bar, rejected=dashed gray strikeout, flagged=dashed red outline, current=blue focus ring.
+     - right queue: suggestions grouped by entity ("Yasmine Nienow · PERSON · SUBJECT · 128 in case" + "Accept all in case"), band filter chips (HIGH ≥90 / REVIEW / FLAGGED with counts), each row: matched text, context snippet with highlight, confidence number, page ref.
+     - KEYBOARD IS THE PRIMARY INPUT: j/k next/prev suggestion (auto-navigates pages/docs), a accept, r reject, e open entity bulk sheet, n add-missed mode, u undo. Persistent footer legend.
+     - flagged items: why-card popover anchored at the mark (title "Likely a false positive", the suggestion's reason text, Reject r / Keep a buttons) + a "Reject all matching" panel (count across docs, one button that fans out).
+     - bulk sheet (overlay, opened by e): entity header + tally (n instances across d documents, s selected, x excluded — different context), instances grouped by document with checkboxes, flagged rows red-tinted + UNCHECKED by default + exclusion banner, primary button "Accept N — lay the ink" where N always equals checked rows.
+     - add-missed mode (n): banner "ADD MISSED MODE — drag to mark any text on the page · Esc to exit"; drag draws a box (px→pt via the same utility); on release a dialog: category chips (PERSON/SSN/PHONE/ADDRESS/DOB/OTHER) + scope choice "This instance only" vs "Find & redact all matches in case" (calls GET /api/search?q=<text under the box> to show the live count), confirm "Redact all N ⏎".
+     - every decision: optimistic update + toast ("Accepted — "280-96-9531"" with Undo button, ≤8 words) via TanStack Query mutations.
+STRINGS: use design/copy.md verbatim — it is the copy spec. VISUALS: extract the CSS custom properties and component styles from design/*.html (Inter + JetBrains Mono, --bg #F4F5F6, --ink #191B1E, amber pending, red flagged, blue current) — plain CSS modules or a single app.css with the tokens; NO Tailwind.
+
+API CONTRACT (backend serves these; if one is missing/unreachable show a plain error state — do NOT bake in mock data):
+  GET  /api/case                         → {case:{id,case_no,title}, stats:{suggestions,pending,accepted,rejected,flagged,entities}, documents:[{id,filename,page_count,width_pt,height_pt,found,pending,flagged,signed_off}], entities:[{id,canonical_text,kind,instances,docs,pending,accepted,rejected,flagged}]}
+  GET  /api/documents/:id/suggestions    → [{id,page_no,x0,y0,x1,y1,text,context,confidence,flag_tag,reason,entity_id,source,status}]
+  POST /api/suggestions/:id/decision     body {status:'accepted'|'rejected'|'pending', actor, reason?} → {id,status}
+  POST /api/entities/:id/decision        body {status,actor} → {updated:n}   (backend excludes flagged)
+  POST /api/documents/:id/suggestions    body {page_no,x0,y0,x1,y1,text,kind,scope:'one'|'all',actor} → {created:n}
+  GET  /api/search?q=…                   → {matches:[{document_id,filename,page_no,x0,y0,x1,y1}], count}
+  GET  /api/audit                        → [{ts,actor,action,text,detail}]
+  POST /api/export                       body {actor} → {exported:n,blocked:bool,flagged_remaining:n}
+Page images: GET /pages/<filename>/p<N>.png (filename = document filename without .pdf). The PNGs already exist at web/pages/ — MOVE that directory to web/public/pages so vite serves them in dev and the built dist carries them.
+
+TESTS (assignment explicitly grades frontend tests): Vitest + React Testing Library — geometry pt↔px round-trip; keyboard triage (j advances, a accepts and advances, u restores); band filter hides rows; bulk sheet excludes flagged from default selection and button count tracks checkboxes; add-missed scope dialog fires the right POST. Mock the api client module; no network in tests.
+
+QUALITY BAR: this is the graded artifact. Small components, typed API layer, no any, npm run build clean, npm test green, eslint clean. Scaffold with npm create vite@latest (react-ts) INSIDE web/ (web/ currently contains only pages/ PNGs — preserve them via the move above).
+
+HARD RULES: do not touch design/, samples/, server/, or anything outside web/ except reading. No fabricated PII anywhere — all rendered data comes from the API. Verify: npm run build && npm test both green; print the file tree and test output at the end.

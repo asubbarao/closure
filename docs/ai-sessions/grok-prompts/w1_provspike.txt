@@ -1,0 +1,15 @@
+Work in /Users/aloksubbarao/personal/closure. You OWN ONLY spikes/provenance/**.
+Read anything; touch nothing else.
+SPIKE the pdf extension's document-audit features for chain-of-custody:
+- pdf_revisions (the ext's README: PDFs are append-only; it enumerates prior
+  revisions via startxref/%%EOF + /Prev chains). Run it on samples/*.pdf and on
+  a file you modify incrementally — what EXACTLY does it return?
+- Design (and prove in standalone SQL in spikes/provenance/): at INGEST, record
+  each source PDF's fingerprint (file hash) + revision count; later, re-check to
+  prove the source wasn't altered mid-review. At EXPORT, show the redacted
+  output's lineage (source fingerprint -> export fingerprint, revision counts,
+  timestamp) — the legal chain-of-custody story.
+- Also check any other ext audit-ish functions (pdf_info fields, metadata).
+Deliver spikes/provenance/README.md: what pdf_revisions returns (real output),
+the proven SQL for ingest-fingerprint + export-lineage, and exactly how a later
+agent wires it into routes (view + route shapes). Keep it ready-to-integrate.

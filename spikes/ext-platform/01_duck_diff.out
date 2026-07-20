@@ -1,0 +1,13 @@
+|  id  | diff_status |                                      diff_data                                       |
+|------|-------------|--------------------------------------------------------------------------------------|
+| dec1 | identical   | NULL                                                                                 |
+| dec2 | different   | {"action":{"left":"reject","right":"accept"},"confidence":{"left":0.4,"right":0.55}} |
+| dec3 | left_only   | NULL                                                                                 |
+| dec4 | right_only  | NULL                                                                                 |
+| n_identical | n_different | n_left_only | n_right_only | n_total | pct_identical | pct_different | pct_left_only | pct_right_only |
+|------------:|------------:|------------:|-------------:|--------:|--------------:|--------------:|--------------:|---------------:|
+| 1           | 1           | 1           | 1            | 4       | 25.0          | 25.0          | 25.0          | 25.0           |
+| document_id | page_no | seq | diff_status |                             diff_data                             |
+|------------:|--------:|----:|-------------|-------------------------------------------------------------------|
+| 1           | 1       | 0   | identical   | NULL                                                              |
+| 1           | 1       | 1   | different   | {"x0":{"left":42.0,"right":43.0},"x1":{"left":70.0,"right":71.0}} |

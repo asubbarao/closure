@@ -1,0 +1,31 @@
+FIRST read the shared build contract in full: /private/tmp/claude-501/-Users-aloksubbarao-personal/f15dcc22-ec83-4ec6-a926-096108b96135/scratchpad/contract.md
+Work in /Users/aloksubbarao/personal/closure.
+
+YOU ARE THE ADD-MISSED GROK (false-negative flow, add-missed screen in the
+design reference). You own ONLY: server/templates/add_missed.html and
+static/addmissed.js. Served at GET /ui/add-missed?doc=<id>&page=<n> (route
+exists). Do NOT edit .sql or other templates.
+
+The reviewer catches redactions the AI missed (e.g. the spaced SSN "280 96 9531"
+in supplemental_report, or "Robyn Prce"). Build:
+- a mode banner: "ADD MISSED MODE — drag to mark any text on the page · Esc to
+  exit" (design/copy.md).
+- the page canvas = real PNG /pages/<filename>/pN.png; the reviewer DRAGS a
+  rectangle on it. Convert the drawn px box back to PDF points via the inverse of
+  the contract transform (pt = px / scale).
+- on release, a dialog: category chips (PERSON / SSN / PHONE / ADDRESS / DOB /
+  OTHER) + scope choice "This instance only" vs "Find & redact all matches in
+  case"; when the reviewer types/confirms the text under the box, call
+  GET /api/search?q=TEXT&case=ID to show the live match count ("N matches ·
+  found on P other pages across D docs").
+- confirm "Redact all N ⏎" (or "Add this redaction") POSTs
+  /api/documents/:id/add with the box, text, kind, and scope; the created
+  suggestion(s) are born accepted. Provenance line: "Will log as reviewer-added
+  · <actor> · reason: missed by AI".
+
+VERIFY: boot, open http://127.0.0.1:8117/ui/add-missed?doc=1 , drag a box, pick a
+category, confirm the search count populates and the add POST fires (show
+response). Do not touch design/ or samples/.
+
+
+VERIFY-PORT NOTE: other agents may hold :8117. Boot your OWN instance on port 8124: run  sed "s/8117/8124/" server/app.sql > /tmp/boot_addmissed.sql  then  /Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned /tmp/addmissed.db -c ".read /tmp/boot_addmissed.sql" &  and curl/open http://127.0.0.1:8124 . Kill it when done.

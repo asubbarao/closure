@@ -1,0 +1,20 @@
+Research task (read-only; do NOT modify the repo). Survey the DuckDB community
+extensions catalog at https://duckdb.org/community_extensions/list_of_extensions.html
+(and the per-extension pages) for anything useful to building/serving a WEBAPP
+directly from DuckDB — i.e. an embedded OLAP DB acting as an HTTP app server.
+
+Specifically look for and report, per relevant extension: name, what it does, the
+exact INSTALL/LOAD line, key functions, and whether a signed build exists for
+duckdb v1.5.x osx_arm64. Categories of interest:
+1. HTTP servers / routing (e.g. httpserver, and the user's own 'quackapi' if
+   listed) — can it register named routes, serve static files, return HTML/JSON?
+2. HTML templating / rendering (e.g. tera) — server-side render.
+3. JS execution (e.g. quickjs) — any use for server logic.
+4. PDF read/render/redact (e.g. the 'pdf' extension) — confirm functions.
+5. Anything else that meaningfully helps a "DuckDB IS the web backend" architecture
+   (websockets, SSE, file serving, auth, sessions, JSON handling, fakeit for
+   sample data).
+For each, note the tradeoffs vs a conventional Node/Python API. Write your
+findings to /Users/aloksubbarao/personal/closure/docs/duckdb-webapp-extensions.md
+as a clean markdown table + short notes. That single file is the ONLY thing you
+may write. Be concrete and cite the extension pages.

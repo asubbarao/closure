@@ -1,0 +1,7 @@
+# Local benchmark artifacts (regenerate with run_bench.sh)
+out/bench.db
+out/bench.db.wal
+out/_timed.sql
+out/setup.log
+out/timer_raw.log
+out/corpus.txt

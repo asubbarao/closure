@@ -1,0 +1,153 @@
+{"event":"start","prompt_chars":2150,"t":0.0,"job":"rig_example_gallery"}
+{"event":"update","kind":"available_commands_update","t":5.03,"job":"rig_example_gallery"}
+{"event":"update","kind":"available_commands_update","t":5.03,"job":"rig_example_gallery"}
+{"event":"update","kind":"user_message_chunk","t":10.26,"job":"rig_example_gallery"}
+{"event":"update","kind":"available_commands_update","t":22.57,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"run_terminal_command","n":1,"args_preview":"{\"command\": \"ls -la /Users/aloksubbarao/personal/quackapi/build/release/duckdb /Users/aloksubbarao/personal/quackapi/build/release/extension/quackapi/ 2>/dev/null; ls -la /Users/aloksubbarao/personal/","t":22.57,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":22.57,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"run_terminal_command","n":2,"args_preview":"{\"command\": \"ls -la /tmp/quackapi_rigs/ 2>/dev/null; find /tmp/quackapi_rigs -type f 2>/dev/null | head -50; ls /Users/aloksubbarao/personal/quackapi/examples 2>/dev/null; ls /Users/aloksubbarao/perso","t":22.74,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":22.74,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":22.84,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":22.84,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":23.3,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":23.5,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":23.5,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":23.6,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":23.62,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":23.9,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":23.91,"job":"rig_example_gallery"}
+{"event":"update","kind":"available_commands_update","t":28.06,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"run_terminal_command","n":3,"args_preview":"{\"command\": \"ls -la /tmp/quackapi_rigs/example_gallery/ /tmp/quackapi_rigs/health_probes/ /tmp/quackapi_rigs/pydantic_endpoints/ /tmp/quackapi_rigs/djangokiller/ /Users/aloksubbarao/personal/quackapi/","t":28.06,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":28.27,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"read_file","n":4,"args_preview":"{\"target_file\": \"/tmp/quackapi_rigs/health_probes/run.sh\"}","t":28.33,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":28.33,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"read_file","n":5,"args_preview":"{\"target_file\": \"/tmp/quackapi_rigs/djangokiller/app.sql\", \"limit\": 200}","t":28.33,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":28.33,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"read_file","n":6,"args_preview":"{\"target_file\": \"/Users/aloksubbarao/personal/quackapi/test/sql/quackapi_routes.test\"}","t":28.33,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":28.33,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":28.34,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":28.37,"job":"rig_example_gallery"}
+{"event":"update","kind":"available_commands_update","t":28.37,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":28.37,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":28.37,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":29.0,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":29.11,"job":"rig_example_gallery"}
+{"event":"update","kind":"available_commands_update","t":33.63,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"read_file","n":7,"args_preview":"{\"target_file\": \"/Users/aloksubbarao/personal/quackapi/test/sql/quackapi_table_api.test\"}","t":33.63,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":33.63,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"read_file","n":8,"args_preview":"{\"target_file\": \"/Users/aloksubbarao/personal/quackapi/test/sql/quackapi_openapi.test\"}","t":33.63,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":33.63,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"read_file","n":9,"args_preview":"{\"target_file\": \"/Users/aloksubbarao/personal/quackapi/test/sql/quackapi_auth.test\"}","t":33.63,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":33.63,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"read_file","n":10,"args_preview":"{\"target_file\": \"/tmp/quackapi_rigs/pydantic_endpoints/PROOF.md\", \"limit\": 150}","t":33.63,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":33.63,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"run_terminal_command","n":11,"args_preview":"{\"command\": \"ls /tmp/quackapi_rigs/pydantic_endpoints/generated/ 2>/dev/null; head -200 /tmp/quackapi_rigs/pydantic_endpoints/test_cases.json 2>/dev/null; ls /tmp/quackapi_rigs/djangokiller/; head -10","t":33.63,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":33.64,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":33.77,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":33.77,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":33.77,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":33.77,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":33.77,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":34.5,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":34.6,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":34.62,"job":"rig_example_gallery"}
+{"event":"update","kind":"available_commands_update","t":47.8,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"run_terminal_command","n":12,"args_preview":"{\"command\": \"# Quick interactive probe of quackapi surface\\nDUCKDB=/Users/aloksubbarao/personal/quackapi/build/release/duckdb\\nEXT=/Users/aloksubbarao/personal/quackapi/build/release/extension/quackap","t":47.81,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":47.92,"job":"rig_example_gallery"}
+{"event":"permission","approved":"allow-once","summary":"{'sessionId': '019f7cbe-6242-78f2-9279-ca8bd0cf0fc5', 'toolCall': {'toolCallId': 'call-357a1dd0-a5ab-4529-9a12-e28e75bec","t":47.99,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"grep","n":13,"args_preview":"{\"pattern\": \"PARAM|BODY SCHEMA|tera|html|422|json_schema\", \"path\": \"/Users/aloksubbarao/personal/quackapi/src\", \"glob\": \"*.{cpp,hpp,h,cc}\", \"head_limit\": 60}","t":47.99,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":47.99,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"read_file","n":14,"args_preview":"{\"target_file\": \"/tmp/quackapi_rigs/pydantic_endpoints/generated/route_past_attempt.sql\"}","t":47.99,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":47.99,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":48.0,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":48.0,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":48.02,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":50.6,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":50.7,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":50.8,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":50.9,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":51.1,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":51.2,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":51.3,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":51.4,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":51.41,"job":"rig_example_gallery"}
+{"event":"chunk","chars":506,"t":60.0,"job":"rig_example_gallery"}
+{"event":"update","kind":"available_commands_update","t":60.99,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"run_terminal_command","n":15,"args_preview":"{\"command\": \"mkdir -p /tmp/quackapi_rigs/example_gallery/examples\\nls -la /tmp/quackapi_rigs/example_gallery/\", \"description\": \"Create example_gallery directory tree\"}","t":61.0,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":61.01,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":61.14,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":61.9,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":62.01,"job":"rig_example_gallery"}
+{"event":"update","kind":"available_commands_update","t":68.36,"job":"rig_example_gallery"}
+{"event":"update","kind":"available_commands_update","t":124.1,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"write","n":16,"args_preview":"{\"file_path\": \"/tmp/quackapi_rigs/example_gallery/examples/01_hello.sql\", \"content\": \"-- =============================================================================\\n-- 01 \\u2014 Hello world\\n-- Cop","t":124.1,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.1,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"write","n":17,"args_preview":"{\"file_path\": \"/tmp/quackapi_rigs/example_gallery/examples/02_typed_params.sql\", \"content\": \"-- =============================================================================\\n-- 02 \\u2014 Typed params","t":124.1,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.1,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"write","n":18,"args_preview":"{\"file_path\": \"/tmp/quackapi_rigs/example_gallery/examples/03_json_list.sql\", \"content\": \"-- =============================================================================\\n-- 03 \\u2014 JSON list from ","t":124.1,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.11,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"write","n":19,"args_preview":"{\"file_path\": \"/tmp/quackapi_rigs/example_gallery/examples/04_html_page.sql\", \"content\": \"-- =============================================================================\\n-- 04 \\u2014 HTML page (Tera","t":124.11,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.11,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"write","n":20,"args_preview":"{\"file_path\": \"/tmp/quackapi_rigs/example_gallery/examples/05_auth_required.sql\", \"content\": \"-- =============================================================================\\n-- 05 \\u2014 Auth-requir","t":124.11,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.12,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"write","n":21,"args_preview":"{\"file_path\": \"/tmp/quackapi_rigs/example_gallery/examples/06_table_crud.sql\", \"content\": \"-- =============================================================================\\n-- 06 \\u2014 CREATE API FOR","t":124.12,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.12,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"write","n":22,"args_preview":"{\"file_path\": \"/tmp/quackapi_rigs/example_gallery/examples/07_openapi_docs.sql\", \"content\": \"-- =============================================================================\\n-- 07 \\u2014 OpenAPI / do","t":124.12,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.12,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"write","n":23,"args_preview":"{\"file_path\": \"/tmp/quackapi_rigs/example_gallery/gallery.sql\", \"content\": \"-- =============================================================================\\n-- example_gallery \\u2014 all copy-paste e","t":124.12,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.12,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"write","n":24,"args_preview":"{\"file_path\": \"/tmp/quackapi_rigs/example_gallery/run.sh\", \"content\": \"#!/usr/bin/env bash\\n# Boot the example_gallery rig, curl every case green, write PROOF.md, stop+reap.\\n#\\n# Usage:\\n#   ./run.sh","t":124.12,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.12,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"write","n":25,"args_preview":"{\"file_path\": \"/tmp/quackapi_rigs/example_gallery/README.md\", \"content\": \"# example_gallery \\u2014 quackapi endpoints for people\\n\\nCopy-paste starter pack of **tiny, tested** routes. Each example is ","t":124.12,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.12,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.13,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.13,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.13,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.13,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.13,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.14,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.14,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.14,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.14,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":124.14,"job":"rig_example_gallery"}
+{"event":"update","kind":"available_commands_update","t":127.12,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"run_terminal_command","n":26,"args_preview":"{\"command\": \"chmod +x /tmp/quackapi_rigs/example_gallery/run.sh && /tmp/quackapi_rigs/example_gallery/run.sh\", \"description\": \"Run example_gallery end-to-end proof\", \"timeout\": 120000}","t":127.12,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":127.13,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":127.19,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":127.6,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":130.3,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":130.4,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":130.5,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":130.6,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":130.7,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":130.8,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":130.9,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":131.1,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":131.2,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":131.3,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":131.4,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":131.5,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":131.6,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":131.7,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":131.8,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":131.9,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":132.1,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":132.4,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":132.5,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":132.6,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":132.7,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":132.8,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":132.9,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":133.0,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":133.02,"job":"rig_example_gallery"}
+{"event":"update","kind":"available_commands_update","t":138.43,"job":"rig_example_gallery"}
+{"event":"tool_call","tool":"run_terminal_command","n":27,"args_preview":"{\"command\": \"find /tmp/quackapi_rigs/example_gallery -type f | sort; echo \\\"---\\\"; wc -l /tmp/quackapi_rigs/example_gallery/PROOF.md; echo \\\"---\\\"; head -80 /tmp/quackapi_rigs/example_gallery/PROOF.md","t":138.43,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":138.54,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":138.74,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":139.2,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":139.3,"job":"rig_example_gallery"}
+{"event":"update","kind":"tool_call_update","t":139.33,"job":"rig_example_gallery"}
+{"event":"chunk","chars":1007,"t":141.73,"job":"rig_example_gallery"}
+{"event":"chunk","chars":1508,"t":143.14,"job":"rig_example_gallery"}
+{"event":"update","kind":"available_commands_update","t":143.48,"job":"rig_example_gallery"}
+{"event":"done","tool_calls":27,"output_chars":1646,"elapsed_s":143.65,"t":143.65,"job":"rig_example_gallery"}

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Closure — Multi-file case map · 24-000117</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_tokens.css">
+<style>
+:root{
+  --bg:#F4F5F6; --surface:#FFFFFF; --surface-2:#F9FAFB;
+  --ink:#191B1E; --sub:#5A5F66; --mut:#878C93;
+  --line:#E4E6E9; --line-strong:#C9CCD1;
+  --amber-fill:rgba(252,196,25,.32); --amber-fill-strong:rgba(252,196,25,.55);
+  --amber-edge:#D99A06; --amber-text:#8A6A00; --amber-bg:#FFFBEE;
+  --red:#C03221; --red-soft:rgba(192,50,33,.07); --red-mid:rgba(192,50,33,.16); --red-text:#A02A1C;
+  --ok:#2F7D46; --ok-soft:rgba(47,125,70,.10);
+  --cur:#1D63ED; --cur-soft:rgba(29,99,237,.08);
+  --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --r-sm:5px; --r-md:8px; --r-lg:12px;
+  --shadow-panel:0 1px 3px rgba(25,27,30,.08),0 4px 12px rgba(25,27,30,.06);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);font-size:13.5px;line-height:1.5;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;font-feature-settings:"tnum";min-height:100vh}
+
+.top{display:flex;align-items:center;gap:14px;height:52px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:100}
+.brand{font-weight:700;font-size:15px}.brand span{color:var(--amber-edge)}
+.top-div{width:1px;height:20px;background:var(--line)}
+.crumb{font-family:var(--mono);font-size:11.5px;color:var(--sub)}.crumb b{color:var(--ink);font-weight:600}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.who{font-size:12.5px;color:var(--sub)}.who b{color:var(--ink);font-weight:600}
+.btn{font:inherit;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);cursor:pointer;text-decoration:none}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn[disabled]{opacity:.42;cursor:not-allowed}
+
+.wrap{max-width:1180px;margin:0 auto;padding:28px 24px 80px}
+.page-head{display:flex;align-items:flex-start;gap:24px;padding-bottom:20px;border-bottom:1px solid var(--line);margin-bottom:22px}
+.page-head h1{font-size:22px;font-weight:700;letter-spacing:-.02em}
+.page-head .sub{font-size:13.5px;color:var(--sub);margin-top:6px;max-width:560px;line-height:1.5}
+.page-head .sub b{color:var(--ink);font-weight:600}
+.stats{margin-left:auto;display:flex;gap:20px;text-align:right;flex-shrink:0}
+.stat .v{font-family:var(--mono);font-size:22px;font-weight:700;display:block;line-height:1.1}
+.stat .v.warn{color:var(--amber-text)}.stat .v.alert{color:var(--red)}
+.stat .l{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin-top:3px}
+
+.blocked{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--red-mid);border:1px solid var(--red);border-radius:var(--r-md);font-size:13px;margin-bottom:22px}
+.blocked .ic{width:20px;height:20px;border-radius:50%;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.blocked b{color:var(--red-text)}
+.blocked a{color:var(--red-text);font-weight:600;margin-left:6px}
+
+.cols{display:grid;grid-template-columns:1fr 340px;gap:24px;align-items:start}
+.sec-label{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);margin-bottom:10px}
+
+.doc-table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-panel)}
+.doc-table th{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);font-weight:700;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface-2);text-align:left}
+.doc-table th.r,.doc-table td.r{text-align:right}
+.doc-table td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+.doc-table tr:last-child td{border-bottom:none}
+.doc-table tbody tr{cursor:pointer}
+.doc-table tbody tr:hover td{background:var(--bg)}
+.doc-name{font-weight:600;font-size:13px}
+.doc-meta{font-family:var(--mono);font-size:10.5px;color:var(--mut);margin-top:2px}
+.doc-num{font-family:var(--mono);font-size:12.5px;font-weight:600}
+.conf-bar{width:120px;height:7px;border-radius:4px;background:var(--line);display:inline-flex;overflow:hidden}
+.cb-h{background:var(--ink)}.cb-m{background:var(--amber-edge)}.cb-l{background:var(--red)}.cb-r{background:var(--line-strong)}
+.conf-detail{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:3px;display:flex;gap:6px}
+.cd-h{color:var(--ink)}.cd-m{color:var(--amber-text)}.cd-l{color:var(--red)}
+.doc-status{font-size:11.5px;font-weight:600;white-space:nowrap}
+.st-review{color:var(--amber-text)}.st-done{color:var(--ok)}.st-done::before{content:"✓ "}
+.st-blocked{color:var(--red)}.st-blocked::before{content:"⚠ "}
+
+.ents-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-panel)}
+.ent{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer;text-decoration:none;color:inherit}
+.ent:last-of-type{border-bottom:none}.ent:hover{background:var(--bg)}
+.ent-nm{flex:1;min-width:0}
+.ent-val{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ent-type{font-size:10px;letter-spacing:.03em;color:var(--mut);margin-top:2px;font-weight:600}
+.ent-ct{font-family:var(--mono);font-size:10.5px;color:var(--sub);text-align:right;flex-shrink:0;line-height:1.3}
+.ent-ct b{color:var(--ink);font-weight:600;display:block;font-size:13px}
+.pill{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 9px;border-radius:10px;flex-shrink:0;white-space:nowrap}
+.p-pend{background:var(--amber-fill-strong);color:var(--amber-text)}
+.p-acc{background:var(--ink);color:#fff}
+.p-flag{background:var(--red-mid);color:var(--red-text);border:1px solid var(--red)}
+.ent-foot{padding:12px 14px;font-size:12.5px;color:var(--sub);background:var(--surface-2);line-height:1.55;border-top:1px solid var(--line)}
+.ent-foot strong{font-weight:600;color:var(--ink)}
+
+.model{margin-top:22px;padding:14px 16px;background:var(--cur-soft);border:1px solid rgba(29,99,237,.2);border-radius:var(--r-md);font-size:13px;color:var(--sub);line-height:1.5}
+.model b{color:var(--ink);font-weight:600}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">Closure<span>.</span></div>
+  <div class="top-div"></div>
+  <div class="crumb"><b>CASE 24-000117</b> · Multi-file map</div>
+  <div class="top-right">
+    <span class="who">Reviewing as <b>A. Subbarao</b></span>
+    <a class="btn" href="01_review_stream.html">Open entity stream</a>
+    <button class="btn primary" disabled>Export redacted…</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>Case package · 23 documents</h1>
+      <p class="sub">Multi-file work is <b>case-scoped</b>. Decide an entity once; it propagates across every file that contains it. Use this map to see which files are still dirty — not to re-decide the same name twenty-three times.</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><span class="v">1,847</span><span class="l">of 2,394 reviewed</span></div>
+      <div class="stat"><span class="v warn">547</span><span class="l">open suggestions</span></div>
+      <div class="stat"><span class="v alert">37</span><span class="l">flagged</span></div>
+      <div class="stat"><span class="v">18/23</span><span class="l">files clear</span></div>
+    </div>
+  </div>
+
+  <div class="blocked">
+    <div class="ic">!</div>
+    <div>
+      <b>Export blocked:</b> 5 documents have 37 flagged items that require individual judgment before export.
+      <a href="05_confidence.html">Jump to flagged →</a>
+    </div>
+  </div>
+
+  <div class="cols">
+    <div>
+      <div class="sec-label">Documents · open work first</div>
+      <table class="doc-table">
+        <thead>
+          <tr>
+            <th>Document</th>
+            <th class="r">Open</th>
+            <th>Bands</th>
+            <th class="r">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="doc-name">consolidated_case_file.pdf</div>
+              <div class="doc-meta">110 pp · 342 suggestions</div>
+            </td>
+            <td class="r"><span class="doc-num">198</span></td>
+            <td>
+              <div class="conf-bar"><i class="cb-h" style="width:42%"></i><i class="cb-m" style="width:38%"></i><i class="cb-l" style="width:12%"></i><i class="cb-r" style="width:8%"></i></div>
+              <div class="conf-detail"><span class="cd-h">H 41</span><span class="cd-m">R 89</span><span class="cd-l">F 14</span></div>
+            </td>
+            <td class="r"><span class="doc-status st-blocked">Flagged open</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="doc-name">incident_report_2024-0117.pdf</div>
+              <div class="doc-meta">10 pp · 44 suggestions</div>
+            </td>
+            <td class="r"><span class="doc-num">19</span></td>
+            <td>
+              <div class="conf-bar"><i class="cb-h" style="width:30%"></i><i class="cb-m" style="width:25%"></i><i class="cb-l" style="width:20%"></i><i class="cb-r" style="width:25%"></i></div>
+              <div class="conf-detail"><span class="cd-h">H 4</span><span class="cd-m">R 7</span><span class="cd-l">F 8</span></div>
+            </td>
+            <td class="r"><span class="doc-status st-blocked">Flagged open</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="doc-name">supplemental_report_A.pdf</div>
+              <div class="doc-meta">10 pp · 38 suggestions</div>
+            </td>
+            <td class="r"><span class="doc-num">11</span></td>
+            <td>
+              <div class="conf-bar"><i class="cb-h" style="width:45%"></i><i class="cb-m" style="width:40%"></i><i class="cb-l" style="width:5%"></i><i class="cb-r" style="width:10%"></i></div>
+              <div class="conf-detail"><span class="cd-h">H 3</span><span class="cd-m">R 6</span><span class="cd-l">F 2</span></div>
+            </td>
+            <td class="r"><span class="doc-status st-review">In review</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="doc-name">bodycam_log_excerpt.pdf</div>
+              <div class="doc-meta">22 pp · 56 suggestions</div>
+            </td>
+            <td class="r"><span class="doc-num">28</span></td>
+            <td>
+              <div class="conf-bar"><i class="cb-h" style="width:50%"></i><i class="cb-m" style="width:35%"></i><i class="cb-l" style="width:10%"></i><i class="cb-r" style="width:5%"></i></div>
+              <div class="conf-detail"><span class="cd-h">H 12</span><span class="cd-m">R 11</span><span class="cd-l">F 5</span></div>
+            </td>
+            <td class="r"><span class="doc-status st-blocked">Flagged open</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="doc-name">interview_transcript_C.pdf</div>
+              <div class="doc-meta">10 pp · 41 suggestions</div>
+            </td>
+            <td class="r"><span class="doc-num">0</span></td>
+            <td>
+              <div class="conf-bar"><i class="cb-r" style="width:100%"></i></div>
+              <div class="conf-detail">all decided</div>
+            </td>
+            <td class="r"><span class="doc-status st-done">Clear</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="doc-name">case_summary.pdf</div>
+              <div class="doc-meta">10 pp · 22 suggestions</div>
+            </td>
+            <td class="r"><span class="doc-num">0</span></td>
+            <td>
+              <div class="conf-bar"><i class="cb-r" style="width:100%"></i></div>
+              <div class="conf-detail">all decided</div>
+            </td>
+            <td class="r"><span class="doc-status st-done">Clear</span></td>
+          </tr>
+          <tr>
+            <td colspan="4" style="color:var(--mut);font-size:12.5px">+ 17 more documents · 16 clear · 1 with open HIGH only</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="model"><b>Multi-file rule:</b> clicking a document filters the entity stream to entities still open <em>in that file</em> — it does not restart a per-document inbox. Accepting “Yasmine Nienow” from any file lays the ink in all 12 files that contain her name.</p>
+    </div>
+
+    <div>
+      <div class="sec-label">Entities spanning files · decide once</div>
+      <div class="ents-card">
+        <a class="ent" href="02_bulk_entity.html">
+          <div class="ent-nm">
+            <div class="ent-val">Yasmine Nienow</div>
+            <div class="ent-type">PERSON · 12 files</div>
+          </div>
+          <div class="ent-ct"><b>47</b>open</div>
+          <span class="pill p-pend">HIGH</span>
+        </a>
+        <a class="ent" href="05_confidence.html">
+          <div class="ent-nm">
+            <div class="ent-val">Nienow Street</div>
+            <div class="ent-type">STREET decoy · 5 files</div>
+          </div>
+          <div class="ent-ct"><b>18</b>open</div>
+          <span class="pill p-flag">HUMAN</span>
+        </a>
+        <a class="ent" href="05_confidence.html">
+          <div class="ent-nm">
+            <div class="ent-val">Det. C. Nienow #9418</div>
+            <div class="ent-type">OFFICER · 14 files</div>
+          </div>
+          <div class="ent-ct"><b>62</b>open</div>
+          <span class="pill p-pend">REVIEW</span>
+        </a>
+        <a class="ent" href="05_confidence.html">
+          <div class="ent-nm">
+            <div class="ent-val">Nienow v. Ohio</div>
+            <div class="ent-type">CITATION · 7 files</div>
+          </div>
+          <div class="ent-ct"><b>11</b>open</div>
+          <span class="pill p-flag">HUMAN</span>
+        </a>
+        <div class="ent">
+          <div class="ent-nm">
+            <div class="ent-val">280-96-9531</div>
+            <div class="ent-type">SSN · 4 files</div>
+          </div>
+          <div class="ent-ct"><b>8</b>open</div>
+          <span class="pill p-pend">HIGH</span>
+        </div>
+        <div class="ent">
+          <div class="ent-nm">
+            <div class="ent-val">D. Rivera (CI)</div>
+            <div class="ent-type">PERSON · 7 files</div>
+          </div>
+          <div class="ent-ct"><b>0</b></div>
+          <span class="pill p-acc">ACCEPTED</span>
+        </div>
+        <div class="ent-foot">
+          <strong>Decide once, propagates everywhere.</strong> Flagged entities require human judgment per suggestion context — never silent bulk.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

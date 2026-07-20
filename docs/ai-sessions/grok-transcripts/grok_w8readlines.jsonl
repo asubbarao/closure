@@ -1,0 +1,6 @@
+{"event":"start","prompt_chars":1596,"t":0.0,"job":"w8readlines"}
+{"event":"update","kind":"available_commands_update","t":2.12,"job":"w8readlines"}
+{"event":"update","kind":"available_commands_update","t":2.12,"job":"w8readlines"}
+{"event":"update","kind":"user_message_chunk","t":5.73,"job":"w8readlines"}
+{"event":"error","msg":"{'code': -32603, 'message': 'Internal error', 'data': {'message': 'API error (status 402 Payment Required): Grok Build usage balance exhausted', 'http_status': 402}}","t":6.74,"job":"w8readlines"}
+{"event":"error","msg":"session/prompt failed: {'code': -32603, 'message': 'Internal error', 'data': {'message': 'API error (status 402 Payment Required): Grok Build usage balance exhausted', 'http_status': 402}}","elapsed_s":6.74,"t":6.74,"job":"w8readlines"}

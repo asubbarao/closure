@@ -1,0 +1,32 @@
+FIRST read the shared build contract in full: /private/tmp/claude-501/-Users-aloksubbarao-personal/f15dcc22-ec83-4ec6-a926-096108b96135/scratchpad/contract.md
+Work in /Users/aloksubbarao/personal/closure.
+
+YOU ARE THE BULK-REVIEW GROK (bulk screen in the design reference). You own ONLY:
+server/templates/bulk.html and static/bulk.js. It is served at GET /ui/bulk
+(route already exists) and takes ?entity=<id> (and/or ?case=<id>). Do NOT edit
+.sql or other templates.
+
+Build the entity bulk-review sheet:
+- header: entity canonical_text + kind + "SUBJECT OF CASE <case_no>".
+- tally line: "N instances across D documents · S selected to accept · X excluded
+  — different context · R already decided" (strings per design/copy.md).
+- instances grouped BY DOCUMENT, each row = checkbox + context snippet + page +
+  confidence. Fetch the data from GET /api/cases/:id/suggestions filtered to the
+  entity (do the filtering in JS).
+- FLAGGED-band rows are red-tinted, UNCHECKED by default, and carry a "why" tag
+  (flag_tag); show the exclusion banner: "X flagged items are excluded from bulk
+  accept — they require individual decisions."
+- primary button "Accept N — lay the ink" where N ALWAYS equals the number of
+  checked rows (live). Secondary "Reject selected". These POST
+  /api/entities/:id/decision (which itself excludes flagged) and/or per-suggestion
+  /api/suggestions/:id/decision for the checked set; on success close/refresh.
+- footer note: "Every bulk action writes one audit event per instance — who,
+  what, when, prior state."
+
+VERIFY: boot, open http://127.0.0.1:8117/ui/bulk?entity=1 , confirm instances
+render grouped by doc, flagged excluded by default, the button count tracks the
+checkboxes, and Accept fires the POST (show the response). Do not touch design/
+or samples/.
+
+
+VERIFY-PORT NOTE: other agents may hold :8117. Boot your OWN instance on port 8123: run  sed "s/8117/8123/" server/app.sql > /tmp/boot_bulk.sql  then  /Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned /tmp/bulk.db -c ".read /tmp/boot_bulk.sql" &  and curl/open http://127.0.0.1:8123 . Kill it when done.

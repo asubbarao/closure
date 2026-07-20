@@ -1,0 +1,16 @@
+THE SINGULAR REQUIREMENT of this product: a human must THOROUGHLY get through 800-3000 AI suggestions across 1000+ pages, fast. The funnel: ~3k suggestions -> high-confidence auto-pass + easy bulk groups clear ~2200 -> the human hand-reviews only the residual ~800, GROUPED (names, addresses, patterns) for batch judgment, while also catching false negatives. Everything must serve throughput + auditability.
+FIRST read: /private/tmp/claude-501/-Users-aloksubbarao-personal/f15dcc22-ec83-4ec6-a926-096108b96135/scratchpad/contract.md and docs/ext-survey-geo.md. Work in /Users/aloksubbarao/personal/closure.
+Run cmd: /Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned closure.db -c ".read server/app.sql" (own port: sed 8117->8133, /tmp/geo.db).
+YOU OWN: NEW server/routes/geo.sql, NEW template partial geo_*.html, NEW
+static/geo.js, spikes/geo/**, minimal .read in app.sql.
+BUILD a small, tasteful ADDRESS MINIMAP as a nice-touch panel (dashboard or
+library): the case's addresses (from entities, standardized) plotted as a
+minimal dot-map. Constraints: NO external geocoding API, NO heavy map library —
+derive plausible coordinates deterministically (e.g. hash-based scatter within a
+city-ish bounding box, or h3 cells if the ext helps) and render as clean inline
+SVG (match the app's design tokens). Clicking a dot filters/jumps to that
+address's suggestions. If after spiking this cannot be made honest + useful,
+say so in a short doc and ship the minimal viable version regardless (it is a
+visual grouping aid, not real geography — label it as such in the UI).
+VERIFY: boot; the panel renders dots for the case addresses; click filters.
+Report evidence.

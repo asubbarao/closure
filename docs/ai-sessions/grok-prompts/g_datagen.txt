@@ -1,0 +1,37 @@
+Work in /Users/aloksubbarao/personal/closure. Rebuild sample-data generation to
+be PROFESSIONAL and GENERAL (this repo goes private to a company and is graded on
+code quality — nothing hardcoded to a specific case/name).
+
+HARD STACK RULES: pure DuckDB + community 'fakeit' + the user's community 'pdf'
+extension (write_pdf(text[,out]) and COPY (query) TO 'x.pdf' (FORMAT pdf)).
+NO python, NO typst. Delete samples/gen/generate.py and samples/gen/report.typ.
+A thin wrapper shell script is allowed ONLY to invoke duckdb (build-time data
+gen, not app runtime).
+
+DELIVER:
+1. scripts/generate-samples.sh — thin wrapper: runs duckdb over a generator SQL
+   file (e.g. samples/gen/generate.sql). Parameterized: number of cases and docs
+   configurable (arg/env), NOT hardcoded to case 24-000117. On a fresh clone,
+   running this script produces the whole sample corpus.
+2. samples/gen/generate.sql — pure DuckDB: fakeit generates identities (names,
+   SSNs, phones, DOBs, addresses) for N cases; compose realistic police-report
+   narrative text in SQL embedding the PII + the planted false positives
+   (surname-as-street, citation, officer-of-record) and false negatives (a real
+   SSN/phone written in a form the detector misses — spaced/dotted); write PDFs
+   via write_pdf / COPY (FORMAT pdf). Keep identities.json + manifest.json output
+   schema compatible with server/ingest.sql + server/seed.sql (do NOT edit those
+   files). fakeit isn't seedable, so committing the generated identities.json as
+   a frozen fixture is fine — but the GENERATOR is the source of truth.
+3. MESSY PDFS (so pdf handling is tested, not assumed): also generate a small set
+   of edge-case PDFs — an image-only/scanned one (rasterize text then rebuild
+   with no text layer), an encrypted/password one, a malformed/truncated one, a
+   rotated-page one, a non-latin/CJK one. Put them under samples/messy/ with a
+   manifest describing what each stresses. (Coordinate: do NOT touch
+   samples/stress/ — another agent owns that.)
+4. Verify: run scripts/generate-samples.sh from scratch, confirm PDFs generate,
+   pdf_info shows them, read_pdf_words finds the planted false negatives' text,
+   and the app still boots+ingests (run cmd:
+   /Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned closure.db -c ".read server/app.sql").
+You OWN: scripts/generate-samples.sh, samples/gen/*, samples/messy/*, and the
+regenerated samples/*.pdf + identities.json + manifest.json. Do NOT edit server/.
+Report the script command, params, and generation proof.

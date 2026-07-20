@@ -1,0 +1,23 @@
+{"event":"start","prompt_chars":4534,"t":0.0,"job":"g1"}
+{"event":"update","kind":"available_commands_update","t":2.55,"job":"g1"}
+{"event":"update","kind":"available_commands_update","t":2.57,"job":"g1"}
+{"event":"update","kind":"user_message_chunk","t":7.8,"job":"g1"}
+{"event":"update","kind":"available_commands_update","t":18.21,"job":"g1"}
+{"event":"tool_call","tool":"read_file","n":1,"args_preview":"{\"target_file\": \"/Users/aloksubbarao/personal/duckdb-chrome-bridge/README.md\"}","t":18.21,"job":"g1"}
+{"event":"update","kind":"tool_call_update","t":18.22,"job":"g1"}
+{"event":"update","kind":"tool_call_update","t":18.25,"job":"g1"}
+{"event":"update","kind":"available_commands_update","t":18.25,"job":"g1"}
+{"event":"update","kind":"available_commands_update","t":33.4,"job":"g1"}
+{"event":"tool_call","tool":"write","n":2,"args_preview":"{\"file_path\": \"/Users/aloksubbarao/personal/duckdb-chrome-bridge/README.md\", \"content\": \"# duckdb-chrome-bridge\\n\\n*The full narrative \\u2014 with DuckDB-generated figures (built by\\n`figures/build_fi","t":33.4,"job":"g1"}
+{"event":"update","kind":"tool_call_update","t":33.4,"job":"g1"}
+{"event":"update","kind":"tool_call_update","t":33.4,"job":"g1"}
+{"event":"update","kind":"available_commands_update","t":35.45,"job":"g1"}
+{"event":"tool_call","tool":"run_terminal_command","n":3,"args_preview":"{\"command\": \"grep -nE 'osa\\\\.sql|osa_programs|compile-osa|osa_lexicon|osa_grammar|osa_assemble|osa_pipe|browser_eval1|browser_qsql|browser_dom1|browser_xpath1|_js|browser_status|browser_ok|browser_bod","t":35.45,"job":"g1"}
+{"event":"update","kind":"tool_call_update","t":35.45,"job":"g1"}
+{"event":"permission","approved":"allow-once","summary":"{'sessionId': '019f7cc5-390f-70f1-8877-bbfb47247733', 'toolCall': {'toolCallId': 'call-5242414d-90c0-40d0-a8b6-beab3d808","t":35.46,"job":"g1"}
+{"event":"update","kind":"tool_call_update","t":35.46,"job":"g1"}
+{"event":"update","kind":"tool_call_update","t":35.6,"job":"g1"}
+{"event":"update","kind":"tool_call_update","t":35.61,"job":"g1"}
+{"event":"chunk","chars":500,"t":38.65,"job":"g1"}
+{"event":"update","kind":"available_commands_update","t":39.39,"job":"g1"}
+{"event":"done","tool_calls":3,"output_chars":747,"elapsed_s":39.39,"t":39.39,"job":"g1"}

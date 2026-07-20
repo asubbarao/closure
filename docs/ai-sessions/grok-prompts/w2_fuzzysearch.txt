@@ -1,0 +1,12 @@
+FIRST read: /private/tmp/claude-501/-Users-aloksubbarao-personal/f15dcc22-ec83-4ec6-a926-096108b96135/scratchpad/contract.md . Work in /Users/aloksubbarao/personal/closure (restructured:
+server/routes/*.sql). Run cmd: /Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned closure.db -c ".read server/app.sql"
+YOU OWN ONLY: server/routes/search.sql and static JS for add-missed (the add-missed
+flow's js file — find it in static/; you own just the search-related functions in
+it), plus nothing else.
+BUILD: upgrade "find all matches in case" (used by add-missed scope choice) to
+rapidfuzz-powered fuzzy matching (INSTALL rapidfuzz FROM community): exact matches
+first, then fuzzy (similarity >= ~90) with their scores, so a reviewer marking
+"280 96 9531" also finds "280-96-9531" and vice versa; likewise misspelled names.
+Response distinguishes exact vs fuzzy. Update the add-missed UI count string to
+show both ("N exact · M similar").
+VERIFY: boot; curl the search route with a variant form and show exact+fuzzy hits.

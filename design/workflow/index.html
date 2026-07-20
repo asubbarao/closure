@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Closure — Workflow suite · 2,394-suggestion navigation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_tokens.css">
+<style>
+:root{
+  --bg:#F4F5F6; --surface:#FFFFFF; --surface-2:#F9FAFB;
+  --ink:#191B1E; --sub:#5A5F66; --mut:#878C93;
+  --line:#E4E6E9; --line-strong:#C9CCD1;
+  --amber-edge:#D99A06; --amber-text:#8A6A00; --amber-fill-strong:rgba(252,196,25,.55);
+  --cur:#1D63ED; --cur-soft:rgba(29,99,237,.08);
+  --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --r-md:8px; --r-lg:12px;
+  --shadow:0 1px 3px rgba(25,27,30,.08),0 4px 12px rgba(25,27,30,.06);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);font-size:14px;line-height:1.55;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;min-height:100vh}
+.top{display:flex;align-items:center;gap:14px;height:52px;padding:0 20px;background:var(--surface);border-bottom:1px solid var(--line)}
+.brand{font-weight:700;font-size:15px}.brand span{color:var(--amber-edge)}
+.top-div{width:1px;height:20px;background:var(--line)}
+.meta{font-family:var(--mono);font-size:11.5px;color:var(--sub)}
+.wrap{max-width:880px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:28px;font-weight:700;letter-spacing:-.03em;line-height:1.15;margin-bottom:10px}
+.lead{font-size:15px;color:var(--sub);max-width:620px;margin-bottom:12px}
+.lead b{color:var(--ink)}
+.thesis{font-size:14px;color:var(--sub);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px 18px;margin:20px 0 32px;box-shadow:var(--shadow);line-height:1.55}
+.thesis b{color:var(--ink)}
+.sec{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);margin-bottom:12px}
+.list{display:flex;flex-direction:column;gap:10px}
+.item{
+  display:grid;grid-template-columns:72px 1fr auto;gap:16px;align-items:center;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+  padding:16px 18px;text-decoration:none;color:inherit;box-shadow:var(--shadow);transition:border-color 80ms;
+}
+.item:hover{border-color:var(--ink)}
+.item.star{border-color:var(--cur);background:linear-gradient(180deg,var(--cur-soft),var(--surface))}
+.num{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--mut)}
+.item.star .num{color:var(--cur)}
+.item h2{font-size:15px;font-weight:700;margin-bottom:3px}
+.item p{font-size:13px;color:var(--sub);line-height:1.45}
+.tag{font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;background:var(--surface-2);color:var(--sub);white-space:nowrap}
+.item.star .tag{background:var(--cur);color:#fff}
+.foot{margin-top:36px;font-size:13px;color:var(--mut);line-height:1.5}
+.foot a{color:var(--cur);font-weight:600}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">Closure<span>.</span></div>
+  <div class="top-div"></div>
+  <div class="meta">design/workflow · case 24-000117</div>
+</header>
+<div class="wrap">
+  <h1>Workflow suite</h1>
+  <p class="lead">High-fidelity mocks for navigating <b>2,394 redaction suggestions</b> across 1,000+ pages and many files. Metric: reviewer throughput with safety.</p>
+  <div class="thesis">
+    <b>Interaction thesis:</b> Primary unit is the <b>entity</b> (not page or suggestion). Case-wide stream ranked by leverage; decision card is primary, PDF is verification; bulk is confidence-gated; FLAGGED is sacred.
+    Full write-up: <a href="THESIS.md" style="color:var(--cur);font-weight:600">THESIS.md</a>
+  </div>
+
+  <div class="sec">Screens</div>
+  <div class="list">
+    <a class="item star" href="01_review_stream.html">
+      <span class="num">01 ★</span>
+      <div>
+        <h2>Review stream</h2>
+        <p>Core surface at 2,394 scale — entity ledger, leverage ranking, decision card, page peek, absolute progress.</p>
+      </div>
+      <span class="tag">Star</span>
+    </a>
+    <a class="item" href="02_bulk_entity.html">
+      <span class="num">02</span>
+      <div>
+        <h2>Entity bulk</h2>
+        <p>Accept/reject many suggestions for one entity across files; flagged excluded; lay the ink with count contract.</p>
+      </div>
+      <span class="tag">Bulk</span>
+    </a>
+    <a class="item" href="03_bulk_band.html">
+      <span class="num">03</span>
+      <div>
+        <h2>Band bulk</h2>
+        <p>Accept remaining HIGH entities in one confirmed action — confidence-gated, previewed, never silent.</p>
+      </div>
+      <span class="tag">Bulk</span>
+    </a>
+    <a class="item" href="04_multifile.html">
+      <span class="num">04</span>
+      <div>
+        <h2>Multi-file map</h2>
+        <p>23-document package: dirty files, band mini-bars, entity panel spanning files, export blocked on flagged.</p>
+      </div>
+      <span class="tag">Multi-file</span>
+    </a>
+    <a class="item" href="05_confidence.html">
+      <span class="num">05</span>
+      <div>
+        <h2>Confidence triage</h2>
+        <p>HIGH / REVIEW / FLAGGED postures + live why-card false positive (Nienow Street).</p>
+      </div>
+      <span class="tag">Confidence</span>
+    </a>
+    <a class="item" href="06_add_missed.html">
+      <span class="num">06</span>
+      <div>
+        <h2>Add missed</h2>
+        <p>Secondary false-negative path — mark text, this instance vs find-all in case.</p>
+      </div>
+      <span class="tag">Secondary</span>
+    </a>
+  </div>
+
+  <p class="foot">
+    Phase-1 blind thesis + mock: <a href="_blind/THESIS.md">_blind/</a> · Incumbent design suite: <a href="../01_case_dashboard.html">design/01–06</a> · Do not overwrite 01–06.
+  </p>
+</div>
+</body>
+</html>

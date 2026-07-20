@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Closure — Band bulk · Accept remaining HIGH</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_tokens.css">
+<style>
+:root{
+  --bg:#F4F5F6; --surface:#FFFFFF; --surface-2:#F9FAFB;
+  --ink:#191B1E; --sub:#5A5F66; --mut:#878C93;
+  --line:#E4E6E9; --line-strong:#C9CCD1;
+  --amber-fill:rgba(252,196,25,.32); --amber-fill-strong:rgba(252,196,25,.55);
+  --amber-edge:#D99A06; --amber-text:#8A6A00; --amber-bg:#FFFBEE;
+  --red:#C03221; --red-soft:rgba(192,50,33,.07); --red-mid:rgba(192,50,33,.16); --red-text:#A02A1C;
+  --ok:#2F7D46; --ok-soft:rgba(47,125,70,.10);
+  --cur:#1D63ED; --cur-soft:rgba(29,99,237,.08);
+  --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --r-sm:5px; --r-md:8px; --r-lg:12px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:var(--sans);font-size:13.5px;line-height:1.5;color:var(--ink);
+  min-height:100vh;background:rgba(25,27,30,.50);
+  display:flex;align-items:center;justify-content:center;padding:28px;
+  -webkit-font-smoothing:antialiased;font-feature-settings:"tnum";
+}
+.sheet{
+  width:720px;max-height:90vh;background:var(--surface);border-radius:16px;
+  box-shadow:0 32px 96px rgba(25,27,30,.45);display:flex;flex-direction:column;overflow:hidden;
+}
+.head{padding:24px 28px 0}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);margin-bottom:6px}
+h1{font-size:22px;font-weight:700;letter-spacing:-.02em;margin-bottom:8px}
+.lead{font-size:14px;color:var(--sub);line-height:1.5;margin-bottom:18px}
+.lead b{color:var(--ink)}
+
+.hero-stats{display:flex;gap:0;border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;margin-bottom:16px}
+.hs{flex:1;padding:14px 12px;text-align:center;border-right:1px solid var(--line);background:var(--surface-2)}
+.hs:last-child{border-right:none}
+.hs .v{font-family:var(--mono);font-size:22px;font-weight:700;display:block;line-height:1.1}
+.hs .v.ok{color:var(--ok)}.hs .v.warn{color:var(--amber-text)}.hs .v.alert{color:var(--red)}
+.hs .l{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin-top:4px}
+
+.gates{padding:0 28px 8px}
+.gate{
+  display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:var(--r-md);
+  border:1px solid var(--line);margin-bottom:8px;background:var(--surface-2);font-size:13px;color:var(--sub);
+}
+.gate.pass{border-color:rgba(47,125,70,.35);background:var(--ok-soft)}
+.gate.block{border-color:rgba(192,50,33,.3);background:var(--red-soft)}
+.gate .icon{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.gate.pass .icon{background:var(--ok);color:#fff}
+.gate.block .icon{background:var(--red);color:#fff}
+.gate b{color:var(--ink);font-weight:600}
+
+.samples{padding:8px 28px 0;flex:1;overflow-y:auto;min-height:0}
+.samples h3{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin-bottom:8px}
+.row{
+  display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px;
+}
+.row:last-child{border-bottom:none}
+.row .nm{font-weight:600;flex:0 0 140px}
+.row .meta{font-family:var(--mono);font-size:11px;color:var(--mut);flex:1}
+.row .conf{font-family:var(--mono);font-weight:700;font-size:12px}
+
+.foot{
+  padding:16px 28px 20px;border-top:1px solid var(--line);display:flex;gap:10px;align-items:center;flex-shrink:0;
+}
+.btn{font:inherit;font-weight:700;font-size:13.5px;padding:11px 18px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--surface);cursor:pointer;color:var(--ink)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff;flex:1}
+.btn.primary:hover{background:#000}
+.btn.ghost{border-color:transparent;color:var(--sub)}
+.audit{font-size:11.5px;color:var(--mut);padding:0 28px 16px;line-height:1.45}
+.audit b{color:var(--sub);font-weight:600}
+.back{position:fixed;top:16px;left:16px;font:600 12.5px var(--sans);color:#fff;text-decoration:none;opacity:.85}
+.back:hover{opacity:1}
+kbd{font-family:var(--mono);font-size:11px;font-weight:600;border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:4px;padding:1px 6px;background:var(--surface)}
+</style>
+</head>
+<body>
+<a class="back" href="01_review_stream.html">← Review stream</a>
+
+<div class="sheet" role="dialog" aria-label="Band bulk accept HIGH">
+  <div class="head">
+    <div class="eyebrow">Band bulk · confidence-gated</div>
+    <h1>Accept remaining HIGH entities</h1>
+    <p class="lead">Clear volume after individual triage of risky items. Only entities whose <b>min confidence ≥ 90</b>, with <b>zero flagged</b> suggestions, and <b>no open REVIEW split</b> are included.</p>
+
+    <div class="hero-stats">
+      <div class="hs"><span class="v ok">18</span><span class="l">Entities</span></div>
+      <div class="hs"><span class="v ok">214</span><span class="l">Suggestions</span></div>
+      <div class="hs"><span class="v">11</span><span class="l">Files touched</span></div>
+      <div class="hs"><span class="v alert">0</span><span class="l">Flagged (blocked)</span></div>
+    </div>
+  </div>
+
+  <div class="gates">
+    <div class="gate pass">
+      <div class="icon">✓</div>
+      <div><b>HIGH band only</b> — min confidence per entity ≥ 90. REVIEW and FLAGGED never enter this path.</div>
+    </div>
+    <div class="gate pass">
+      <div class="icon">✓</div>
+      <div><b>Flagged exclusion</b> — 37 FLAGGED suggestions case-wide remain untouched. Export still blocked until they are decided individually.</div>
+    </div>
+    <div class="gate pass">
+      <div class="icon">✓</div>
+      <div><b>Entity integrity</b> — “Nienow Street” and “Det. C. Nienow” are separate entities (FLAGGED / REVIEW) and are not in this set.</div>
+    </div>
+    <div class="gate block">
+      <div class="icon">!</div>
+      <div><b>Not silent</b> — you must confirm. One audit event per suggestion. Undo restores all 214 to pending.</div>
+    </div>
+  </div>
+
+  <div class="samples">
+    <h3>Sample of entities that will be accepted (18)</h3>
+    <div class="row"><span class="nm">5024 Island Ton</span><span class="meta">ADDRESS · 31 suggestions · 9 files</span><span class="conf">94%</span></div>
+    <div class="row"><span class="nm">280-96-9531</span><span class="meta">SSN · 8 suggestions · 4 files</span><span class="conf">99%</span></div>
+    <div class="row"><span class="nm">(266) 458-3812</span><span class="meta">PHONE · 14 suggestions · 6 files</span><span class="conf">93%</span></div>
+    <div class="row"><span class="nm">12/23/1999</span><span class="meta">DOB · 12 suggestions · 8 files</span><span class="conf">97%</span></div>
+    <div class="row"><span class="nm">EV-24-000117-003</span><span class="meta">ID · 6 suggestions · 3 files</span><span class="conf">91%</span></div>
+    <div class="row" style="color:var(--mut)"><span class="nm">+ 13 more</span><span class="meta">all HIGH · 0 flagged · case-wide</span><span class="conf">—</span></div>
+  </div>
+
+  <p class="audit">Will log as: <b>accepted</b> · band bulk HIGH · A. Subbarao · 214 suggestions · 18 entities · case 24-000117. Does <b>not</b> lay ink on FLAGGED or REVIEW.</p>
+
+  <div class="foot">
+    <a class="btn ghost" href="01_review_stream.html">Cancel</a>
+    <button class="btn primary" type="button">Accept 214 — lay the ink</button>
+  </div>
+</div>
+</body>
+</html>

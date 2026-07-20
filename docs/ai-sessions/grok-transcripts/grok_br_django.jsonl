@@ -1,0 +1,3 @@
+{"event":"start","prompt_chars":2448,"t":0.0,"job":"br_django"}
+{"event":"update","kind":"available_commands_update","t":3.44,"job":"br_django"}
+{"event":"update","kind":"available_commands_update","t":3.45,"job":"br_django"}

@@ -1,0 +1,26 @@
+URGENT integration fix. Work in /Users/aloksubbarao/personal/closure. Ten agents
+just edited overlapping files in parallel and the app no longer boots — a module
+loaded AFTER server/judge.sql aborts the boot before quackapi_serve() runs (no
+listener on :8117).
+Boot cmd: /Users/aloksubbarao/personal/quackapi/build/release/duckdb -unsigned closure.db -c ".read server/app.sql"  (kill any :8117 listener; rm -f closure.db closure.db.wal first).
+The boot log gets through: ingest ok, pdf_io OCR enrich, seed (2082 suggestions),
+"judge ensemble ready" — then dies with NO server listening. So the fault is in
+one of the modules .read AFTER judge.sql in server/app.sql: remainder_scan.sql,
+load_templates.sql, provenance.sql, pdf_store.sql, or any server/routes/*.sql
+(triage, history, search, remainder, judge, provenance, geo, store, export).
+DIAGNOSE precisely: run the boot and capture the FIRST error (it likely scrolled;
+run duckdb with .bail on, or bisect the .read list) — a Catalog/Binder/Parser
+error, a missing table/column from a cross-module dependency, a duplicate
+CREATE, an extension not loaded (rapidfuzz/crypto must be INSTALLed+LOADed in
+app.sql before modules that use them — check they are), or a route handler whose
+SQL references something that doesn't exist yet.
+FIX it with the smallest change that respects every module's intent (do not delete
+features — judge/remainder/provenance/geo/store/triage/history must all survive).
+Ensure app.sql loads all required extensions (pdf, tera, rapidfuzz, crypto,
+quackapi) up front. 
+VERIFY: boot clean; sweep these all 200 — / /cases/1 /documents/1 /cases/1/library
+/api/stats /api/documents/1/suggestions /api/suggestions/1/judges
+/api/documents/1/missed /api/cases/1/provenance /api/cases/1/history
+/api/documents/1/store /api/cases/1/geo /api/cases/1/triage ; then
+cd tests/e2e && npx playwright test — report pass count. Report the ONE root
+cause + the fix + the green sweep + e2e result.

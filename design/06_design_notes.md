@@ -125,3 +125,5 @@ The interaction model is: start at the dashboard to see the big picture, click i
 - Keyboard shortcut for "accept all HIGH in this document" (one-stroke, safeguarded by confirmation)
 - Progress persistence: resume where you left off across sessions
 - Real-time collaboration indicators (two reviewers working the same case)
+
+**Workflow suite (2,394-scale navigation redesign):** see `design/workflow/` — entity stream + decision card, band/entity bulk, multi-file map; thesis in `design/workflow/THESIS.md`.

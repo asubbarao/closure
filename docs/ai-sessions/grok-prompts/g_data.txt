@@ -1,0 +1,23 @@
+Read-only-ish research + a focused improvement task for the sample DATA of the
+redaction-review app at /Users/aloksubbarao/personal/closure. The corpus is
+fakeit-generated identities (samples/identities.json) rendered to PDFs; the
+manifest (samples/manifest.json) is the answer key.
+
+1. Inspect the CURRENT fake data: samples/identities.json, samples/manifest.json,
+   and samples/gen/ (generate.py, identities.sql, report.typ). Note what PII types
+   exist, how realistic they are, and any weaknesses (e.g. addresses that look
+   fake, names that won't trigger good false positives).
+2. Study these DuckDB community extensions and whether they'd make the fake data
+   better/more realistic, with exact INSTALL/LOAD + key functions + v1.5.x
+   osx_arm64 signed-build availability:
+   - fakeit            https://duckdb.org/community_extensions/extensions/fakeit
+   - finetype          https://duckdb.org/community_extensions/extensions/finetype
+   - us_address_standardizer  https://duckdb.org/community_extensions/extensions/us_address_standardizer
+   For each: what it generates/does, and specifically how it could improve the
+   corpus (more realistic SSNs/phones/DOBs, US-standardized addresses that create
+   believable "Street" false-positive bait, type detection via finetype to auto-
+   classify PII columns).
+3. Write findings + a concrete proposal (what to change in samples/gen to use
+   these) to /Users/aloksubbarao/personal/closure/docs/data-improvements.md. That
+   one file is the ONLY thing you may write. Do NOT regenerate the corpus yet and
+   do NOT touch identities.json/manifest.json — just propose. Keep it concrete.

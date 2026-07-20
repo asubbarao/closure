@@ -1,0 +1,32 @@
+FIRST read the shared build contract: /private/tmp/claude-501/-Users-aloksubbarao-personal/f15dcc22-ec83-4ec6-a926-096108b96135/scratchpad/contract.md
+Then read /Users/aloksubbarao/personal/closure/design/clozure-redaction-mocks.html is at /Users/aloksubbarao/Downloads/clozure-redaction-mocks.html and design/*.html + design/copy.md for the visual system. Also invoke your 'frontend-design' skill (now installed) — build to that quality bar, avoid generic AI-slop UI.
+Work in /Users/aloksubbarao/personal/closure. The app WORKS now (all pages 200,
+boots via the contract run command). YOU OWN the whole Track A app surface:
+server/routes.sql, server/ingest.sql, server/app.sql, server/templates/*.html,
+static/*.js. No other agent is editing these. Pure DuckDB (no shell scripts).
+
+MISSION: make the UX excellent and deepen the WORKFLOW. Priorities:
+1. BULK EDITS as a first-class, fast path: from the review queue and the entity
+   panel, select many suggestions (by entity, by band, by page range, or
+   shift-range) and accept/reject them in one action with a live count and one
+   audit event per instance. Keyboard-driven. Flagged items excluded from bulk
+   by default with the clear banner.
+2. MULTI-DOCUMENT / MULTI-FILE WORKFLOW: the case spans many PDFs. Support a
+   folder-glob style selection (conceptually "select all documents matching
+   */*F*/*.pdf") — a document picker where the reviewer scopes an operation to a
+   set of documents, and entity decisions fan out across every selected document.
+   Show per-document progress rollups.
+3. SUPER-LARGE DOCUMENTS: the 110-page consolidated doc must feel instant —
+   page-scoped rendering, fast page jump, a page/suggestion minimap or jump-list,
+   and never load the whole doc at once. Make navigating a huge doc pleasant.
+4. FIRST-CLASS PDF MANAGEMENT: add a proper document-library / case view where a
+   reviewer sees all PDFs (name, pages, size, redaction progress, status),
+   can open any into review, and (stub is fine) an import affordance. This is a
+   real part of the product, not an afterthought.
+Everything must stay ONE navigable app (dashboard -> library -> document review
+with inline overlays for bulk/reject/add-missed), consistent design system,
+strong contrast, readable. Use design/copy.md strings.
+
+VERIFY (curl is fine, fastest): boot, exercise every route + the new bulk /
+multi-doc / library flows, confirm 200s and that a bulk action changes many
+statuses (re-GET proves it). Report the routes, the new UX, and evidence.

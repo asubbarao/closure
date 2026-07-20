@@ -1,0 +1,13 @@
+Work in /Users/aloksubbarao/personal/closure. YOU OWN: samples/public/** and
+docs/public-samples.md. Find REAL public court documents to exercise the app
+with authentic material: search the public web for US court filings/opinions
+that are PUBLIC DOMAIN (federal court opinions are US-government works; PACER/
+CourtListener/RECAP free documents; DOJ/FOIA reading rooms) — prefer a MIX:
+born-digital PDFs AND scanned/image-only ones, a long one (100+ pages) if
+available. Download 3-6 into samples/public/ with a docs/public-samples.md table:
+source URL, court/case, why chosen (digital vs scan, length), and the licensing/
+public-domain basis for each (only take clearly public material).
+Then TEST the pipeline against them (do not wire into the app's case ingest —
+standalone duckdb): pdf_info, read_pdf_words counts per doc, pdf_to_png a page.
+Report per-document: pages, words extracted (0 = scan), render ok — the honest
+"real world documents" compatibility table.
