@@ -62,85 +62,9 @@ SELECT CASE
     ELSE 'boot integrity ok'
 END AS boot_integrity;
 
+-- Templates + declarative panel mounts (ui_panel_mounts) — see load_templates.sql.
 .read server/load_templates.sql
 .read server/provenance.sql
-
--- Mount panel partials; stamp CLOSURE_ACTOR into template default actor literal.
-CREATE OR REPLACE TABLE app_templates AS
-WITH base AS (
-    SELECT
-        name,
-        replace(content, 'A. Subbarao', (SELECT value FROM app_config WHERE key = 'actor')) AS content
-    FROM app_templates
-),
-prov AS (
-    SELECT content FROM base WHERE name = 'provenance_panel.html'
-),
-geo AS (
-    SELECT content FROM base WHERE name = 'geo_panel.html'
-),
-judge AS (
-    SELECT content FROM base WHERE name = 'judge_panel.html'
-),
-remainder AS (
-    SELECT content FROM base WHERE name = 'remainder_panel.html'
-),
-triage AS (
-    SELECT content FROM base WHERE name = 'triage_funnel.html'
-),
-hist AS (
-    SELECT content FROM base WHERE name = 'history_panel.html'
-),
-hist_mount AS (
-    SELECT
-        coalesce((SELECT content FROM hist), '<!-- history_panel.html missing -->') ||
-        chr(10) || '<script src="/static/history.js"></script>' || chr(10) AS html
-)
-SELECT
-    b.name,
-    CASE
-        WHEN b.name = 'case.html' THEN
-            replace(
-                replace(
-                    replace(
-                        b.content,
-                        '<!-- PROVENANCE_MOUNT -->',
-                        coalesce((SELECT content FROM prov), '<!-- PROVENANCE_MOUNT missing -->')
-                    ),
-                    '<!-- GEO_MOUNT -->',
-                    coalesce((SELECT content FROM geo), '<!-- GEO_MOUNT missing -->')
-                ),
-                '</body>',
-                (SELECT html FROM hist_mount) || '</body>'
-            )
-        WHEN b.name = 'review.html' THEN
-            replace(
-                replace(
-                    replace(
-                        replace(
-                            b.content,
-                            '<!-- TRIAGE_MOUNT -->',
-                            coalesce((SELECT content FROM triage), '<!-- TRIAGE_MOUNT missing -->')
-                        ),
-                        '<!-- JUDGE_MOUNT -->',
-                        coalesce((SELECT content FROM judge), '<!-- JUDGE_MOUNT missing -->')
-                    ),
-                    '<!-- REMAINDER_MOUNT -->',
-                    coalesce((SELECT content FROM remainder), '<!-- REMAINDER_MOUNT missing -->')
-                ),
-                '</body>',
-                (SELECT html FROM hist_mount) || '</body>'
-            )
-        -- Decision shells owned by UX polish: surface History / undo entry point
-        WHEN b.name IN ('bulk.html', 'add_missed.html', 'reject.html') THEN
-            replace(
-                b.content,
-                '</body>',
-                (SELECT html FROM hist_mount) || '</body>'
-            )
-        ELSE b.content
-    END AS content
-FROM base b;
 
 .read server/pdf_store.sql
 .read server/routes/pages.sql
