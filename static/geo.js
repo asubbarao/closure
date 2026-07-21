@@ -14,35 +14,11 @@
   const INNER_W = W - PAD_X * 2;
   const INNER_H = H - PAD_Y * 2;
 
-  function bootCaseId(root) {
-    if (root && root.dataset && root.dataset.caseId) {
-      const s = String(root.dataset.caseId).trim();
-      if (s) return s;
-    }
-    const body = document.body;
-    if (body && body.dataset && body.dataset.caseId) {
-      const s = String(body.dataset.caseId).trim();
-      if (s) return s;
-    }
-    try {
-      const boot = JSON.parse(document.getElementById("boot-data").textContent);
-      if (boot && boot.caseId != null && String(boot.caseId).trim() !== "")
-        return String(boot.caseId);
-    } catch (_) {
-      /* */
-    }
-    // case id is an opaque natural-key string (e.g. "24-001001")
-    const m = /^\/cases\/([^/]+)/.exec(window.location.pathname || "");
-    if (m) return decodeURIComponent(m[1]);
-    return "1";
-  }
+  const C = window.Closure;
+  const esc = C.escapeHtml;
 
-  function esc(s) {
-    return String(s == null ? "" : s)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+  function bootCaseId(root) {
+    return C.bootCaseId({ prefer: "dataset", root: root });
   }
 
   function toSvg(x, y) {

@@ -20,7 +20,7 @@ test:
 	@echo "==> fresh boot for test run"
 	@mkdir -p .tmp
 	@PORT=$(PORT) nohup ./run.sh > .tmp/run.log 2>&1 & \
-	for i in $$(seq 1 45); do \
+	for i in $$(seq 1 240); do \
 		curl -s -o /dev/null -w '%{http_code}' $(BASE)/api/stats 2>/dev/null | grep -q 200 && break; \
 		sleep 1; \
 	done; \

@@ -16,17 +16,13 @@
 (function () {
   "use strict";
 
-  const ACTOR = "A. Subbarao";
+  const C = window.Closure;
+  const ACTOR = C.DEFAULT_ACTOR;
   const STATUS_CLASS = ["pending", "accepted", "rejected", "flagged"];
   const THR_DEFAULT = 90;
 
   const body = document.body;
-  let boot = {};
-  try {
-    boot = JSON.parse(document.getElementById("boot-data").textContent);
-  } catch (_) {
-    boot = {};
-  }
+  const boot = C.readBoot();
   const docId = boot.docId || body.dataset.docId;
   const caseId = boot.caseId || body.dataset.caseId;
   const pageNo = Number(boot.pageNo || body.dataset.pageNo);
@@ -96,29 +92,17 @@
   let thrDebounce = null;
 
   // ── helpers ───────────────────────────────────────────────────────────
-  function bandOf(conf, explicit) {
-    if (explicit === "high" || explicit === "review" || explicit === "flagged") return explicit;
-    const n = Number(conf);
-    if (n >= 90) return "high";
-    if (n >= 60) return "review";
-    return "flagged";
-  }
+  const bandOf = C.bandOf;
+  const confClass = C.confClass;
+  const isFlagged = C.isFlagged;
+  const escapeHtml = C.escapeHtml;
+  const highlightContext = C.highlightContext;
 
   function markVisualStatus(s) {
     if (s.status === "accepted") return "accepted";
     if (s.status === "rejected") return "rejected";
     if (s.band === "flagged" || Number(s.confidence) < 60) return "flagged";
     return "pending";
-  }
-
-  function confClass(band) {
-    if (band === "high") return "h";
-    if (band === "review") return "m";
-    return "l";
-  }
-
-  function isFlagged(s) {
-    return s.band === "flagged" || Number(s.confidence) < 60;
   }
 
   function isAutoEligible(s) {
@@ -132,29 +116,6 @@
 
   function isEligible(s) {
     return s.status === "pending" && !isFlagged(s);
-  }
-
-  function escapeHtml(str) {
-    return String(str == null ? "" : str)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
-
-  function highlightContext(ctx, text) {
-    const c = String(ctx || "");
-    const t = String(text || "");
-    if (!t || !c) return escapeHtml(c);
-    const i = c.toLowerCase().indexOf(t.toLowerCase());
-    if (i < 0) return escapeHtml(c);
-    return (
-      escapeHtml(c.slice(0, i)) +
-      "<em>" +
-      escapeHtml(c.slice(i, i + t.length)) +
-      "</em>" +
-      escapeHtml(c.slice(i + t.length))
-    );
   }
 
   function shortText(t) {
@@ -248,11 +209,7 @@
   }
 
   function extractRows(payload) {
-    if (Array.isArray(payload)) return payload;
-    if (payload && Array.isArray(payload.suggestions)) return payload.suggestions;
-    if (payload && Array.isArray(payload.rows)) return payload.rows;
-    if (payload && typeof payload === "object" && payload.id != null) return [payload];
-    return [];
+    return C.asRows(payload);
   }
 
   function extractOne(payload) {
@@ -444,15 +401,7 @@
     params.set("status", status);
     params.set("actor", actor);
     if (reason) params.set("reason", reason);
-    try {
-      return await fetch("/api/suggestions/" + id + "/decision?" + params.toString(), {
-        method: "POST",
-        headers: { Accept: "application/json", "Content-Type": "application/json" },
-        body: "{}",
-      });
-    } catch (err) {
-      return { ok: false, status: 0, error: err };
-    }
+    return C.postJson("/api/suggestions/" + id + "/decision?" + params.toString());
   }
 
   async function postBatch(ids, status, reason) {
@@ -462,15 +411,7 @@
     params.set("ids", ids.join(","));
     params.set("actor", actor);
     if (reason) params.set("reason", reason);
-    try {
-      return await fetch("/api/suggestions/batch/decision?" + params.toString(), {
-        method: "POST",
-        headers: { Accept: "application/json", "Content-Type": "application/json" },
-        body: "{}",
-      });
-    } catch (err) {
-      return { ok: false, status: 0, error: err };
-    }
+    return C.postJson("/api/suggestions/batch/decision?" + params.toString());
   }
 
   async function postAcceptHigh() {
@@ -478,18 +419,7 @@
     params.set("threshold", String(threshold));
     params.set("actor", actor);
     params.set("reason", "triage high-confidence auto-pass ≥" + threshold);
-    try {
-      return await fetch(
-        "/api/cases/" + caseId + "/triage/accept-high?" + params.toString(),
-        {
-          method: "POST",
-          headers: { Accept: "application/json", "Content-Type": "application/json" },
-          body: "{}",
-        }
-      );
-    } catch (err) {
-      return { ok: false, status: 0, error: err };
-    }
+    return C.postJson("/api/cases/" + caseId + "/triage/accept-high?" + params.toString());
   }
 
   async function postGroupDecision(groupKey, status, excludeIds, reason) {
@@ -500,18 +430,9 @@
     params.set("actor", actor);
     params.set("exclude_ids", (excludeIds || []).join(","));
     if (reason) params.set("reason", reason);
-    try {
-      return await fetch(
-        "/api/cases/" + caseId + "/triage/group/decision?" + params.toString(),
-        {
-          method: "POST",
-          headers: { Accept: "application/json", "Content-Type": "application/json" },
-          body: "{}",
-        }
-      );
-    } catch (err) {
-      return { ok: false, status: 0, error: err };
-    }
+    return C.postJson(
+      "/api/cases/" + caseId + "/triage/group/decision?" + params.toString()
+    );
   }
 
   // ── funnel UI ─────────────────────────────────────────────────────────
@@ -1348,13 +1269,7 @@
   function onKey(e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const t = e.target;
-    if (
-      t &&
-      (t.tagName === "INPUT" ||
-        t.tagName === "TEXTAREA" ||
-        t.tagName === "SELECT" ||
-        t.isContentEditable)
-    ) {
+    if (C.isEditableTarget(t)) {
       if (e.key === "Escape") t.blur();
       return;
     }

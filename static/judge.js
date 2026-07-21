@@ -9,6 +9,8 @@
 (function () {
   "use strict";
 
+  const C = window.Closure;
+
   const CSS_ID = "judge-panel-css";
   const cache = new Map(); // suggestion_id → { panel, votes[] }
   let lastCurrentId = null;
@@ -131,11 +133,7 @@
   }
 
   function extractRows(payload) {
-    if (Array.isArray(payload)) return payload;
-    if (payload && Array.isArray(payload.rows)) return payload.rows;
-    if (payload && Array.isArray(payload.judges)) return payload.judges;
-    if (payload && typeof payload === "object" && payload.judge_name) return [payload];
-    return [];
+    return C.asRows(payload, { keys: ["rows", "judges", "suggestions", "data"] });
   }
 
   function normalizeVotes(rows) {
@@ -317,13 +315,7 @@
     }
   }
 
-  function escapeHtml(str) {
-    return String(str == null ? "" : str)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
+  const escapeHtml = C.escapeHtml;
   function escapeAttr(str) {
     return escapeHtml(str).replace(/'/g, "&#39;");
   }

@@ -9,7 +9,11 @@
 (function () {
   "use strict";
 
-  var ACTOR = "A. Subbarao";
+  var C = window.Closure;
+  var ACTOR = C.DEFAULT_ACTOR;
+  var esc = C.escapeHtml;
+  var bandOf = C.bandOf;
+  var confClass = C.confClass;
   var DISPLAY_W = 700;
   var TOAST_MS = 8000;
 
@@ -82,21 +86,7 @@
     el.err.textContent = "";
   }
 
-  function esc(s) {
-    return String(s == null ? "" : s)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
 
-  function bandOf(s) {
-    if (s.band) return s.band;
-    var c = Number(s.confidence) || 0;
-    if (c >= 90) return "high";
-    if (c >= 60) return "review";
-    return "flagged";
-  }
 
   function statusOf(s) {
     return s.status || "pending";
@@ -124,12 +114,6 @@
     return "pending";
   }
 
-  function confClass(s) {
-    var b = bandOf(s);
-    if (b === "high") return "h";
-    if (b === "review") return "m";
-    return "l";
-  }
 
   function scale() {
     return DISPLAY_W / (Number(state.doc.width_pt) || 612);
@@ -179,40 +163,11 @@
   }
 
   function normalizeList(payload) {
-    if (!payload) return [];
-    if (Array.isArray(payload)) {
-      // quackapi may return [{suggestions: [...]}] or bare rows
-      if (payload.length === 1 && payload[0] && Array.isArray(payload[0].suggestions)) {
-        return payload[0].suggestions;
-      }
-      if (payload.length === 1 && payload[0] && Array.isArray(payload[0].rows)) {
-        return payload[0].rows;
-      }
-      return payload;
-    }
-    if (Array.isArray(payload.suggestions)) return payload.suggestions;
-    if (Array.isArray(payload.rows)) return payload.rows;
-    if (Array.isArray(payload.data)) return payload.data;
-    return [];
+    return C.asRows(payload);
   }
 
   async function fetchJson(url, opts) {
-    opts = opts || {};
-    // quackapi POST handlers hang if the request has no body/Content-Length
-    if ((opts.method || "GET").toUpperCase() === "POST") {
-      opts = Object.assign({}, opts);
-      if (opts.body == null) opts.body = "{}";
-      opts.headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
-    }
-    var res = await fetch(url, opts);
-    var text = await res.text();
-    var data = null;
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch (e) {
-      data = { raw: text };
-    }
-    return { ok: res.ok, status: res.status, data: data, text: text, url: url };
+    return C.fetchJson(url, opts);
   }
 
   async function loadDocMetaFromHtml() {
@@ -356,37 +311,25 @@
   }
 
   async function postDecision(id, status, reason) {
-    // Contract: POST /api/suggestions/:id/decision?status=&reason=&actor=
-    // Also send action= for older handlers that bind $action.
-    var q = new URLSearchParams();
-    q.set("status", status);
-    q.set("action", status);
-    q.set("actor", ACTOR);
-    if (reason) q.set("reason", reason);
-    var url = "/api/suggestions/" + id + "/decision?" + q.toString();
-    var res = await fetchJson(url, { method: "POST" });
-    if (!res.ok) {
-      var q2 = new URLSearchParams();
-      q2.set("action", status);
-      q2.set("status", status);
-      if (reason) q2.set("reason", reason);
-      q2.set("actor", ACTOR);
-      res = await fetchJson("/suggestions/" + id + "/decision?" + q2.toString(), {
-        method: "POST"
-      });
-    }
+    // action= for older handlers; legacyFallback for pre-/api path
+    var res = await C.postSuggestionDecision(id, {
+      status: status,
+      actor: ACTOR,
+      reason: reason,
+      action: true,
+      legacyFallback: true
+    });
     state.lastResponses.push({ kind: "suggestion", id: id, status: status, res: res });
     return res;
   }
 
   async function postEntityDecision(entityId, status, reason) {
-    var q = new URLSearchParams();
-    q.set("status", status);
-    q.set("action", status);
-    q.set("actor", ACTOR);
-    if (reason) q.set("reason", reason);
-    var url = "/api/entities/" + entityId + "/decision?" + q.toString();
-    var res = await fetchJson(url, { method: "POST" });
+    var res = await C.postEntityDecision(entityId, {
+      status: status,
+      actor: ACTOR,
+      reason: reason,
+      action: true
+    });
     state.lastResponses.push({ kind: "entity", id: entityId, status: status, res: res });
     return res;
   }
@@ -790,15 +733,7 @@
   }
 
   function highlightCtx(ctx, text) {
-    if (!ctx) return "";
-    var c = String(ctx);
-    var t = String(text || "");
-    if (!t) return esc(c);
-    var idx = c.indexOf(t);
-    if (idx < 0) return esc(c);
-    return (
-      esc(c.slice(0, idx)) + "<em>" + esc(t) + "</em>" + esc(c.slice(idx + t.length))
-    );
+    return C.highlightContext(ctx, text, { caseInsensitive: false });
   }
 
   function renderQueue() {
@@ -904,12 +839,7 @@
     var histBtn = document.getElementById("btn-history");
     if (histBtn) {
       histBtn.addEventListener("click", function () {
-        if (window.__history && typeof window.__history.open === "function") {
-          window.__history.open();
-        } else {
-          var fab = document.getElementById("hist-fab");
-          if (fab) fab.click();
-        }
+        C.openHistory();
       });
     }
     el.pgPrev.addEventListener("click", function () {
@@ -935,8 +865,7 @@
     });
 
     document.addEventListener("keydown", function (ev) {
-      var tag = (ev.target && ev.target.tagName) || "";
-      if (tag === "INPUT" || tag === "TEXTAREA" || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+      if (C.isEditableTarget(ev.target) || ev.metaKey || ev.ctrlKey || ev.altKey) return;
       var k = ev.key;
       if (k === "r" || k === "R") {
         ev.preventDefault();

@@ -10,19 +10,13 @@
 (function () {
   "use strict";
 
-  const ACTOR = "A. Subbarao";
+  const C = window.Closure;
+  const ACTOR = C.DEFAULT_ACTOR;
   const PANEL_ID = "remainder-panel";
   const STYLE_ID = "remainder-panel-styles";
+  const escapeHtml = C.escapeHtml;
 
-  function bootData() {
-    try {
-      const el = document.getElementById("boot-data");
-      if (el) return JSON.parse(el.textContent);
-    } catch (_) {}
-    return {};
-  }
-
-  const boot = bootData();
+  const boot = C.readBoot();
   const body = document.body;
   // doc/case ids are opaque strings (uuid / natural-key); pageNo stays numeric
   const docId = String(boot.docId || body.dataset.docId || "").trim();
@@ -35,14 +29,6 @@
   let items = [];
   const addedIds = new Set();
   let inflight = new Set();
-
-  function escapeHtml(str) {
-    return String(str == null ? "" : str)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
 
   function toast(msg, isErr) {
     let el = document.getElementById("rm-toast");
@@ -136,24 +122,12 @@
   }
 
   async function fetchJson(url, opts) {
-    const res = await fetch(url, opts);
-    let data = null;
-    const raw = await res.text();
-    try {
-      data = raw ? JSON.parse(raw) : null;
-    } catch (_) {
-      data = raw;
-    }
-    return { ok: res.ok, status: res.status, data: data, raw: raw };
+    return C.fetchJson(url, opts);
   }
 
-  function normalizeRows(data) {
+    function normalizeRows(data) {
     if (!data) return [];
-    if (Array.isArray(data)) return data;
-    // quackapi sometimes wraps: {rows:[...]} or single object
-    if (Array.isArray(data.rows)) return data.rows;
-    if (data.id != null || data.text != null) return [data];
-    // object map of columns → parallel arrays (rare)
+    // object map of columns → parallel arrays (unique to remainder)
     if (data.document_id && Array.isArray(data.document_id)) {
       const n = data.document_id.length;
       const rows = [];
@@ -166,7 +140,7 @@
       }
       return rows;
     }
-    return [];
+    return C.asRows(data);
   }
 
   function kindLabel(k) {

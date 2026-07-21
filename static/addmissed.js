@@ -6,8 +6,10 @@
 (function () {
   'use strict';
 
+  var C = window.Closure;
   var CFG = window.CLOSURE_ADD || {};
-  var ACTOR = CFG.actor || 'A. Subbarao';
+  var ACTOR = CFG.actor || C.DEFAULT_ACTOR;
+  var escapeHtml = C.escapeHtml;
   var DISPLAY_W = CFG.displayW || 680;
 
   var params = new URLSearchParams(window.location.search);
@@ -121,15 +123,11 @@
     lastAddIds = [];
     for (var i = 0; i < ids.length; i++) {
       try {
-        await fetchJson(
-          '/api/suggestions/' +
-            ids[i] +
-            '/decision?status=pending&actor=' +
-            encodeURIComponent(ACTOR) +
-            '&reason=' +
-            encodeURIComponent('undo add-missed'),
-          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }
-        );
+        await C.postSuggestionDecision(ids[i], {
+          status: 'pending',
+          actor: ACTOR,
+          reason: 'undo add-missed'
+        });
       } catch (e) { /* best-effort */ }
     }
     toast('Restored to pending — reviewer-added mark cleared');
@@ -140,14 +138,6 @@
       renderQueue();
       renderMarks();
     }
-  }
-
-  function escapeHtml(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
   }
 
   function reviewUrl(d, p) {
@@ -299,14 +289,10 @@
   }
 
   async function fetchJson(url, opts) {
-    var res = await fetch(url, opts);
-    var text = await res.text();
-    var data = null;
-    try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
-    return { ok: res.ok, status: res.status, data: data, raw: text };
+    return C.fetchJson(url, opts);
   }
 
-  async function loadWordsApi() {
+    async function loadWordsApi() {
     // Prefer page-scoped route; fall back to page-1 route
     var urls = [
       '/api/documents/' + state.docId + '/pages/' + state.pageNo + '/words',
@@ -1067,13 +1053,7 @@
     var histBtn = document.getElementById('btn-history');
     if (histBtn) {
       histBtn.addEventListener('click', function () {
-        if (window.__history && typeof window.__history.open === 'function') {
-          window.__history.open();
-        } else {
-          var fab = document.getElementById('hist-fab');
-          if (fab) fab.click();
-          else toast('History not available on this page', 'err');
-        }
+        if (!C.openHistory()) toast('History not available on this page', 'err');
       });
     }
 
@@ -1110,7 +1090,7 @@
       if (evt.key === 'Enter' && el.popover.classList.contains('open') && !evt.target.matches('input,textarea')) {
         confirmAdd();
       }
-      if ((evt.key === 'u' || evt.key === 'U') && tag !== 'INPUT' && tag !== 'TEXTAREA') {
+      if ((evt.key === 'u' || evt.key === 'U') && !C.isEditableTarget(evt.target)) {
         if (lastAddIds.length) {
           evt.preventDefault();
           void undoLastAdd();

@@ -7,7 +7,13 @@
 (function () {
   'use strict';
 
-  var ACTOR = 'A. Subbarao';
+  var C = window.Closure;
+  var ACTOR = C.DEFAULT_ACTOR;
+  var esc = C.escapeHtml;
+  var isFlagged = C.isFlagged;
+  var confClass = C.confClass;
+  var asRows = C.asRows;
+  var globToRegExp = C.globToRegExp;
   var PREVIEW_LIMIT = 5;
 
   var params = new URLSearchParams(window.location.search);
@@ -81,13 +87,6 @@
     return Number.isFinite(n) ? n : null;
   }
 
-  function esc(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
 
   function showStatus(msg, isErr, undoPayload) {
     var msgEl = document.getElementById('bulk-status-msg');
@@ -127,16 +126,12 @@
       var ids = lastUndo.ids.slice();
       var prior = lastUndo.priorStatus || 'pending';
       for (var i = 0; i < ids.length; i++) {
-        var u =
-          '/api/suggestions/' +
-          ids[i] +
-          '/decision?status=' +
-          encodeURIComponent(prior) +
-          '&actor=' +
-          encodeURIComponent(ACTOR) +
-          '&reason=' +
-          encodeURIComponent('undo bulk');
-        await fetchJson(u, { method: 'POST' });
+        await C.postSuggestionDecision(ids[i], {
+          status: prior,
+          actor: ACTOR,
+          reason: 'undo bulk',
+          throwOnError: true
+        });
       }
       lastUndo = null;
       showStatus('Restored to pending · ' + ids.length + ' instance' + (ids.length === 1 ? '' : 's'));
@@ -154,9 +149,6 @@
     return row.status === 'accepted' || row.status === 'rejected';
   }
 
-  function isFlagged(row) {
-    return row.band === 'flagged' || (row.confidence != null && Number(row.confidence) < 60);
-  }
 
   function isEligibleDefault(row) {
     return !isDecided(row) && !isFlagged(row);
@@ -172,12 +164,6 @@
     return 'document_' + (row.document_id != null ? row.document_id : '?');
   }
 
-  function confClass(c) {
-    c = Number(c);
-    if (c >= 90) return 'h';
-    if (c >= 60) return 'm';
-    return 'l';
-  }
 
   function flagWhy(row) {
     if (row.flag_tag) return String(row.flag_tag).replace(/_/g, ' ');
@@ -190,29 +176,7 @@
   }
 
   function highlightContext(ctx, matchText) {
-    ctx = String(ctx || '');
-    matchText = String(matchText || '');
-    if (!ctx) return esc(matchText || '—');
-    if (!matchText) return esc(ctx);
-    var lower = ctx.toLowerCase();
-    var m = matchText.toLowerCase();
-    var i = lower.indexOf(m);
-    if (i < 0) {
-      // try first token
-      var tok = matchText.split(/\s+/)[0];
-      if (tok) {
-        i = lower.indexOf(tok.toLowerCase());
-        if (i >= 0) matchText = ctx.slice(i, i + tok.length);
-      }
-    }
-    if (i < 0) return esc(ctx);
-    return (
-      esc(ctx.slice(0, i)) +
-      '<em>' +
-      esc(ctx.slice(i, i + matchText.length)) +
-      '</em>' +
-      esc(ctx.slice(i + matchText.length))
-    );
+    return C.highlightContext(ctx, matchText, { tokenFallback: true });
   }
 
   function formatKindCase(kind, cno) {
@@ -227,44 +191,7 @@
   }
 
   async function fetchJson(url, opts) {
-    opts = opts || {};
-    // quackapi POST requires a body (bare POST → 400). Always send JSON {}.
-    if (opts.method && String(opts.method).toUpperCase() === 'POST') {
-      opts.headers = Object.assign(
-        { 'Content-Type': 'application/json' },
-        opts.headers || {}
-      );
-      if (opts.body == null) opts.body = '{}';
-    }
-    var res = await fetch(url, opts);
-    var text = await res.text();
-    var data = null;
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch (e) {
-      data = { raw: text };
-    }
-    if (!res.ok) {
-      var err = new Error('HTTP ' + res.status + ' for ' + url);
-      err.status = res.status;
-      err.body = data;
-      throw err;
-    }
-    return data;
-  }
-
-  /** Normalize API payload to a row array (handles list or {suggestions:[]}). */
-  function asRows(payload) {
-    if (Array.isArray(payload)) return payload;
-    if (payload && Array.isArray(payload.suggestions)) return payload.suggestions;
-    if (payload && Array.isArray(payload.rows)) return payload.rows;
-    if (payload && typeof payload === 'object') {
-      // single row object
-      if (payload.id != null && (payload.entity_id != null || payload.document_id != null)) {
-        return [payload];
-      }
-    }
-    return [];
+    return C.fetchJson(url, Object.assign({}, opts || {}, { throwOnError: true }));
   }
 
   async function loadCaseSuggestions(cid) {
@@ -307,24 +234,6 @@
     if (lastErr) throw lastErr;
     caseId = 1;
     return [];
-  }
-
-  function globToRegExp(pattern) {
-    var p = String(pattern || '').trim();
-    if (!p) return null;
-    var re = '';
-    for (var i = 0; i < p.length; i++) {
-      var c = p[i];
-      if (c === '*') re += '.*';
-      else if (c === '?') re += '.';
-      else if ('\\.^$+()[]{}|'.indexOf(c) >= 0) re += '\\' + c;
-      else re += c;
-    }
-    try {
-      return new RegExp('^' + re + '$', 'i');
-    } catch (e) {
-      return null;
-    }
   }
 
   function matchesGlob(row, pattern) {
@@ -838,27 +747,21 @@
 
       // quackapi requires every $param named in the route — always pass status + actor
       if (onlyEligible) {
-        var url =
-          '/api/entities/' +
-          entityId +
-          '/decision?status=' +
-          encodeURIComponent(status) +
-          '&actor=' +
-          encodeURIComponent(ACTOR);
-        var body = await fetchJson(url, { method: 'POST' });
-        results.push({ mode: 'entity', url: url, body: body });
+        var body = await C.postEntityDecision(entityId, {
+          status: status,
+          actor: ACTOR,
+          throwOnError: true
+        });
+        results.push({ mode: 'entity', body: body });
       } else {
         for (var i = 0; i < sel.length; i++) {
           var row = sel[i];
-          var u =
-            '/api/suggestions/' +
-            row.id +
-            '/decision?status=' +
-            encodeURIComponent(status) +
-            '&actor=' +
-            encodeURIComponent(ACTOR);
-          var b = await fetchJson(u, { method: 'POST' });
-          results.push({ mode: 'suggestion', id: row.id, url: u, body: b });
+          var b = await C.postSuggestionDecision(row.id, {
+            status: status,
+            actor: ACTOR,
+            throwOnError: true
+          });
+          results.push({ mode: 'suggestion', id: row.id, body: b });
         }
       }
 
@@ -960,9 +863,7 @@
 
   function wireKeyboard() {
     document.addEventListener('keydown', function (e) {
-      var tag = (e.target && e.target.tagName) || '';
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable)
-        return;
+      if (C.isEditableTarget(e.target)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       var k = e.key;
       if (k === 'Escape') {

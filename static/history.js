@@ -5,44 +5,12 @@
 (function () {
   "use strict";
 
-  const ACTOR = "A. Subbarao";
+  const C = window.Closure;
+  const ACTOR = C.DEFAULT_ACTOR;
+  const escapeHtml = C.escapeHtml;
 
-  function bootCaseId() {
-    try {
-      const boot = JSON.parse(document.getElementById("boot-data").textContent);
-      if (boot && boot.caseId != null && String(boot.caseId).trim() !== "")
-        return String(boot.caseId);
-    } catch (_) {
-      /* fall through */
-    }
-    const body = document.body;
-    if (body && body.dataset && body.dataset.caseId) {
-      const s = String(body.dataset.caseId).trim();
-      if (s) return s;
-    }
-    const el = document.querySelector("[data-case-id]");
-    if (el) {
-      const s = String(el.getAttribute("data-case-id") || "").trim();
-      if (s) return s;
-    }
-    // case id is an opaque natural-key string (e.g. "24-001001")
-    const m = /^\/cases\/([^/]+)/.exec(window.location.pathname || "");
-    if (m) return decodeURIComponent(m[1]);
-    return "1";
-  }
-
-  function bootActor() {
-    try {
-      const boot = JSON.parse(document.getElementById("boot-data").textContent);
-      if (boot && boot.actor) return String(boot.actor);
-    } catch (_) {
-      /* */
-    }
-    return ACTOR;
-  }
-
-  const caseId = bootCaseId();
-  const actor = bootActor();
+  const caseId = C.bootCaseId();
+  const actor = C.bootActor(ACTOR);
 
   const els = {
     fab: document.getElementById("hist-fab"),
@@ -81,14 +49,6 @@
     }
     document.body.classList.toggle("hist-open", open);
     if (open) void loadHistory();
-  }
-
-  function escapeHtml(s) {
-    return String(s == null ? "" : s)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
   }
 
   function fmtTs(ts) {
@@ -281,9 +241,7 @@
 
   // Capture-phase keyboard: own 'u' and Cmd/Ctrl+Z over review.js client undo.
   function onKey(e) {
-    const tag = (e.target && e.target.tagName) || "";
-    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || e.target.isContentEditable)
-      return;
+    if (C.isEditableTarget(e.target)) return;
 
     if (e.key === "h" || e.key === "H") {
       if (e.metaKey || e.ctrlKey || e.altKey) return;

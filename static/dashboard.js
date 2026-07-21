@@ -8,8 +8,11 @@
   const body = document.body;
   if (!body || !body.dataset.caseId) return;
 
+  const C = window.Closure;
   const caseId = body.dataset.caseId;
-  const actor = body.dataset.actor || "A. Subbarao";
+  const actor = body.dataset.actor || C.DEFAULT_ACTOR;
+  const escapeHtml = C.escapeHtml;
+  const globToRegExp = C.globToRegExp;
 
   /** @type {Set<number>} */
   const selectedDocs = new Set();
@@ -72,27 +75,9 @@
     }
   }
 
-  /* ── glob matcher (folder-glob style: *F*, *report*, consolidated*) ── */
-  function globToRegExp(pattern) {
-    const p = String(pattern || "").trim();
-    if (!p) return null;
-    // Treat as case-insensitive substring glob over filename
-    let re = "";
-    for (let i = 0; i < p.length; i++) {
-      const c = p[i];
-      if (c === "*") re += ".*";
-      else if (c === "?") re += ".";
-      else if ("\\.^$+()[]{}|".indexOf(c) >= 0) re += "\\" + c;
-      else re += c;
-    }
-    try {
-      return new RegExp("^" + re + "$", "i");
-    } catch (_) {
-      return null;
-    }
-  }
+  /* ── glob matcher (via Closure.globToRegExp) ── */
 
-  function rowFilename(row) {
+    function rowFilename(row) {
     return String(row.dataset.filename || "").replace(/\.pdf$/i, "");
   }
 
@@ -210,14 +195,6 @@
       chkAll.checked = allOn;
       chkAll.indeterminate = count > 0 && !allOn;
     }
-  }
-
-  function escapeHtml(str) {
-    return String(str == null ? "" : str)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
   }
 
   function selectMatched() {
@@ -741,13 +718,7 @@
   }
 
   function openHistory() {
-    if (window.__history && typeof window.__history.open === "function") {
-      window.__history.open();
-      return;
-    }
-    const fab = document.getElementById("hist-fab");
-    if (fab) fab.click();
-    else toast("History panel not mounted on this page");
+    if (!C.openHistory()) toast("History panel not mounted on this page");
   }
 
   /* ── bulk HIGH accept across selected docs (or whole case) ─────────── */
@@ -766,11 +737,7 @@
           encodeURIComponent(actor) +
           "&reason=" +
           encodeURIComponent(reason || "bulk HIGH accept");
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: "{}",
-        });
+        const res = await C.postJson(url);
         if (res.ok || res.status === 200 || res.status === 204) {
           ok += 1;
           succeeded.push(docId);
@@ -792,11 +759,7 @@
           encodeURIComponent(actor) +
           "&reason=" +
           encodeURIComponent("undo bulk HIGH");
-        await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: "{}",
-        });
+        await C.postJson(url);
       } catch (_) {
         /* best-effort */
       }
@@ -1154,9 +1117,7 @@
 
   function wireKeyboard() {
     document.addEventListener("keydown", (e) => {
-      const tag = (e.target && e.target.tagName) || "";
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || e.target.isContentEditable)
-        return;
+      if (C.isEditableTarget(e.target)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       const k = e.key;
