@@ -41,28 +41,53 @@ FROM (
 -- Consumers: /api/cases/:id/history, /api/undo, /api/cases/:id/restore, /api/undo/status.
 -- Purpose: one set-based GROUP BY over history events + undo graph join.
 CREATE OR REPLACE VIEW v_decision_batches AS
-WITH agg AS (
+WITH base AS (
+    -- Batch spine: one row per batch_id (non-count attrs + total size).
     SELECT batch_id, min(event_ts) AS ts, max(event_ts) AS ts_end,
            any_value(actor) AS actor, any_value(batch_label) AS label,
            count(*)::INTEGER AS decision_count,
-           count(*) FILTER (WHERE status = 'accepted')::INTEGER AS accepted_count,
-           count(*) FILTER (WHERE status = 'rejected')::INTEGER AS rejected_count,
-           count(*) FILTER (WHERE status = 'pending')::INTEGER AS pending_count,
-           count(*) FILTER (WHERE kind = 'added')::INTEGER AS added_count,
            max(undoes_batch_id) AS undoes_batch_id, max(case_id) AS case_id
     FROM v_history_events GROUP BY batch_id
+),
+by_status AS (
+    SELECT batch_id, status, count(*)::INTEGER AS n
+    FROM v_history_events
+    GROUP BY ALL
+),
+status_wide AS (
+    SELECT batch_id,
+           coalesce(accepted, 0)::INTEGER AS accepted_count,
+           coalesce(rejected, 0)::INTEGER AS rejected_count,
+           coalesce(pending, 0)::INTEGER AS pending_count
+    FROM (
+        FROM by_status
+        PIVOT (sum(n) FOR status IN ('accepted', 'rejected', 'pending'))
+    )
+),
+by_kind AS (
+    SELECT batch_id, count(*)::INTEGER AS added_count
+    FROM v_history_events
+    WHERE kind = 'added'
+    GROUP BY batch_id
 ),
 undone_ids AS (
     SELECT DISTINCT undoes_batch_id AS batch_id FROM v_history_events
     WHERE undoes_batch_id IS NOT NULL
 )
 SELECT a.batch_id, a.ts, a.ts_end, a.actor, coalesce(nullif(a.label, ''), 'Batch') AS label,
-       a.decision_count, a.accepted_count, a.rejected_count, a.pending_count, a.added_count,
+       a.decision_count,
+       coalesce(sw.accepted_count, 0) AS accepted_count,
+       coalesce(sw.rejected_count, 0) AS rejected_count,
+       coalesce(sw.pending_count, 0) AS pending_count,
+       coalesce(k.added_count, 0) AS added_count,
        CASE WHEN a.undoes_batch_id IS NOT NULL THEN 'undo'
             WHEN u.batch_id IS NOT NULL THEN 'undone' END AS undo_role,
        a.undoes_batch_id IS NOT NULL AS is_undo, a.undoes_batch_id, a.case_id,
        u.batch_id IS NOT NULL AS undone
-FROM agg a LEFT JOIN undone_ids u ON u.batch_id = a.batch_id;
+FROM base a
+LEFT JOIN status_wide sw ON sw.batch_id = a.batch_id
+LEFT JOIN by_kind k ON k.batch_id = a.batch_id
+LEFT JOIN undone_ids u ON u.batch_id = a.batch_id;
 
 CREATE OR REPLACE ROUTE api_case_history GET '/api/cases/:id/history' AS
 SELECT batch_id, label, actor, ts, ts_end, decision_count, accepted_count, rejected_count,

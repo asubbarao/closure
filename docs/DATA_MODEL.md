@@ -9,7 +9,8 @@ This is **not** Claude’s “orthogonal layers of views = the model” story.
 | `exports/decisions/*.json` | Append-only **changelog** for status transitions + manual suggestion birth |
 | Sample PDFs + `watchlist.json` + manifest | Batch **inputs** to detect at boot |
 | `cases` / `documents` / `pages` / `words` / `entities` / `suggestions` | **Derived tables** rebuilt at boot — must use **durable keys** |
-| `v_*` UI / triage / counts | **Marts** (projections), not the core model |
+| `v_suggestion_cube` + status/band PIVOTs | **Tall count grain** → wide marts (no `COUNT FILTER` laundry) |
+| `v_*` UI / triage / history | **Thin marts** over cube/PIVOT — projections, not the model |
 
 See the full Kimball / Inmon / Kleppmann assault: [`data-model-assault.md`](./data-model-assault.md).
 

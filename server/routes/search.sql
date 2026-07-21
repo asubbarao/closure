@@ -75,8 +75,8 @@ SELECT
     ) ORDER BY CASE match_kind WHEN 'exact' THEN 0 ELSE 1 END,
               score DESC, document_id, page_no, bbox.y0, bbox.x0), []) AS matches,
     count(*)::INTEGER AS count,
-    count(*) FILTER (WHERE match_kind = 'exact')::INTEGER AS exact_count,
-    count(*) FILTER (WHERE match_kind = 'fuzzy')::INTEGER AS fuzzy_count
+    coalesce((SELECT count(*)::INTEGER FROM hits WHERE match_kind = 'exact'), 0) AS exact_count,
+    coalesce((SELECT count(*)::INTEGER FROM hits WHERE match_kind = 'fuzzy'), 0) AS fuzzy_count
 FROM hits;
 
 -- GET /api/cases/:id/audit — decision trail (VARCHAR case_no); v_audit is the

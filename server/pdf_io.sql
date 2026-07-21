@@ -64,24 +64,45 @@ DROP TABLE IF EXISTS _empty_pages;
 
 -- Consumers: /api/documents/:id/scan, /api/cases/:id/scan, v_doc_ui.
 CREATE OR REPLACE VIEW document_scan_status AS
-WITH page_words AS (
+WITH source_tall AS (
+    -- grain: document × page × source (text|ocr)
+    SELECT document_id, page_no, coalesce(source, 'text') AS source, count(*)::BIGINT AS n
+    FROM words
+    GROUP BY ALL
+),
+page_words AS (
     SELECT document_id, page_no,
-           count(*) FILTER (WHERE coalesce(source, 'text') = 'text')::BIGINT AS native_words,
-           count(*) FILTER (WHERE source = 'ocr')::BIGINT AS ocr_words,
-           count(*)::BIGINT AS total_words
-    FROM words GROUP BY document_id, page_no
+           coalesce(text, 0)::BIGINT AS native_words,
+           coalesce(ocr, 0)::BIGINT AS ocr_words,
+           (coalesce(text, 0) + coalesce(ocr, 0))::BIGINT AS total_words
+    FROM (
+        FROM source_tall
+        PIVOT (sum(n) FOR source IN ('text', 'ocr'))
+    )
+),
+page_class AS (
+    SELECT document_id, page_no, native_words, ocr_words, total_words,
+           CASE
+               WHEN native_words > 0 THEN 'text_layer'
+               WHEN ocr_words > 0 THEN 'ocr_only'
+               ELSE 'gap'
+           END AS page_kind
+    FROM page_words
 ),
 agg AS (
     SELECT d.id AS document_id, d.case_id, d.filename, d.source_path, d.page_count,
-           count(*) FILTER (WHERE coalesce(pw.native_words, 0) > 0)::BIGINT AS text_layer_pages,
-           count(*) FILTER (WHERE coalesce(pw.native_words, 0) = 0 AND coalesce(pw.ocr_words, 0) > 0)::BIGINT AS ocr_pages,
-           count(*) FILTER (WHERE coalesce(pw.native_words, 0) = 0 AND coalesce(pw.ocr_words, 0) = 0)::BIGINT AS scanned_gap_pages,
-           coalesce(sum(pw.native_words), 0)::BIGINT AS native_word_count,
-           coalesce(sum(pw.ocr_words), 0)::BIGINT AS ocr_word_count,
-           coalesce(sum(pw.total_words), 0)::BIGINT AS total_word_count
+           coalesce(sum(CASE WHEN pc.page_kind = 'text_layer' THEN 1 ELSE 0 END), 0)::BIGINT
+               AS text_layer_pages,
+           coalesce(sum(CASE WHEN pc.page_kind = 'ocr_only' THEN 1 ELSE 0 END), 0)::BIGINT
+               AS ocr_pages,
+           coalesce(sum(CASE WHEN pc.page_kind = 'gap' OR pc.page_kind IS NULL THEN 1 ELSE 0 END), 0)::BIGINT
+               AS scanned_gap_pages,
+           coalesce(sum(pc.native_words), 0)::BIGINT AS native_word_count,
+           coalesce(sum(pc.ocr_words), 0)::BIGINT AS ocr_word_count,
+           coalesce(sum(pc.total_words), 0)::BIGINT AS total_word_count
     FROM documents d
     LEFT JOIN pages p ON p.document_id = d.id
-    LEFT JOIN page_words pw ON pw.document_id = p.document_id AND pw.page_no = p.page_no
+    LEFT JOIN page_class pc ON pc.document_id = p.document_id AND pc.page_no = p.page_no
     GROUP BY d.id, d.case_id, d.filename, d.source_path, d.page_count
 )
 SELECT a.document_id, a.case_id, a.filename, a.source_path, a.page_count,

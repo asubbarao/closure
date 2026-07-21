@@ -24,22 +24,33 @@ WITH marked AS (
     JOIN documents d ON d.id = s.document_id
     WHERE d.case_id = $id
 ),
-counts AS (
-    SELECT count(*)::BIGINT AS total,
-           count(*) FILTER (WHERE status IN ('accepted', 'rejected'))::BIGINT AS resolved,
-           count(*) FILTER (WHERE status = 'pending')::BIGINT AS pending,
-           count(*) FILTER (WHERE funnel = 'auto')::BIGINT AS auto_passable,
-           count(*) FILTER (WHERE funnel = 'residual')::BIGINT AS residual,
-           count(*) FILTER (WHERE status = 'pending' AND band = 'high')::BIGINT AS high_pending,
-           count(*) FILTER (WHERE status = 'pending' AND band = 'review')::BIGINT AS review_pending,
-           count(*) FILTER (WHERE status = 'pending' AND band = 'flagged')::BIGINT AS flagged_pending
+-- Tall grain first (funnel × status × band), then one-row map — no FILTER laundry.
+counts_tall AS (
+    SELECT funnel, status, band, count(*)::BIGINT AS n
     FROM marked
+    GROUP BY ALL
+),
+counts AS (
+    SELECT
+        coalesce((SELECT sum(n) FROM counts_tall), 0)::BIGINT AS total,
+        coalesce((SELECT sum(n) FROM counts_tall
+                  WHERE status IN ('accepted', 'rejected')), 0)::BIGINT AS resolved,
+        coalesce((SELECT sum(n) FROM counts_tall WHERE status = 'pending'), 0)::BIGINT AS pending,
+        coalesce((SELECT sum(n) FROM counts_tall WHERE funnel = 'auto'), 0)::BIGINT AS auto_passable,
+        coalesce((SELECT sum(n) FROM counts_tall WHERE funnel = 'residual'), 0)::BIGINT AS residual,
+        coalesce((SELECT sum(n) FROM counts_tall
+                  WHERE status = 'pending' AND band = 'high'), 0)::BIGINT AS high_pending,
+        coalesce((SELECT sum(n) FROM counts_tall
+                  WHERE status = 'pending' AND band = 'review'), 0)::BIGINT AS review_pending,
+        coalesce((SELECT sum(n) FROM counts_tall
+                  WHERE status = 'pending' AND band = 'flagged'), 0)::BIGINT AS flagged_pending
 ),
 bulk AS (
-    SELECT coalesce(sum(n) FILTER (WHERE n > 1), 0)::BIGINT AS residual_bulk_eligible
+    SELECT coalesce(sum(n), 0)::BIGINT AS residual_bulk_eligible
     FROM (
         SELECT count(*) AS n FROM marked WHERE funnel = 'residual'
         GROUP BY group_key
+        HAVING count(*) > 1
     ) group_sizes
 )
 SELECT $id AS case_id, $threshold AS threshold,

@@ -118,19 +118,41 @@ JOIN judge_rules r ON r.judge_id = j.judge_id AND r.bucket = b.bucket;
 
 -- Consumer: /api/suggestions/:id/judges (routes/judge.sql).
 CREATE OR REPLACE VIEW v_judge_panel AS
-SELECT suggestion_id,
-    round(avg(CASE verdict WHEN 'redact' THEN score WHEN 'keep' THEN 100 - score
-                           WHEN 'unsure' THEN 48 + (score % 5) END))::INTEGER AS confidence,
-    CASE WHEN bool_or(verdict = 'redact') AND bool_or(verdict = 'keep') THEN 'conflict'
-         WHEN count(DISTINCT verdict) = 1 THEN 'agree' ELSE 'split' END AS panel_signal,
-    count(*)::INTEGER AS judge_count,
-    count(*) FILTER (WHERE verdict = 'redact')::INTEGER AS redact_votes,
-    count(*) FILTER (WHERE verdict = 'keep')::INTEGER AS keep_votes,
-    count(*) FILTER (WHERE verdict = 'unsure')::INTEGER AS unsure_votes,
-    list(struct_pack(judge_id := judge_id, judge_name := judge_name, factor := factor,
-                     verdict := verdict, score := score, reason := reason)
-         ORDER BY judge_id) AS judges
-FROM judge_votes GROUP BY suggestion_id;
+WITH vote_tall AS (
+    SELECT suggestion_id, verdict, count(*)::INTEGER AS n
+    FROM judge_votes
+    GROUP BY ALL
+),
+vote_wide AS (
+    SELECT suggestion_id,
+           coalesce(redact, 0)::INTEGER AS redact_votes,
+           coalesce(keep, 0)::INTEGER AS keep_votes,
+           coalesce(unsure, 0)::INTEGER AS unsure_votes
+    FROM (
+        FROM vote_tall
+        PIVOT (sum(n) FOR verdict IN ('redact', 'keep', 'unsure'))
+    )
+),
+panel AS (
+    SELECT suggestion_id,
+        round(avg(CASE verdict WHEN 'redact' THEN score WHEN 'keep' THEN 100 - score
+                               WHEN 'unsure' THEN 48 + (score % 5) END))::INTEGER AS confidence,
+        CASE WHEN bool_or(verdict = 'redact') AND bool_or(verdict = 'keep') THEN 'conflict'
+             WHEN count(DISTINCT verdict) = 1 THEN 'agree' ELSE 'split' END AS panel_signal,
+        count(*)::INTEGER AS judge_count,
+        list(struct_pack(judge_id := judge_id, judge_name := judge_name, factor := factor,
+                         verdict := verdict, score := score, reason := reason)
+             ORDER BY judge_id) AS judges
+    FROM judge_votes
+    GROUP BY suggestion_id
+)
+SELECT p.suggestion_id, p.confidence, p.panel_signal, p.judge_count,
+       coalesce(w.redact_votes, 0) AS redact_votes,
+       coalesce(w.keep_votes, 0) AS keep_votes,
+       coalesce(w.unsure_votes, 0) AS unsure_votes,
+       p.judges
+FROM panel p
+LEFT JOIN vote_wide w ON w.suggestion_id = p.suggestion_id;
 
 SELECT 'judge ensemble ready' AS status,
        (SELECT count(*) FROM judge_votes) AS votes,

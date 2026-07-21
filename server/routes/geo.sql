@@ -59,34 +59,48 @@ placed AS (
     LEFT JOIN case_city cc ON cc.case_id = r.case_id
     JOIN city_anchor a ON a.city = coalesce(r.parsed_city, cc.city, 'Unknown')
 ),
-stats AS (
-    SELECT
-        s.entity_id,
-        count(*) AS suggestion_count,
-        count(*) FILTER (WHERE s.status = 'pending')  AS pending_count,
-        count(*) FILTER (WHERE s.status = 'accepted') AS accepted_count,
-        count(*) FILTER (WHERE s.status = 'rejected') AS rejected_count,
-        min(s.document_id) AS first_document_id,
-        min(s.page_no)     AS first_page_no
+-- Tall status grain per entity → PIVOT; spine holds total + first hit coords.
+entity_status AS (
+    SELECT s.entity_id, s.status, count(*)::BIGINT AS n
+    FROM v_suggestions s
+    WHERE s.entity_id IS NOT NULL
+    GROUP BY ALL
+),
+entity_spine AS (
+    SELECT s.entity_id,
+           count(*)::BIGINT AS suggestion_count,
+           min(s.document_id) AS first_document_id,
+           min(s.page_no) AS first_page_no
     FROM v_suggestions s
     WHERE s.entity_id IS NOT NULL
     GROUP BY s.entity_id
+),
+status_wide AS (
+    SELECT entity_id,
+           coalesce(pending, 0)::BIGINT AS pending_count,
+           coalesce(accepted, 0)::BIGINT AS accepted_count,
+           coalesce(rejected, 0)::BIGINT AS rejected_count
+    FROM (
+        FROM entity_status
+        PIVOT (sum(n) FOR status IN ('pending', 'accepted', 'rejected'))
+    )
 )
 SELECT
     p.entity_id, p.case_id, p.kind, p.canonical_text,
     p.city, p.state, p.zip, p.is_street_fp,
     least(0.96, greatest(0.04, p.cx + p.jx * p.half)) AS map_x,
     least(0.96, greatest(0.04, p.cy + p.jy * p.half)) AS map_y,
-    coalesce(st.suggestion_count, 0) AS suggestion_count,
-    coalesce(st.pending_count, 0)    AS pending_count,
-    coalesce(st.accepted_count, 0)   AS accepted_count,
-    coalesce(st.rejected_count, 0)   AS rejected_count,
-    st.first_document_id,
-    st.first_page_no,
+    coalesce(sp.suggestion_count, 0) AS suggestion_count,
+    coalesce(sw.pending_count, 0)    AS pending_count,
+    coalesce(sw.accepted_count, 0)   AS accepted_count,
+    coalesce(sw.rejected_count, 0)   AS rejected_count,
+    sp.first_document_id,
+    sp.first_page_no,
     true AS is_schematic,
     'city-anchor + hash jitter; not geocoded' AS placement_method
 FROM placed p
-LEFT JOIN stats st ON st.entity_id = p.entity_id;
+LEFT JOIN entity_spine sp ON sp.entity_id = p.entity_id
+LEFT JOIN status_wide sw ON sw.entity_id = p.entity_id;
 
 CREATE OR REPLACE ROUTE api_case_addresses GET '/api/cases/:id/addresses' AS
 SELECT * FROM v_address_map

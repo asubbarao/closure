@@ -1,6 +1,77 @@
 -- routes/pages.sql — HTML page routes (no render mega-macros).
 -- Contracts: case.html {case,stats,documents,entities,audit};
 --   audit.html {case,events}; review.html {case,doc,page,words,marks,docs,page_map,suggestions,stats}.
+--
+-- Count grain (skim this first):
+--   v_suggestion_cube     — tall GROUP BY doc × page × status × band
+--   v_doc_status_wide     — PIVOT status → pending/accepted/rejected per doc
+--   v_doc_band_wide       — PIVOT band → high/review/flagged per doc
+--   v_doc_flagged_pending — pending ∧ flagged only (UI “flagged” badge)
+--   v_page_status_wide    — same status PIVOT at page grain
+-- UI marts (v_doc_ui, v_page_map) only join these — no COUNT FILTER laundry.
+
+-- Tall fact: one row per (document, page, status, band). Source for all UI counts.
+CREATE OR REPLACE VIEW v_suggestion_cube AS
+SELECT document_id, page_no, status, band, count(*)::BIGINT AS n
+FROM v_suggestions
+GROUP BY ALL;
+
+CREATE OR REPLACE VIEW v_doc_status_wide AS
+SELECT document_id,
+       coalesce(pending, 0)::BIGINT AS pending,
+       coalesce(accepted, 0)::BIGINT AS accepted,
+       coalesce(rejected, 0)::BIGINT AS rejected,
+       (coalesce(pending, 0) + coalesce(accepted, 0) + coalesce(rejected, 0))::BIGINT AS total
+FROM (
+    FROM (
+        SELECT document_id, status, sum(n)::BIGINT AS n
+        FROM v_suggestion_cube
+        GROUP BY ALL
+    ) t
+    PIVOT (sum(n) FOR status IN ('pending', 'accepted', 'rejected'))
+);
+
+CREATE OR REPLACE VIEW v_doc_band_wide AS
+SELECT document_id,
+       coalesce(high, 0)::BIGINT AS high,
+       coalesce(review, 0)::BIGINT AS review,
+       coalesce(flagged, 0)::BIGINT AS flagged
+FROM (
+    FROM (
+        SELECT document_id, band, sum(n)::BIGINT AS n
+        FROM v_suggestion_cube
+        GROUP BY ALL
+    ) t
+    PIVOT (sum(n) FOR band IN ('high', 'review', 'flagged'))
+);
+
+-- Compound slice used by badges (not a status column, not a whole band).
+CREATE OR REPLACE VIEW v_doc_flagged_pending AS
+SELECT document_id, sum(n)::BIGINT AS n
+FROM v_suggestion_cube
+WHERE status = 'pending' AND band = 'flagged'
+GROUP BY document_id;
+
+CREATE OR REPLACE VIEW v_page_status_wide AS
+SELECT document_id, page_no,
+       coalesce(pending, 0)::BIGINT AS pending,
+       coalesce(accepted, 0)::BIGINT AS accepted,
+       coalesce(rejected, 0)::BIGINT AS rejected,
+       (coalesce(pending, 0) + coalesce(accepted, 0) + coalesce(rejected, 0))::BIGINT AS total
+FROM (
+    FROM (
+        SELECT document_id, page_no, status, sum(n)::BIGINT AS n
+        FROM v_suggestion_cube
+        GROUP BY ALL
+    ) t
+    PIVOT (sum(n) FOR status IN ('pending', 'accepted', 'rejected'))
+);
+
+CREATE OR REPLACE VIEW v_page_flagged_pending AS
+SELECT document_id, page_no, sum(n)::BIGINT AS n
+FROM v_suggestion_cube
+WHERE status = 'pending' AND band = 'flagged'
+GROUP BY ALL;
 
 CREATE OR REPLACE VIEW v_doc_ui AS
 SELECT
@@ -11,38 +82,30 @@ SELECT
     coalesce(sc.is_scanned, false) AS is_scanned,
     coalesce(sc.ocr_ingested, false) AS ocr_ingested,
     coalesce(sc.scan_gap, false) AS scan_gap,
-    coalesce(sg.suggestion_count, 0)::BIGINT AS suggestion_count,
-    coalesce(sg.pending_count, 0)::BIGINT AS pending_count,
-    coalesce(sg.accepted_count, 0)::BIGINT AS accepted_count,
-    coalesce(sg.rejected_count, 0)::BIGINT AS rejected_count,
-    coalesce(sg.flagged_count, 0)::BIGINT AS flagged_count,
-    coalesce(sg.high_count, 0)::BIGINT AS high_count,
-    coalesce(sg.review_count, 0)::BIGINT AS review_count,
-    CASE WHEN coalesce(sg.suggestion_count, 0) = 0 THEN 0
-         ELSE round(100.0 * (sg.accepted_count + sg.rejected_count) / sg.suggestion_count, 0)::INTEGER END AS progress_pct,
-    CASE WHEN coalesce(sg.flagged_count, 0) > 0 THEN 'flagged'
-         WHEN coalesce(sg.suggestion_count, 0) = 0 THEN 'empty'
-         WHEN coalesce(sg.pending_count, 0) = 0 THEN 'done' ELSE 'review' END AS status,
+    coalesce(st.total, 0)::BIGINT AS suggestion_count,
+    coalesce(st.pending, 0)::BIGINT AS pending_count,
+    coalesce(st.accepted, 0)::BIGINT AS accepted_count,
+    coalesce(st.rejected, 0)::BIGINT AS rejected_count,
+    coalesce(fp.n, 0)::BIGINT AS flagged_count,
+    coalesce(bd.high, 0)::BIGINT AS high_count,
+    coalesce(bd.review, 0)::BIGINT AS review_count,
+    CASE WHEN coalesce(st.total, 0) = 0 THEN 0
+         ELSE round(100.0 * (st.accepted + st.rejected) / st.total, 0)::INTEGER END AS progress_pct,
+    CASE WHEN coalesce(fp.n, 0) > 0 THEN 'flagged'
+         WHEN coalesce(st.total, 0) = 0 THEN 'empty'
+         WHEN coalesce(st.pending, 0) = 0 THEN 'done' ELSE 'review' END AS status,
     CASE WHEN d.file_size IS NULL THEN '—'
          WHEN d.file_size >= 1048576 THEN round(d.file_size / 1048576.0, 1)::VARCHAR || ' MB'
          WHEN d.file_size >= 1024 THEN round(d.file_size / 1024.0, 0)::VARCHAR || ' KB'
          ELSE d.file_size::VARCHAR || ' B' END AS size_label
 FROM documents d
 LEFT JOIN (
-    SELECT document_id AS document_id, count(*)::BIGINT AS word_count
+    SELECT document_id, count(*)::BIGINT AS word_count
     FROM words GROUP BY 1
 ) wc ON wc.document_id = d.id
-LEFT JOIN (
-    SELECT document_id,
-           count(*)::BIGINT AS suggestion_count,
-           count(*) FILTER (WHERE status = 'pending')::BIGINT AS pending_count,
-           count(*) FILTER (WHERE status = 'accepted')::BIGINT AS accepted_count,
-           count(*) FILTER (WHERE status = 'rejected')::BIGINT AS rejected_count,
-           count(*) FILTER (WHERE band = 'flagged' AND status = 'pending')::BIGINT AS flagged_count,
-           count(*) FILTER (WHERE band = 'high')::BIGINT AS high_count,
-           count(*) FILTER (WHERE band = 'review')::BIGINT AS review_count
-    FROM v_suggestions GROUP BY document_id
-) sg ON sg.document_id = d.id
+LEFT JOIN v_doc_status_wide st ON st.document_id = d.id
+LEFT JOIN v_doc_band_wide bd ON bd.document_id = d.id
+LEFT JOIN v_doc_flagged_pending fp ON fp.document_id = d.id
 LEFT JOIN document_scan_status sc ON sc.document_id = d.id;
 
 CREATE OR REPLACE VIEW v_audit AS
@@ -84,20 +147,16 @@ JOIN v_page_geom g ON g.document_id = s.document_id AND g.page_no = s.page_no;
 
 CREATE OR REPLACE VIEW v_page_map AS
 SELECT p.document_id AS document_id, p.page_no,
-       coalesce(c.n, 0)::BIGINT AS total,
-       coalesce(c.pending, 0)::BIGINT AS pending,
-       coalesce(c.accepted, 0)::BIGINT AS accepted,
-       coalesce(c.rejected, 0)::BIGINT AS rejected,
-       coalesce(c.flagged, 0)::BIGINT AS flagged
+       coalesce(st.total, 0)::BIGINT AS total,
+       coalesce(st.pending, 0)::BIGINT AS pending,
+       coalesce(st.accepted, 0)::BIGINT AS accepted,
+       coalesce(st.rejected, 0)::BIGINT AS rejected,
+       coalesce(fp.n, 0)::BIGINT AS flagged
 FROM pages p
-LEFT JOIN (
-    SELECT document_id, page_no, count(*)::BIGINT AS n,
-           count(*) FILTER (WHERE status = 'pending')::BIGINT AS pending,
-           count(*) FILTER (WHERE status = 'accepted')::BIGINT AS accepted,
-           count(*) FILTER (WHERE status = 'rejected')::BIGINT AS rejected,
-           count(*) FILTER (WHERE band = 'flagged' AND status = 'pending')::BIGINT AS flagged
-    FROM v_suggestions GROUP BY document_id, page_no
-) c ON c.document_id = p.document_id AND c.page_no = p.page_no;
+LEFT JOIN v_page_status_wide st
+  ON st.document_id = p.document_id AND st.page_no = p.page_no
+LEFT JOIN v_page_flagged_pending fp
+  ON fp.document_id = p.document_id AND fp.page_no = p.page_no;
 
 CREATE OR REPLACE VIEW v_case_page AS
 SELECT
