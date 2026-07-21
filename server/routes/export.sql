@@ -1,15 +1,14 @@
 -- routes/export.sql — case export: the plan is a VIEW, the act is one route.
 --
--- pdf_redact and query() are TABLE functions — their args must fold at bind,
--- so a sentence built from live data can't be assembled inside the executing
--- call. Construction therefore lives in v_export_plans (the sentence is a
--- COLUMN), and the fail-closed gate lives IN the construction: a case with
--- flagged-pending suggestions gets the no-op sentence — nothing a client
--- sends can unblock it.
+-- TODO(pdf-ext gap): pdf_redact(input, output, boxes) binds input/output/boxes
+-- as foldable constants only (PdfRedactBind StringValue::Get / ListValue).
+-- No columnar/glob overload → cannot SELECT pdf_redact(d.source_path, out, b.boxes)
+-- FROM documents d. Until the extension accepts column-ref paths + LIST boxes
+-- per row, export_sql remains a format()'d sentence executed via query($sql).
+-- Gap writeup: /tmp/closure_pdf_gap.md
 --
--- The act: GET export_plan hands the sentence out, POST export hands it back
--- as the foldable $sql param. The response is the redaction RELATION itself
--- (document_id, pages per doc) — callers count rows, no server-side tallies.
+-- Construction lives in v_export_plans (sentence is a COLUMN); fail-closed gate
+-- is IN the construction: flagged-pending → no-op sentence.
 
 -- Bind-safe export sentence + fail-closed flagged gate (not a stats dump).
 -- Consumer: /api/cases/:id/export_plan (POST /export reuses the sentence).

@@ -141,6 +141,8 @@ SELECT d.id AS document_id,
        format('data/working/doc{}_working{}.pdf', d.id, coalesce(g.gen, 1)) AS path,
        coalesce(bt.decision_batch, sha256('no-accepted')) AS decision_batch,
        coalesce(bx.boxes, []) AS boxes,
+       -- TODO(pdf-ext gap): same bind-time literal wall as routes/export.sql —
+       -- cannot call pdf_redact(d.source_path, path, boxes) columnar yet.
        format(
            'SELECT count(*)::INTEGER AS pages FROM pdf_redact(''{}'', ''{}'', {}::STRUCT(page INTEGER, x DOUBLE, y DOUBLE, w DOUBLE, h DOUBLE)[])',
            d.source_path,
