@@ -215,7 +215,11 @@ SELECT b.id, b.document_id, b.page_no, b.bbox, b.text, b.context,
        b.confidence, b.flag_tag, b.reason, b.entity_id, b.source, b.created_at,
        coalesce(e.kind, b.kind_stored) AS kind, e.canonical_text AS entity_text,
        coalesce(ld.status, CASE b.source WHEN 'manual' THEN 'accepted' ELSE 'pending' END) AS status,
-       CASE WHEN b.confidence >= 90 THEN 'high'
+       -- false_positive flag_tag (street/citation/officer bait) always FLAGGED —
+       -- confidence alone is high on exact fuzzy matches, but export hard-blocks
+       -- on flagged pending and the band filters need ≥2 bands on sample docs.
+       CASE WHEN b.flag_tag = 'false_positive' THEN 'flagged'
+            WHEN b.confidence >= 90 THEN 'high'
             WHEN b.confidence >= 60 THEN 'review' ELSE 'flagged' END AS band,
        CASE WHEN b.entity_id IS NOT NULL THEN 'e:' || b.entity_id
             ELSE concat('t:', lower(b.text), '|', coalesce(e.kind, b.kind_stored)) END AS group_key

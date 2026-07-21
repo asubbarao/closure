@@ -20,13 +20,16 @@ run:
 
 # ALWAYS boot fresh, then run the Playwright e2e suite. Reusing a server that
 # happens to be up means testing whatever stale code it booted with — never
-# what's in the tree. run.sh kills any previous instance on the port and
-# wipes the derived DB, so this is idempotent.
+# what's in the tree. run.sh wipes the derived DB but keeps the decision log;
+# e2e needs a clean log too (stale accepts/rejects → skips on pending-queue tests).
 # Fresh clone: npm install + chromium once under tests/e2e (node_modules gitignored).
 # Boot poll 360s — heavy remainder scan on the 110-page consolidated is ~3 min.
 test:
 	@echo "==> e2e deps (npm + chromium if needed)"
 	@cd tests/e2e && npm install --no-fund --no-audit && npx playwright install chromium
+	@echo "==> wipe decision log for deterministic e2e"
+	@mkdir -p exports/decisions
+	@rm -f exports/decisions/*.json
 	@echo "==> fresh boot for test run"
 	@mkdir -p .tmp
 	@PORT=$(PORT) nohup ./run.sh > .tmp/run.log 2>&1 & \
