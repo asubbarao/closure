@@ -15,11 +15,18 @@ FROM (
     FROM read_json_auto(getvariable('samples_dir') || '/manifest.json')
 );
 
--- documents: v_src_pdf_info × manifest. uuid() issued once at load (ruling C).
+-- documents: v_src_pdf_info × manifest.
+-- Durable id = md5(case_no || unitsep || filename) as UUID — survives reboot so
+-- decision-log document_id / suggestion FKs still join after clean boot.
 -- Join via parse_filename (built-in basename) — no regex.
 CREATE OR REPLACE TABLE documents AS
 SELECT
-    uuid()                     AS id,
+    CAST(
+        substr(h, 1, 8) || '-' || substr(h, 9, 4) || '-' ||
+        substr(h, 13, 4) || '-' || substr(h, 17, 4) || '-' ||
+        substr(h, 21, 12)
+        AS UUID
+    ) AS id,
     cast(m.case_no AS VARCHAR) AS case_id,
     p.filename,
     p.source_path,
@@ -36,7 +43,10 @@ JOIN (
         SELECT unnest(files) AS f
         FROM read_json_auto(getvariable('samples_dir') || '/manifest.json')
     )
-) m ON m.filename = p.filename;
+) m ON m.filename = p.filename
+CROSS JOIN LATERAL (
+    SELECT md5(cast(m.case_no AS VARCHAR) || chr(31) || cast(p.filename AS VARCHAR)) AS h
+);
 
 -- pages / words: expensive extracts — pin to tables.
 CREATE OR REPLACE TABLE pages AS

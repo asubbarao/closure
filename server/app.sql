@@ -80,18 +80,19 @@ SET VARIABLE exports_dir = (SELECT value FROM app_config WHERE key = 'exports_di
 -- Working-dir bootstrap (decision log sentinel; empty glob would error)
 -- ═══════════════════════════════════════════════════════════════════════════
 
--- COPY TO targets are grammar literals (no expressions/subqueries); this path
--- is the app_config exports_dir default — CLOSURE_DECISIONS_GLOB redirects
--- reads only, decision WRITES always land under exports/decisions/.
+-- COPY TO targets are grammar literals. Decision writes + reads both use
+-- exports/decisions under the default layout (see sources.sql getenv fold).
+-- Sentinel pins VARCHAR types for id columns (never INTEGER — that poisoned
+-- read_json_auto inference for live UUID string ids).
 COPY (
     SELECT
         'sentinel' AS kind,
-        NULL::INTEGER AS suggestion_id,
+        NULL::VARCHAR AS suggestion_id,
         NULL::VARCHAR AS status,
         NULL::VARCHAR AS actor,
         NULL::VARCHAR AS reason,
         NULL::VARCHAR AS ts,
-        NULL::INTEGER AS document_id,
+        NULL::VARCHAR AS document_id,
         NULL::INTEGER AS page_no,
         NULL::DOUBLE AS x0,
         NULL::DOUBLE AS y0,
@@ -102,8 +103,8 @@ COPY (
         NULL::INTEGER AS confidence,
         NULL::VARCHAR AS flag_tag,
         NULL::VARCHAR AS source,
-        NULL::INTEGER AS entity_id,
-        NULL::INTEGER AS case_id,
+        NULL::VARCHAR AS entity_id,
+        NULL::VARCHAR AS case_id,
         NULL::VARCHAR AS batch_id,
         NULL::VARCHAR AS batch_label,
         NULL::VARCHAR AS undoes_batch_id
@@ -113,8 +114,9 @@ COPY (
 -- Domain modules (order matters)
 -- ═══════════════════════════════════════════════════════════════════════════
 
--- Raw layer first: unmaterialized views straight over source files
--- (pdf_info glob, decision-log JSON). Everything above composes these.
+-- Durable id contract (docs), then sources, then load/detect.
+.read server/ids.sql
+-- Source files: pdf_info + decision log (changelog). Not "the orthogonal model."
 .read server/sources.sql
 .read server/ingest.sql
 -- OCR / scan-status enrich (must run before detect so OCR words participate

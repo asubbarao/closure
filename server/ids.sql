@@ -1,0 +1,27 @@
+-- ids.sql — durable identity expressions (no boot-time uuid() for log FKs).
+--
+-- Capital sin fixed here (see docs/data-model-assault.md): CTAS used to mint
+-- uuid() for documents/suggestions/entities every boot while exports/decisions
+-- kept the old ids → stream-table duality broken (orphans with confidence).
+--
+-- Pattern: md5(payload) formatted as UUID (stable, joinable as UUID/VARCHAR).
+-- Natural payload must NOT include process time or random bits.
+--
+-- NO MACROS. Call sites use the same expression shape:
+--   CAST(substr(h,1,8)||'-'||substr(h,9,4)||'-'||substr(h,13,4)||'-'||
+--        substr(h,17,4)||'-'||substr(h,21,12) AS UUID)
+--   FROM (SELECT md5(<payload>) AS h)
+--
+-- Payloads (documented contract):
+--   document  = case_no || chr(31) || filename
+--   entity    = case_id || chr(31) || kind || chr(31) || canonical_text
+--   suggestion(ai) = document_id || chr(31) || page_no || chr(31) ||
+--                    round(x0,1) || chr(31) || round(y0,1) || chr(31) ||
+--                    round(x1,1) || chr(31) || round(y1,1) || chr(31) ||
+--                    text || chr(31) || kind || chr(31) || 'ai'
+--
+-- Event/batch ids in the decision log may still use uuid() — those are
+-- event keys, not subject keys. Manual-add suggestion_id is minted once at
+-- write and must never be re-derived by boot CTAS.
+
+SELECT 'ids contract loaded' AS phase;

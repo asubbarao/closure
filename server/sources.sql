@@ -1,28 +1,17 @@
--- sources.sql — the RAW LAYER: unmaterialized views straight over source files.
+-- sources.sql — SOURCE OF TRUTH surfaces (files), not an "orthogonal data model."
 --
--- Model (owner's, same as the scale-control dashboards): everything is a layer
--- of views over raw sources. This bottom layer wraps `read_*` table functions as
--- views so the rest of the app composes them; DuckDB re-derives on demand, fast.
+-- Doctrine (data-model-assault / Kleppmann):
+--   * The decision log on disk is the changelog for status (and manual adds).
+--   * PDF samples + watchlist + manifest are inputs to batch detect at boot.
+--   * Serving tables (suggestions, entities, words) are DERIVED — rebuildable —
+--     but MUST use durable keys (see ids.sql / ingest.sql / detect.sql).
+--   * UI marts (v_doc_ui, triage counts, …) are projections, not the model.
 --
--- Two rulings this layer enforces:
---   * GENERIC, not fixture-shaped. The app does NOT reshape identities.json's
---     nested struct into an entity catalog — that would build the schema "for"
---     the mock data. PII is found by generic detection over document words
---     (detect.sql: finetype types, addrust parses addresses, patterns +
---     rapidfuzz for the rest); names match a generic watchlist. identities.json
---     / manifest.json are TEST ground-truth only, read by the test harness — not
---     by the app. So they are intentionally NOT read here.
---   * No fabricated ids / row_number on read. Surrogate ids (uuid) are issued
---     once at LOAD in ingest.sql (the "record created" event) and persisted;
---     natural keys (filename) are used where they exist.
---
--- Paths are inline getenv folds (the committed app_config idiom): these views
--- re-bind at REQUEST time inside route handlers, where SET VARIABLEs are not
--- visible (see routes/decisions.sql) — getvariable here would bind NULL paths.
+-- This file only wraps read_* over source files. No uuid(). No metrics.
 
 -- Real documents: dimensions + on-disk path, keyed by filename (natural key).
 CREATE OR REPLACE VIEW v_src_pdf_info AS
-SELECT parse_filename(file, true) AS filename,   -- built-in basename, no regex
+SELECT parse_filename(file, true) AS filename,   -- built-in basename
        file                       AS source_path,
        page_count,
        width  AS width_pt,
@@ -34,21 +23,41 @@ FROM pdf_info(
          THEN getenv('CLOSURE_SAMPLES_DIR')
          ELSE 'samples' END || '/*.pdf');
 
--- The append-only decision log, read straight off disk. Writes append one JSON
--- file per decision; this view always reflects current state with no mutable
--- table. A committed _sentinel.json pins the column set so the glob resolves
--- even before any decision exists. THE one reader of the glob — every decision
--- consumer (v_latest_decision, v_audit, v_history_events, …) composes this view;
--- filename is the shard path.
+-- Append-only decision log. ONE reader. Typed columns so empty/sentinel boots
+-- do not infer JSON and break coalesce(status, 'pending').
+-- ignore_errors OFF: corrupt shards must fail loud (audit log, not best-effort).
 CREATE OR REPLACE VIEW v_src_decisions AS
-SELECT * FROM read_json_auto(
+SELECT
+    cast(kind AS VARCHAR) AS kind,
+    cast(suggestion_id AS VARCHAR) AS suggestion_id,
+    cast(status AS VARCHAR) AS status,
+    cast(actor AS VARCHAR) AS actor,
+    cast(reason AS VARCHAR) AS reason,
+    cast(ts AS VARCHAR) AS ts,
+    cast(document_id AS VARCHAR) AS document_id,
+    try_cast(page_no AS INTEGER) AS page_no,
+    try_cast(x0 AS DOUBLE) AS x0,
+    try_cast(y0 AS DOUBLE) AS y0,
+    try_cast(x1 AS DOUBLE) AS x1,
+    try_cast(y1 AS DOUBLE) AS y1,
+    cast(text AS VARCHAR) AS text,
+    cast(context AS VARCHAR) AS context,
+    try_cast(confidence AS INTEGER) AS confidence,
+    cast(flag_tag AS VARCHAR) AS flag_tag,
+    cast(source AS VARCHAR) AS source,
+    cast(entity_id AS VARCHAR) AS entity_id,
+    cast(case_id AS VARCHAR) AS case_id,
+    cast(batch_id AS VARCHAR) AS batch_id,
+    cast(batch_label AS VARCHAR) AS batch_label,
+    cast(undoes_batch_id AS VARCHAR) AS undoes_batch_id,
+    filename
+FROM read_json_auto(
     CASE WHEN getenv('CLOSURE_EXPORTS_DIR') IS NOT NULL
           AND length(getenv('CLOSURE_EXPORTS_DIR')) > 0
          THEN getenv('CLOSURE_EXPORTS_DIR')
          ELSE 'exports' END || '/decisions/*.json',
-    union_by_name := true, ignore_errors := true, filename := true)
+    union_by_name := true,
+    ignore_errors := false,
+    filename := true
+)
 WHERE kind IS DISTINCT FROM 'sentinel';
-
--- NOTE: the entity / watchlist catalog is produced by detect.sql from generic
--- detection over the words table (+ an optional operator watchlist), NOT by
--- unpivoting the fixture here. See docs/SCHEMA_CONTRACT.md and detect.sql.

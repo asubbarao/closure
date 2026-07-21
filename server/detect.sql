@@ -113,21 +113,60 @@ SELECT * FROM type_hits
 UNION ALL BY NAME SELECT * FROM addr_hits
 UNION ALL BY NAME SELECT * FROM name_hits;
 
--- entities + suggestions: uuid issued once at load (ruling C).
+-- entities + suggestions: DURABLE ids (md5→UUID). Never uuid() for subjects that
+-- land in exports/decisions — that breaks stream-table duality on reboot.
 CREATE OR REPLACE TABLE entities AS
-SELECT uuid() AS id, case_id, canonical_text, kind
+SELECT
+    CAST(
+        substr(h, 1, 8) || '-' || substr(h, 9, 4) || '-' ||
+        substr(h, 13, 4) || '-' || substr(h, 17, 4) || '-' ||
+        substr(h, 21, 12)
+        AS UUID
+    ) AS id,
+    case_id, canonical_text, kind
 FROM (
-    SELECT cast(case_no AS VARCHAR) AS case_id, term AS canonical_text, kind FROM watchlist
-    WHERE coalesce(trim(term), '') <> ''
-    UNION
-    SELECT case_id, text, kind FROM _detect_hits WHERE coalesce(kind, '') <> '' AND text IS NOT NULL
-) c GROUP BY case_id, canonical_text, kind;
+    SELECT case_id, canonical_text, kind,
+           md5(case_id || chr(31) || kind || chr(31) || canonical_text) AS h
+    FROM (
+        SELECT cast(case_no AS VARCHAR) AS case_id, term AS canonical_text, kind FROM watchlist
+        WHERE coalesce(trim(term), '') <> ''
+        UNION
+        SELECT case_id, text, kind FROM _detect_hits
+        WHERE coalesce(kind, '') <> '' AND text IS NOT NULL
+    ) c
+    GROUP BY case_id, canonical_text, kind
+);
 
 CREATE OR REPLACE TABLE suggestions AS
-SELECT uuid() AS id, h.document_id, h.page_no, h.x0, h.y0, h.x1, h.y1,
-       h.text, coalesce(h.context, h.text) AS context, h.confidence,
-       h.flag_tag, h.reason, e.id AS entity_id, h.kind, 'ai' AS source, now() AS created_at
-FROM _detect_hits h
+SELECT
+    CAST(
+        substr(h, 1, 8) || '-' || substr(h, 9, 4) || '-' ||
+        substr(h, 13, 4) || '-' || substr(h, 17, 4) || '-' ||
+        substr(h, 21, 12)
+        AS UUID
+    ) AS id,
+    h.document_id, h.page_no,
+    h.x0, h.y0, h.x1, h.y1,
+    -- one geometry object; flat columns kept for route/JS contract at the edge
+    struct_pack(page := h.page_no, x0 := h.x0, y0 := h.y0, x1 := h.x1, y1 := h.y1,
+                origin := 'pdf_tl') AS bbox,
+    h.text, coalesce(h.context, h.text) AS context, h.confidence,
+    h.flag_tag, h.reason, e.id AS entity_id, h.kind, 'ai' AS source,
+    TIMESTAMP '1970-01-01' AS created_at  -- deterministic; not a birth clock
+FROM (
+    SELECT hit.*,
+           md5(
+               cast(hit.document_id AS VARCHAR) || chr(31) ||
+               cast(hit.page_no AS VARCHAR) || chr(31) ||
+               cast(round(hit.x0, 1) AS VARCHAR) || chr(31) ||
+               cast(round(hit.y0, 1) AS VARCHAR) || chr(31) ||
+               cast(round(hit.x1, 1) AS VARCHAR) || chr(31) ||
+               cast(round(hit.y1, 1) AS VARCHAR) || chr(31) ||
+               cast(hit.text AS VARCHAR) || chr(31) ||
+               cast(hit.kind AS VARCHAR) || chr(31) || 'ai'
+           ) AS h
+    FROM _detect_hits hit
+) h
 LEFT JOIN entities e ON e.case_id = h.case_id AND e.kind = h.kind
  AND (e.canonical_text = h.text OR starts_with(e.canonical_text, h.text)
    OR starts_with(h.text, e.canonical_text));

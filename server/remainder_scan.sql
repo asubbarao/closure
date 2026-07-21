@@ -299,12 +299,30 @@ dedup AS (
     GROUP BY document_id, page_no, round(x0, 1), round(y0, 1), round(x1, 1), kind
 )
 SELECT
-    cast(uuid() AS VARCHAR) AS id,
+    -- durable residual id (not random uuid) — same hit rebinds after boot
+    CAST(
+        substr(h, 1, 8) || '-' || substr(h, 9, 4) || '-' ||
+        substr(h, 13, 4) || '-' || substr(h, 17, 4) || '-' ||
+        substr(h, 21, 12)
+        AS VARCHAR
+    ) AS id,
     document_id,
     page_no AS page,
     x0, y0, x1, y1,
     text, kind, why, detector, score, entity_id
-FROM dedup;
+FROM dedup
+CROSS JOIN LATERAL (
+    SELECT md5(
+        cast(document_id AS VARCHAR) || chr(31) ||
+        cast(page_no AS VARCHAR) || chr(31) ||
+        cast(round(x0, 1) AS VARCHAR) || chr(31) ||
+        cast(round(y0, 1) AS VARCHAR) || chr(31) ||
+        cast(round(x1, 1) AS VARCHAR) || chr(31) ||
+        cast(round(y1, 1) AS VARCHAR) || chr(31) ||
+        cast(text AS VARCHAR) || chr(31) ||
+        cast(kind AS VARCHAR) || chr(31) || 'residual'
+    ) AS h
+);
 
 DROP TABLE IF EXISTS _remainder_spans;
 
