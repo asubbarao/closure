@@ -35,13 +35,13 @@ SELECT
     $path AS path,
     $gen AS gen,
     cast(NULL AS VARCHAR) AS fingerprint,
-    coalesce($decision_batch, '') AS decision_batch,
-    coalesce($accepted_count, 0) AS accepted_count,
+    $decision_batch AS decision_batch,
+    $accepted_count AS accepted_count,
     r.pages AS pages_redacted,
     cast(NULL AS BIGINT) AS size_bytes,
     1 AS revision_count,
     now() AS created_ts,
-    coalesce($actor, 'reviewer') AS actor,
+    $actor AS actor,
     'working' AS kind
 FROM query(CASE WHEN starts_with($sql, 'SELECT ') AND position(';' IN $sql) = 0
                 THEN $sql

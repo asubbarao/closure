@@ -2,19 +2,18 @@
 -- Spine: v_suggestions, documents. Mutations COPY → exports/decisions.
 -- Auto-pass: pending ∧ conf≥thr ∧ band≠flagged ∧ flag_tag≠false_positive.
 -- group_key: e:{entity_id} else t:{lower(text)}|{kind}. $id = case_no VARCHAR.
+-- PARAM DEFAULTs bind when absent — no coalesce($param, default). Threshold
+-- clamped at bind: GE 0 LE 100 → 422 if out of range.
 
 CREATE OR REPLACE ROUTE api_case_triage GET '/api/cases/:id/triage'
-  PARAM threshold INTEGER DEFAULT 90
+  PARAM threshold INTEGER DEFAULT 90 GE 0 LE 100
 AS
-WITH thr AS (
-    SELECT greatest(0, least(100, coalesce($threshold::INTEGER, 90))) AS threshold
-),
-marked AS (
+WITH marked AS (
     SELECT s.status, s.band, s.confidence, s.flag_tag, s.entity_id, s.text, s.kind,
            s.group_key,
            CASE
                WHEN s.status = 'pending'
-                AND s.confidence >= (SELECT threshold FROM thr)
+                AND s.confidence >= $threshold
                 AND s.band <> 'flagged'
                 AND coalesce(s.flag_tag, '') <> 'false_positive'
                THEN 'auto'
@@ -36,7 +35,6 @@ counts AS (
            count(*) FILTER (WHERE status = 'pending' AND band = 'flagged')::BIGINT AS flagged_pending
     FROM marked
 ),
--- Residual instances in multi-member groups (batch-judgable).
 bulk AS (
     SELECT coalesce(sum(n) FILTER (WHERE n > 1), 0)::BIGINT AS residual_bulk_eligible
     FROM (
@@ -44,7 +42,7 @@ bulk AS (
         GROUP BY group_key
     ) group_sizes
 )
-SELECT $id AS case_id, (SELECT threshold FROM thr) AS threshold,
+SELECT $id AS case_id, $threshold AS threshold,
        c.total, c.resolved, c.pending, c.auto_passable, c.residual,
        c.high_pending, c.review_pending, c.flagged_pending,
        (SELECT residual_bulk_eligible FROM bulk) AS residual_bulk_eligible,
@@ -53,7 +51,7 @@ SELECT $id AS case_id, (SELECT threshold FROM thr) AS threshold,
 FROM counts c;
 
 CREATE OR REPLACE ROUTE api_case_triage_groups GET '/api/cases/:id/triage/groups'
-  PARAM threshold INTEGER DEFAULT 90
+  PARAM threshold INTEGER DEFAULT 90 GE 0 LE 100
   PARAM scope VARCHAR DEFAULT 'case'
   PARAM doc_id VARCHAR DEFAULT ''
 AS
@@ -65,11 +63,11 @@ WITH residual AS (
     FROM v_suggestions s
     JOIN documents d ON d.id = s.document_id
     WHERE d.case_id = $id AND s.status = 'pending'
-      AND NOT (s.confidence >= greatest(0, least(100, coalesce($threshold::INTEGER, 90)))
+      AND NOT (s.confidence >= $threshold
                AND s.band <> 'flagged' AND coalesce(s.flag_tag, '') <> 'false_positive')
       AND CASE
-            WHEN lower(coalesce($scope::VARCHAR, 'case')) <> 'doc' THEN true
-            WHEN coalesce($doc_id::VARCHAR, '') IN ('', '0') THEN true
+            WHEN lower($scope) <> 'doc' THEN true
+            WHEN $doc_id IN ('', '0') THEN true
             ELSE s.document_id = $doc_id
           END
 )
@@ -96,7 +94,7 @@ ORDER BY max(CASE band WHEN 'flagged' THEN 2 WHEN 'review' THEN 1 ELSE 0 END) DE
          n DESC, group_label;
 
 CREATE OR REPLACE ROUTE api_case_triage_accept_high POST '/api/cases/:id/triage/accept-high'
-  PARAM threshold INTEGER DEFAULT 90
+  PARAM threshold INTEGER DEFAULT 90 GE 0 LE 100
   PARAM actor VARCHAR DEFAULT 'reviewer'
   PARAM reason VARCHAR DEFAULT 'triage high-confidence auto-pass'
 AS
@@ -106,14 +104,12 @@ COPY (
         FROM v_suggestions s
         JOIN documents d ON d.id = s.document_id
         WHERE d.case_id = $id AND s.status = 'pending'
-          AND s.confidence >= greatest(0, least(100, coalesce($threshold::INTEGER, 90)))
+          AND s.confidence >= $threshold
           AND s.band <> 'flagged' AND coalesce(s.flag_tag, '') <> 'false_positive'
     ),
     meta AS (
         SELECT cast(uuid() AS VARCHAR) AS batch_id, now() AS ts,
-               coalesce($actor::VARCHAR, 'reviewer') AS actor,
-               coalesce($reason::VARCHAR, 'triage high-confidence auto-pass') AS reason,
-               greatest(0, least(100, coalesce($threshold::INTEGER, 90))) AS threshold,
+               $actor AS actor, $reason AS reason, $threshold AS threshold,
                (SELECT count(*) FROM targets) AS n
     )
     SELECT 'decision' AS kind, t.suggestion_id, 'accepted' AS status,
@@ -131,12 +127,12 @@ CREATE OR REPLACE ROUTE api_case_triage_group_decision POST '/api/cases/:id/tria
   PARAM exclude_ids VARCHAR DEFAULT ''
   PARAM actor VARCHAR DEFAULT 'reviewer'
   PARAM reason VARCHAR DEFAULT ''
-  PARAM threshold INTEGER DEFAULT 90
+  PARAM threshold INTEGER DEFAULT 90 GE 0 LE 100
 AS
 COPY (
     WITH excluded AS (
         SELECT DISTINCT trim(token) AS suggestion_id
-        FROM unnest(string_split(coalesce($exclude_ids::VARCHAR, ''), ',')) AS _(token)
+        FROM unnest(string_split($exclude_ids, ',')) AS _(token)
         WHERE trim(token) <> ''
     ),
     targets AS (
@@ -144,18 +140,17 @@ COPY (
         FROM v_suggestions s
         JOIN documents d ON d.id = s.document_id
         WHERE d.case_id = $id AND s.status = 'pending'
-          AND NOT (s.confidence >= greatest(0, least(100, coalesce($threshold::INTEGER, 90)))
+          AND NOT (s.confidence >= $threshold
                    AND s.band <> 'flagged' AND coalesce(s.flag_tag, '') <> 'false_positive')
-          AND s.group_key = trim(coalesce($group_key::VARCHAR, ''))
+          AND s.group_key = trim($group_key)
           AND s.id NOT IN (SELECT suggestion_id FROM excluded)
-          AND lower(trim(coalesce($status::VARCHAR, ''))) IN ('accepted', 'rejected', 'pending')
+          AND lower(trim($status)) IN ('accepted', 'rejected', 'pending')
     ),
     meta AS (
         SELECT cast(uuid() AS VARCHAR) AS batch_id, now() AS ts,
-               lower(trim(coalesce($status::VARCHAR, ''))) AS status,
-               coalesce($actor::VARCHAR, 'reviewer') AS actor,
-               coalesce($reason::VARCHAR, '') AS reason,
-               trim(coalesce($group_key::VARCHAR, '')) AS group_key,
+               lower(trim($status)) AS status,
+               $actor AS actor, $reason AS reason,
+               trim($group_key) AS group_key,
                (SELECT count(*) FROM targets) AS n,
                (SELECT max(coalesce(entity_text, text)) FROM targets) AS sample_text
     )

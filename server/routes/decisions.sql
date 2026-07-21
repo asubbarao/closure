@@ -11,7 +11,7 @@ CREATE OR REPLACE ROUTE api_suggestion_decision POST '/api/suggestions/:id/decis
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
 AS COPY (
     SELECT 'decision' AS kind, t.suggestion_id, $status AS status,
-           coalesce($actor, 'reviewer') AS actor, coalesce($reason, '') AS reason,
+           $actor AS actor, $reason AS reason,
            now() AS ts, t.document_id, t.case_id, t.text,
            cast(uuid() AS VARCHAR) AS batch_id,
            CASE lower($status)
@@ -59,7 +59,7 @@ AS COPY (
                (SELECT coalesce(max(canonical_text), max(text)) FROM targets) AS sample_text
     )
     SELECT 'decision' AS kind, t.suggestion_id, $status AS status,
-           coalesce($actor, 'reviewer') AS actor, coalesce($reason, '') AS reason,
+           $actor AS actor, $reason AS reason,
            m.ts, t.document_id, t.case_id, t.text, m.batch_id,
            CASE lower($status)
                WHEN 'accepted' THEN 'Accepted ' || cast(m.n AS VARCHAR) || ' — ' ||
@@ -94,7 +94,7 @@ AS COPY (
                (SELECT count(*) FROM targets) AS n
     )
     SELECT 'decision' AS kind, t.suggestion_id, $status AS status,
-           coalesce($actor, 'reviewer') AS actor,
+           $actor AS actor,
            coalesce($reason, 'bulk band ' || $band) AS reason,
            m.ts, t.document_id, t.case_id, t.text, m.batch_id,
            CASE lower($status)
@@ -117,7 +117,7 @@ AS COPY (
         FROM suggestions s
         JOIN documents d ON d.id = s.document_id
         JOIN (SELECT DISTINCT trim(u) AS suggestion_id
-              FROM unnest(string_split(coalesce($ids, ''), ',')) AS t(u)
+              FROM unnest(string_split($ids, ',')) AS t(u)
               WHERE length(trim(u)) > 0) ids ON ids.suggestion_id = s.id
     ),
     meta AS (
@@ -126,7 +126,7 @@ AS COPY (
                (SELECT max(text) FROM targets) AS sample_text
     )
     SELECT 'decision' AS kind, t.suggestion_id, $status AS status,
-           coalesce($actor, 'reviewer') AS actor, coalesce($reason, '') AS reason,
+           $actor AS actor, $reason AS reason,
            m.ts, t.document_id, t.case_id, t.text, m.batch_id,
            CASE lower($status)
                WHEN 'accepted' THEN CASE WHEN m.n = 1
@@ -153,11 +153,11 @@ AS COPY (
            $id AS document_id, $page::INTEGER AS page_no,
            $x0::DOUBLE AS x0, $y0::DOUBLE AS y0, $x1::DOUBLE AS x1, $y1::DOUBLE AS y1,
            $text AS text, coalesce($text, '') AS context, 99 AS confidence,
-           coalesce($kind, 'MANUAL') AS flag_tag, coalesce($reason, 'manual add') AS reason,
+           $kind AS flag_tag, coalesce($reason, 'manual add') AS reason,
            cast(NULL AS VARCHAR) AS entity_id, 'manual' AS source, 'accepted' AS status,
-           coalesce($actor, 'reviewer') AS actor, now() AS ts,
+           $actor AS actor, now() AS ts,
            (SELECT case_id FROM documents WHERE id = $id) AS case_id,
-           coalesce($scope, 'one') AS scope, cast(uuid() AS VARCHAR) AS batch_id,
+           $scope AS scope, cast(uuid() AS VARCHAR) AS batch_id,
            'Added missed — ' || coalesce($text, '') AS batch_label,
            cast(NULL AS VARCHAR) AS undoes_batch_id
 ) TO 'exports/decisions'

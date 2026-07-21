@@ -83,7 +83,7 @@ COPY (
         ORDER BY ts DESC, batch_id DESC LIMIT 1
     )
     SELECT 'decision' AS kind, p.suggestion_id, p.prior_status AS status,
-           coalesce($actor, 'reviewer') AS actor, 'undo' AS reason,
+           $actor AS actor, 'undo' AS reason,
            (SELECT now()) AS ts, p.document_id, p.case_id, p.text,
            (SELECT cast(uuid() AS VARCHAR)) AS batch_id,
            'Undid: ' || coalesce(t.label, 'batch') AS batch_label,
@@ -128,7 +128,7 @@ COPY (
         JOIN restored r ON r.suggestion_id = (SELECT min(suggestion_id) FROM restored)
     )
     SELECT 'decision' AS kind, w.suggestion_id, w.target_status AS status,
-           coalesce($actor, 'reviewer') AS actor, 'restore' AS reason,
+           $actor AS actor, 'restore' AS reason,
            (SELECT now()) AS ts, w.document_id,
            coalesce(w.case_id, $id) AS case_id, w.text,
            (SELECT cast(uuid() AS VARCHAR)) AS batch_id,
