@@ -36,60 +36,45 @@ High-fidelity design (Part 1): [`design/`](design/).
 
 ## Prerequisites
 
-1. **A quackapi-built DuckDB binary** — stock `brew install duckdb` cannot
-   parse `CREATE ROUTE`. Build [quackapi](https://github.com/asubbarao/quackapi)
-   (`GEN=ninja make release`) and either place it as a **sibling** of this repo
-   (`../quackapi/build/release/duckdb`, the default `run.sh` looks for) or point
-   `DUCKDB_BIN` / `CLOSURE_QUACKAPI_EXT` at your build.
-2. **Network on first run** — setup/boot auto-INSTALL DuckDB community
-   extensions: `pdf`, `tera`, `fakeit` (setup), `rapidfuzz`, `finetype`,
-   `us_address_standardizer` (boot). Community **pdf requires DuckDB ≥1.5.4**
-   (`pdf_info`, `pdf_redact`, …). `make setup` / `run.sh` prefer a sibling
-   `../quackapi/build/release/duckdb`; a stock 1.5.3 `duckdb` on PATH is not enough.
-3. **poppler** (`pdftoppm`, `brew install poppler`) — fast page-PNG previews;
-   without it setup falls back to the slower in-DuckDB `pdf_to_png`.
-4. **Node 18+** — only for the e2e suite (`make test` runs `npm install` +
-   chromium install under `tests/e2e` automatically).
+| Need | Why | How |
+|------|-----|-----|
+| **macOS or Linux** | Prebuilt runtime / source build | Windows not supported yet |
+| **Network (first run)** | Download runtime + community extensions (`pdf`, `tera`, `fakeit`, `rapidfuzz`, `finetype`, `us_address_standardizer`) | Ordinary HTTPS |
+| **poppler** (recommended) | Fast page-PNG previews | `brew install poppler` / `apt install poppler-utils` |
+| **Node 18+** | Playwright e2e only | `make test` installs deps under `tests/e2e` |
 
-## Quick start
+You do **not** need to clone or understand [quackapi](https://github.com/asubbarao/quackapi). Closure installs a pinned DuckDB + quackapi **binary pair** into local `.deps/runtime/` (gitignored). quackapi source is **never** vendored into this repo.
+
+## Quick start (graders)
 
 ```sh
-# Default layout: this repo + sibling quackapi/ (built release binary).
-make setup && make run
-# → http://127.0.0.1:8117/
+git clone https://github.com/asubbarao/closure.git
+cd closure
+
+make install          # download (or build) DuckDB + quackapi → .deps/runtime/
+make setup            # sample PDFs + page PNGs
+make run              # → http://127.0.0.1:8117/
 ```
 
-`make setup` generates the sample PDF corpus + page PNGs (`scripts/setup.sh`);
-`make run` boots Closure fresh (`run.sh`, which resets the DB and delegates to
-`server/app.sql`). Run `make test` (or `PORT=8127 make test`) to npm-install
-e2e deps, boot the app, and run Playwright; `make clean` removes generated
-runtime state (`closure.db`, `closure.db.wal`, `exports/decisions/*.json`).
+`make install` is `./scripts/install-runtime.sh`:
+
+1. Reuse `.deps/runtime` if already installed  
+2. Else copy a sibling `../quackapi/build/release` (local dev only)  
+3. Else download a prebuilt tarball from this repo’s [Releases](https://github.com/asubbarao/closure/releases)  
+4. Else clone + build quackapi into `.deps/src/` (needs `cmake` + `ninja`; 10–30+ min)
+
+`make setup` generates the sample corpus and will call `install-runtime` if `.deps/runtime` is missing.  
+`make run` boots fresh (`run.sh` → `server/app.sql`).  
+`make test` boots and runs Playwright.  
+`make clean` drops `closure.db` and decision JSON (not `.deps/`).
 
 ### No-make path
 
-Requires a **quackapi-built** DuckDB binary (parser extension registration —
-the extension is statically linked into that binary, so no `LOAD` is needed):
-
 ```sh
-cd /path/to/closure
-
-export DUCKDB_BIN="${DUCKDB_BIN:-../quackapi/build/release/duckdb}"  # sibling quackapi build
-
-# Kill any prior listener on your port; fresh DB each boot (ingest is source of truth).
-lsof -ti :"${CLOSURE_PORT:-8117}" | xargs kill 2>/dev/null || true
-rm -f closure.db closure.db.wal
-
-"$DUCKDB_BIN" -unsigned closure.db -c ".read server/app.sql"
-# → http://127.0.0.1:${CLOSURE_PORT:-8117}/
-```
-
-Booting a **generic** DuckDB binary instead requires preloading the extension
-(the generated-command pattern — `LOAD` only accepts a string literal):
-
-```sh
-"$DUCKDB_BIN" -unsigned closure.db \
-  -cmd "LOAD '$QUACKAPI_EXT';" \
-  -c ".read server/app.sql"
+./scripts/install-runtime.sh
+./scripts/setup.sh
+./run.sh
+# → http://127.0.0.1:8117/
 ```
 
 ### Configuration — one relation
@@ -105,9 +90,10 @@ non-empty, else the committed default. The boot log prints the resolved table.
 | `CLOSURE_SAMPLES_DIR` | `samples_dir` | `samples` | ingest PDF/manifest/identities dir |
 | `CLOSURE_EXPORTS_DIR` | `exports_dir` | `exports` | redacted-PDF target prefix |
 | `CLOSURE_DECISIONS_GLOB` | `decisions_glob` | `exports/decisions/*.json` | decision-log **read** glob (writes are `COPY TO` literals under `exports/decisions/`) |
-| `CLOSURE_QUACKAPI_EXT` | `quackapi_ext` | sibling quackapi build path | extension path for the generic-binary boot above |
+| `CLOSURE_QUACKAPI_EXT` | `quackapi_ext` | `.deps/runtime/…` after install | path to `quackapi.duckdb_extension` |
 | `CLOSURE_ACTOR` | `actor` | `A. Subbarao` | "Reviewing as" identity stamped into templates |
-| `DUCKDB_BIN` | — | sibling `../quackapi/build/release/duckdb`, else `duckdb` on PATH | binary for `scripts/*.sh` / `run.sh` (must be ≥1.5.4 with full community pdf) |
+| `DUCKDB_BIN` | — | `.deps/runtime/duckdb` after install | DuckDB binary for `run.sh` / setup |
+| `CLOSURE_RUNTIME_TAG` | — | `runtime-v1.5.4-1` | GitHub Release tag for the prebuilt runtime |
 
 `GET /api/routes` returns the full route map as JSON — generated from the live
 `quackapi_routes()` registry joined to the parsed `CREATE ROUTE` declarations
@@ -229,8 +215,9 @@ are data-state guards on an almost-fully-decided corpus, not broken features).
 
 `scripts/setup.sh` runs pure DuckDB (`samples/gen/01_identities.sql` +
 `02_corpus.sql` via fakeit + `write_pdf`) then renders `pages/<stem>/pN.png`
-with `pdftoppm`. Scripts resolve the binary as `$DUCKDB_BIN`, else `duckdb`
-on PATH. Commit no sample PDFs — clone → setup → boot.
+with `pdftoppm`. Scripts resolve DuckDB via `.deps/runtime` (after
+`make install`), then `$DUCKDB_BIN`, then PATH. Commit no sample PDFs —
+clone → install → setup → boot.
 
 ## Design rationale
 

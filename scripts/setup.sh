@@ -11,8 +11,8 @@
 #   2. Render every samples/*.pdf page to pages/<stem>/pN.png
 #        (pdftoppm preferred; DuckDB pdf_to_png fallback)
 #
-# Does NOT boot the app. After setup (quackapi-built binary):
-#   "$DUCKDB_BIN" -unsigned closure.db -c ".read server/app.sql"
+# Does NOT boot the app. After setup:
+#   make run    # or ./run.sh
 #
 # Env / flags forwarded to generate-samples.sh:
 #   N_CASES DOCS_PER_CASE CONSOLIDATED_PAGES REUSE_IDENTITIES DUCKDB_BIN SAMPLES_DIR
@@ -28,15 +28,20 @@ SKIP_PNG="${SKIP_PNG:-0}"
 SAMPLES_DIR="${SAMPLES_DIR:-samples}"
 PAGES_DIR="${PAGES_DIR:-pages}"
 
-# Same binary resolution as generate-samples.sh / run.sh: env → sibling quackapi → PATH.
+# Runtime: .deps/runtime (install-runtime.sh) → env → sibling → PATH.
 if [[ -z "${DUCKDB_BIN:-}" ]]; then
-  _sibling="$(dirname "$ROOT")/quackapi/build/release/duckdb"
-  if [[ -x "$_sibling" ]]; then
-    export DUCKDB_BIN="$_sibling"
-  elif command -v duckdb >/dev/null 2>&1; then
-    export DUCKDB_BIN="$(command -v duckdb)"
+  if [[ ! -x "$ROOT/.deps/runtime/duckdb" && ! -f "$ROOT/.deps/runtime/env" ]]; then
+    echo "==> runtime missing — running install-runtime.sh first"
+    "$ROOT/scripts/install-runtime.sh"
   fi
+  # shellcheck source=resolve-runtime.sh
+  source "$ROOT/scripts/resolve-runtime.sh" || true
 fi
+if [[ -z "${DUCKDB_BIN:-}" || ! -x "${DUCKDB_BIN:-}" ]]; then
+  echo "error: duckdb not found after install-runtime — set DUCKDB_BIN" >&2
+  exit 1
+fi
+export DUCKDB_BIN
 
 echo "==> Closure setup (repo root: $ROOT)"
 [[ -n "${DUCKDB_BIN:-}" ]] && echo "    DUCKDB_BIN=$DUCKDB_BIN"

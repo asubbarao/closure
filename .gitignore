@@ -68,6 +68,11 @@ samples/public/_renders/
 
 .tmp/
 .playwright-mcp/
+
+# Downloaded / built quackapi runtime (see scripts/install-runtime.sh).
+# Never vendor quackapi source into this repo — only a local binary cache.
+.deps/
+
 samples/public/govinfo_usreports_vol5.pdf
 samples/stress/*.pdf
 

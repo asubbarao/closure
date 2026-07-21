@@ -34,19 +34,25 @@ CONSOLIDATED_PAGES="${CONSOLIDATED_PAGES:-110}"
 REUSE_IDENTITIES="${REUSE_IDENTITIES:-0}"
 SAMPLES_DIR="${SAMPLES_DIR:-samples}"
 
-# Resolution: $DUCKDB_BIN env, else sibling quackapi build, else duckdb on PATH.
+# Resolution: $DUCKDB_BIN env → .deps/runtime (install-runtime.sh) → sibling → PATH.
 # Needs DuckDB ≥1.5.4 with community pdf (pdf_info / write_pdf / pdf_encrypt / …).
-# Stock 1.5.3 community pdf lacks pdf_info — PATH brew/local duckdb often fails here.
 if [[ -z "${DUCKDB_BIN:-}" ]]; then
-  _sibling="$(dirname "$ROOT")/quackapi/build/release/duckdb"
-  if [[ -x "$_sibling" ]]; then
-    DUCKDB_BIN="$_sibling"
+  if [[ -f "$ROOT/.deps/runtime/env" || -x "$ROOT/.deps/runtime/duckdb" ]]; then
+    # shellcheck source=resolve-runtime.sh
+    source "$ROOT/scripts/resolve-runtime.sh"
   else
-    DUCKDB_BIN="$(command -v duckdb 2>/dev/null || true)"
+    _sibling="$(dirname "$ROOT")/quackapi/build/release/duckdb"
+    if [[ -x "$_sibling" ]]; then
+      DUCKDB_BIN="$_sibling"
+    else
+      DUCKDB_BIN="$(command -v duckdb 2>/dev/null || true)"
+    fi
   fi
 fi
-if [[ -z "$DUCKDB_BIN" ]]; then
-  echo "error: duckdb not found — set DUCKDB_BIN to a ≥1.5.4 binary (sibling ../quackapi/build/release/duckdb preferred) or put duckdb on PATH" >&2
+if [[ -z "${DUCKDB_BIN:-}" || ! -x "${DUCKDB_BIN:-}" ]]; then
+  echo "error: duckdb not found." >&2
+  echo "  Run once:  ./scripts/install-runtime.sh" >&2
+  echo "  Or set:    DUCKDB_BIN=/path/to/duckdb  (≥1.5.4)" >&2
   exit 1
 fi
 
