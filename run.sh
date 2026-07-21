@@ -43,9 +43,24 @@ if [[ ! -d "$DATA_DIR" ]]; then
   exit 1
 fi
 
-# app.sql COPYs a decision-log sentinel into exports/decisions/ at boot and
-# expects static_dir/exports_dir to exist; ensure both up front.
+# app.sql expects static_dir/exports_dir to exist; ensure both up front.
+# (The decision log under exports/decisions/ is the durable state and is
+# deliberately NOT touched here — the DB below is derived and disposable.)
 mkdir -p exports/decisions static
+
+# Exactly one server per port: kill any previous instance still bound to
+# $PORT before wiping the DB. Without this the old process keeps serving the
+# deleted inode and the new boot can't bind — two servers fighting over
+# closure.db was a real observed failure mode.
+OLD_PIDS="$(lsof -t -i tcp:"$PORT" -s tcp:LISTEN 2>/dev/null || true)"
+if [[ -n "$OLD_PIDS" ]]; then
+  echo "==> stopping previous server on :$PORT (pid $OLD_PIDS)"
+  kill $OLD_PIDS 2>/dev/null || true
+  for i in $(seq 1 20); do
+    lsof -t -i tcp:"$PORT" -s tcp:LISTEN >/dev/null 2>&1 || break
+    sleep 0.25
+  done
+fi
 
 # Fresh DB each boot — ingest is the source of truth.
 rm -f "$DB" "${DB}.wal"

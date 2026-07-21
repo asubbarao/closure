@@ -12,20 +12,20 @@ setup:
 run:
 	PORT=$(PORT) ./run.sh
 
-# Boot the app if it isn't already up, run the Playwright e2e suite against
-# it, then leave the app running the way it was found.
+# ALWAYS boot fresh, then run the Playwright e2e suite. Reusing a server that
+# happens to be up means testing whatever stale code it booted with — never
+# what's in the tree. run.sh kills any previous instance on the port and
+# wipes the derived DB, so this is idempotent.
 test:
-	@if curl -s -o /dev/null -w '%{http_code}' $(BASE)/api/stats 2>/dev/null | grep -q 200; then \
-		echo "==> app already up on :$(PORT)"; \
-	else \
-		echo "==> booting app for test run"; \
-		mkdir -p .tmp; \
-		PORT=$(PORT) nohup ./run.sh > .tmp/run.log 2>&1 & \
-		for i in $$(seq 1 30); do \
-			curl -s -o /dev/null -w '%{http_code}' $(BASE)/api/stats 2>/dev/null | grep -q 200 && break; \
-			sleep 1; \
-		done; \
-	fi
+	@echo "==> fresh boot for test run"
+	@mkdir -p .tmp
+	@PORT=$(PORT) nohup ./run.sh > .tmp/run.log 2>&1 & \
+	for i in $$(seq 1 45); do \
+		curl -s -o /dev/null -w '%{http_code}' $(BASE)/api/stats 2>/dev/null | grep -q 200 && break; \
+		sleep 1; \
+	done; \
+	curl -s -o /dev/null -w '%{http_code}' $(BASE)/api/stats 2>/dev/null | grep -q 200 \
+		|| { echo "boot failed — tail .tmp/run.log:"; tail -30 .tmp/run.log; exit 1; }
 	cd tests/e2e && CLOSURE_BASE_URL=$(BASE) npx playwright test --reporter=line
 
 # Remove generated runtime state: the DB, its WAL, and decision-log JSON
