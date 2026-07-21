@@ -65,10 +65,10 @@ FROM pages p;
 
 CREATE OR REPLACE VIEW v_page_words AS
 SELECT cast(w.document_id AS VARCHAR) AS document_id, w.page_no, w.word,
-       w.x0, w.y0, w.x1, w.y1,
-       round(w.x0 * g.scale, 2) AS left_px, round(w.y0 * g.scale, 2) AS top_px,
-       round((w.x1 - w.x0) * g.scale, 2) AS width_px,
-       round(greatest(w.y1 - w.y0, 4) * g.scale, 2) AS height_px,
+       w.bbox,
+       round(w.bbox.x0 * g.scale, 2) AS left_px, round(w.bbox.y0 * g.scale, 2) AS top_px,
+       round((w.bbox.x1 - w.bbox.x0) * g.scale, 2) AS width_px,
+       round(greatest(w.bbox.y1 - w.bbox.y0, 4) * g.scale, 2) AS height_px,
        round(coalesce(w.font_size, 9) * g.scale * 0.95, 1) AS font_px, false AS is_hit
 FROM words w
 JOIN v_page_geom g ON g.document_id = cast(w.document_id AS VARCHAR) AND g.page_no = w.page_no;
@@ -76,9 +76,9 @@ JOIN v_page_geom g ON g.document_id = cast(w.document_id AS VARCHAR) AND g.page_
 CREATE OR REPLACE VIEW v_page_marks AS
 SELECT cast(s.document_id AS VARCHAR) AS document_id, s.page_no,
        s.id, s.text, s.confidence, s.status, s.band, coalesce(s.kind, '') AS kind,
-       round(s.x0 * g.scale, 2) AS left_px, round(s.y0 * g.scale, 2) AS top_px,
-       round((s.x1 - s.x0) * g.scale, 2) AS width_px,
-       round((s.y1 - s.y0) * g.scale, 2) AS height_px, false AS is_current
+       round(s.bbox.x0 * g.scale, 2) AS left_px, round(s.bbox.y0 * g.scale, 2) AS top_px,
+       round((s.bbox.x1 - s.bbox.x0) * g.scale, 2) AS width_px,
+       round((s.bbox.y1 - s.bbox.y0) * g.scale, 2) AS height_px, false AS is_current
 FROM v_suggestions s
 JOIN v_page_geom g ON g.document_id = cast(s.document_id AS VARCHAR) AND g.page_no = s.page_no;
 
@@ -171,8 +171,9 @@ SELECT
                 png_href := '/pages/' || d.filename || '/p' || g.page_no || '.png'
             ),
             'words': (SELECT coalesce(list(struct_pack(
-                word := w.word, x0 := round(w.x0, 2), y0 := round(w.y0, 2),
-                x1 := round(w.x1, 2), y1 := round(w.y1, 2),
+                word := w.word,
+                x0 := round(w.bbox.x0, 2), y0 := round(w.bbox.y0, 2),
+                x1 := round(w.bbox.x1, 2), y1 := round(w.bbox.y1, 2),
                 left_px := w.left_px, top_px := w.top_px,
                 width := w.width_px, height := w.height_px,
                 font_px := w.font_px, is_hit := w.is_hit

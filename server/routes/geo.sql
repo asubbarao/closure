@@ -103,7 +103,7 @@ ORDER BY is_street_fp, canonical_text, entity_id;
 CREATE OR REPLACE ROUTE api_case_address_suggestions GET '/api/cases/:id/addresses/:entity_id/suggestions' AS
 SELECT
     s.id, s.document_id, d.filename, s.page_no,
-    s.x0, s.y0, s.x1, s.y1,
+    s.bbox.x0 AS x0, s.bbox.y0 AS y0, s.bbox.x1 AS x1, s.bbox.y1 AS y1,
     s.text, s.context, s.confidence, s.flag_tag, s.reason,
     s.entity_id, s.source, s.status, s.band, s.kind, s.entity_text
 FROM v_suggestions s

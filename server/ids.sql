@@ -16,9 +16,10 @@
 --   document  = case_no || chr(31) || filename
 --   entity    = case_id || chr(31) || kind || chr(31) || canonical_text
 --   suggestion(ai) = document_id || chr(31) || page_no || chr(31) ||
---                    round(x0,1) || chr(31) || round(y0,1) || chr(31) ||
---                    round(x1,1) || chr(31) || round(y1,1) || chr(31) ||
+--                    round(bbox.x0,1) || chr(31) || round(bbox.y0,1) || chr(31) ||
+--                    round(bbox.x1,1) || chr(31) || round(bbox.y1,1) || chr(31) ||
 --                    text || chr(31) || kind || chr(31) || 'ai'
+--   (scalar fields of STRUCT bbox — same numeric payload as the old flat cols)
 --
 -- Event/batch ids in the decision log may still use uuid() — those are
 -- event keys, not subject keys. Manual-add suggestion_id is minted once at

@@ -2,6 +2,7 @@
 -- Inputs: words, documents, watchlist; v_src_decisions.
 -- Ext: finetype, us_address_standardizer, rapidfuzz, splink_udfs.
 -- No ngram union, no row_number. Taxonomy is data (kinds not sprinkled).
+-- Geometry: words.bbox STRUCT; suggestions.bbox only (no flat x0..y1 columns).
 
 INSTALL finetype FROM community; LOAD finetype;
 INSTALL us_address_standardizer FROM community; LOAD us_address_standardizer;
@@ -17,25 +18,26 @@ SELECT * FROM (VALUES
     ('addrust',        'ADDRESS · SUBJECT', true)
 ) AS t(code, kind, is_pii);
 
--- Visual lines: string_agg + word_meta ordered by x0 (bbox for name/address spans).
+-- Visual lines: string_agg + word_meta ordered by bbox.x0.
 CREATE OR REPLACE TABLE _detect_lines AS
 SELECT w.document_id, w.page_no, d.case_id,
-       string_agg(w.word, ' ' ORDER BY w.x0) AS line_text,
-       lower(trim(unaccent(string_agg(w.word, ' ' ORDER BY w.x0)))) AS line_norm,
-       list(struct_pack(word := w.word, x0 := w.x0, y0 := w.y0, x1 := w.x1, y1 := w.y1)
-            ORDER BY w.x0) AS word_meta
+       string_agg(w.word, ' ' ORDER BY w.bbox.x0) AS line_text,
+       lower(trim(unaccent(string_agg(w.word, ' ' ORDER BY w.bbox.x0)))) AS line_norm,
+       list(struct_pack(word := w.word, x0 := w.bbox.x0, y0 := w.bbox.y0,
+                        x1 := w.bbox.x1, y1 := w.bbox.y1)
+            ORDER BY w.bbox.x0) AS word_meta
 FROM words w JOIN documents d ON d.id = w.document_id
-GROUP BY w.document_id, w.page_no, d.case_id, round(w.y0, 0);
+GROUP BY w.document_id, w.page_no, d.case_id, round(w.bbox.y0, 0);
 
 -- Hits: finetype words | tightened addrust | watchlist×lines rapidfuzz. No ngrams.
 CREATE OR REPLACE TABLE _detect_hits AS
 WITH type_hits AS (
     SELECT c.document_id, c.page_no, c.case_id, c.token AS text, c.token AS context,
-           c.x0, c.y0, c.x1, c.y1, tax.kind,
+           c.bbox, tax.kind,
            greatest(1, least(99, cast(round(100.0 * coalesce(c.ft_conf, 0.70)) AS INTEGER))) AS confidence,
            'finetype: ' || c.ft_type AS reason, cast(NULL AS VARCHAR) AS flag_tag
     FROM (
-        SELECT w.document_id, w.page_no, d.case_id, w.x0, w.y0, w.x1, w.y1,
+        SELECT w.document_id, w.page_no, d.case_id, w.bbox,
                trim(w.word, '.,;:()"''[]') AS token,
                finetype([trim(w.word, '.,;:()"''[]')]) AS ft_type,
                try_cast(json_extract_string(
@@ -55,10 +57,12 @@ WITH type_hits AS (
 ),
 addr_hits AS (
     SELECT p.document_id, p.page_no, p.case_id, p.addr_span AS text, p.line_text AS context,
-           list_min(list_transform(p.span_words, lambda m: m.x0)) AS x0,
-           list_min(list_transform(p.span_words, lambda m: m.y0)) AS y0,
-           list_max(list_transform(p.span_words, lambda m: m.x1)) AS x1,
-           list_max(list_transform(p.span_words, lambda m: m.y1)) AS y1,
+           struct_pack(
+               x0 := list_min(list_transform(p.span_words, lambda m: m.x0)),
+               y0 := list_min(list_transform(p.span_words, lambda m: m.y0)),
+               x1 := list_max(list_transform(p.span_words, lambda m: m.x1)),
+               y1 := list_max(list_transform(p.span_words, lambda m: m.y1))
+           ) AS bbox,
            tax.kind, 92 AS confidence,
            'addrust: ' || p.a.street_number || ' ' || coalesce(p.a.street_name, '') AS reason,
            cast(NULL AS VARCHAR) AS flag_tag
@@ -80,10 +84,12 @@ addr_hits AS (
 ),
 name_hits AS (
     SELECT s.document_id, s.page_no, s.case_id, s.wl_term AS text, s.line_text AS context,
-           list_min(list_transform(s.match_words, lambda m: m.x0)) AS x0,
-           list_min(list_transform(s.match_words, lambda m: m.y0)) AS y0,
-           list_max(list_transform(s.match_words, lambda m: m.x1)) AS x1,
-           list_max(list_transform(s.match_words, lambda m: m.y1)) AS y1,
+           struct_pack(
+               x0 := list_min(list_transform(s.match_words, lambda m: m.x0)),
+               y0 := list_min(list_transform(s.match_words, lambda m: m.y0)),
+               x1 := list_max(list_transform(s.match_words, lambda m: m.x1)),
+               y1 := list_max(list_transform(s.match_words, lambda m: m.y1))
+           ) AS bbox,
            s.wl_kind AS kind,
            greatest(1, least(99, cast(round(greatest(s.token_sort, s.partial_ratio,
                100.0 * s.jaro_winkler)) AS INTEGER))) AS confidence,
@@ -146,10 +152,7 @@ SELECT
         AS UUID
     ) AS id,
     h.document_id, h.page_no,
-    h.x0, h.y0, h.x1, h.y1,
-    -- one geometry object; flat columns kept for route/JS contract at the edge
-    struct_pack(page := h.page_no, x0 := h.x0, y0 := h.y0, x1 := h.x1, y1 := h.y1,
-                origin := 'pdf_tl') AS bbox,
+    h.bbox,
     h.text, coalesce(h.context, h.text) AS context, h.confidence,
     h.flag_tag, h.reason, e.id AS entity_id, h.kind, 'ai' AS source,
     TIMESTAMP '1970-01-01' AS created_at  -- deterministic; not a birth clock
@@ -158,10 +161,10 @@ FROM (
            md5(
                cast(hit.document_id AS VARCHAR) || chr(31) ||
                cast(hit.page_no AS VARCHAR) || chr(31) ||
-               cast(round(hit.x0, 1) AS VARCHAR) || chr(31) ||
-               cast(round(hit.y0, 1) AS VARCHAR) || chr(31) ||
-               cast(round(hit.x1, 1) AS VARCHAR) || chr(31) ||
-               cast(round(hit.y1, 1) AS VARCHAR) || chr(31) ||
+               cast(round(hit.bbox.x0, 1) AS VARCHAR) || chr(31) ||
+               cast(round(hit.bbox.y0, 1) AS VARCHAR) || chr(31) ||
+               cast(round(hit.bbox.x1, 1) AS VARCHAR) || chr(31) ||
+               cast(round(hit.bbox.y1, 1) AS VARCHAR) || chr(31) ||
                cast(hit.text AS VARCHAR) || chr(31) ||
                cast(hit.kind AS VARCHAR) || chr(31) || 'ai'
            ) AS h
@@ -182,12 +185,17 @@ FROM v_src_decisions
 WHERE kind = 'decision' AND suggestion_id IS NOT NULL
 GROUP BY cast(suggestion_id AS VARCHAR);
 
+-- Manual adds: decision log keeps flat x0..y1; reconstruct bbox here.
 CREATE OR REPLACE VIEW v_manual_suggestions AS
 SELECT cast(m.suggestion_id AS VARCHAR) AS id,
        cast(m.latest.document_id AS VARCHAR) AS document_id,
        try_cast(m.latest.page_no AS INTEGER) AS page_no,
-       try_cast(m.latest.x0 AS DOUBLE) AS x0, try_cast(m.latest.y0 AS DOUBLE) AS y0,
-       try_cast(m.latest.x1 AS DOUBLE) AS x1, try_cast(m.latest.y1 AS DOUBLE) AS y1,
+       struct_pack(
+           x0 := try_cast(m.latest.x0 AS DOUBLE),
+           y0 := try_cast(m.latest.y0 AS DOUBLE),
+           x1 := try_cast(m.latest.x1 AS DOUBLE),
+           y1 := try_cast(m.latest.y1 AS DOUBLE)
+       ) AS bbox,
        cast(m.latest.text AS VARCHAR) AS text,
        coalesce(cast(m.latest.context AS VARCHAR), cast(m.latest.text AS VARCHAR)) AS context,
        coalesce(try_cast(m.latest.confidence AS INTEGER), 99) AS confidence,
@@ -211,16 +219,16 @@ FROM (
 CREATE OR REPLACE VIEW v_suggestions AS
 WITH base AS (
     SELECT cast(s.id AS VARCHAR) AS id, cast(s.document_id AS VARCHAR) AS document_id,
-           s.page_no, s.x0, s.y0, s.x1, s.y1, s.text, s.context, s.confidence,
+           s.page_no, s.bbox, s.text, s.context, s.confidence,
            s.flag_tag, s.reason, cast(s.entity_id AS VARCHAR) AS entity_id,
            s.source, s.created_at, s.kind AS kind_stored
     FROM suggestions s
     UNION ALL BY NAME
-    SELECT id, document_id, page_no, x0, y0, x1, y1, text, context, confidence,
+    SELECT id, document_id, page_no, bbox, text, context, confidence,
            flag_tag, reason, entity_id, source, created_at, kind
     FROM v_manual_suggestions
 )
-SELECT b.id, b.document_id, b.page_no, b.x0, b.y0, b.x1, b.y1, b.text, b.context,
+SELECT b.id, b.document_id, b.page_no, b.bbox, b.text, b.context,
        b.confidence, b.flag_tag, b.reason, b.entity_id, b.source, b.created_at,
        coalesce(e.kind, b.kind_stored) AS kind, e.canonical_text AS entity_text,
        coalesce(ld.status, CASE b.source WHEN 'manual' THEN 'accepted' ELSE 'pending' END) AS status,

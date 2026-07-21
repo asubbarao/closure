@@ -17,14 +17,15 @@ query AS (
 ),
 line_bags AS (
     SELECT w.document_id, d.filename, w.page_no,
-           list(w.word ORDER BY w.x0) AS word_list,
-           list(struct_pack(word := w.word, x0 := w.x0, y0 := w.y0, x1 := w.x1, y1 := w.y1)
-                ORDER BY w.x0) AS word_meta
+           list(w.word ORDER BY w.bbox.x0) AS word_list,
+           list(struct_pack(word := w.word, x0 := w.bbox.x0, y0 := w.bbox.y0,
+                            x1 := w.bbox.x1, y1 := w.bbox.y1)
+                ORDER BY w.bbox.x0) AS word_meta
     FROM words w
     JOIN documents d ON d.id = w.document_id
     JOIN query ON d.case_id = query.case_id
     WHERE w.word IS NOT NULL AND trim(w.word) <> ''
-    GROUP BY w.document_id, d.filename, w.page_no, round(w.y0, 0)
+    GROUP BY w.document_id, d.filename, w.page_no, round(w.bbox.y0, 0)
 ),
 -- ngrams(n) needs a constant n — the four calls are ONE list literal (each
 -- fixed-size ARRAY(n) cast to VARCHAR[] so they unify); projection written once.
@@ -43,20 +44,23 @@ spans AS (
         r.document_id, r.filename, r.page_no, r.token_count, query.query_norm,
         array_to_string(r.tokens, ' ') AS text_raw,
         lower(trim(unaccent(array_to_string(r.tokens, ' ')))) AS text_norm,
-        r.word_meta[r.start_idx].x0 AS x0,
-        r.word_meta[r.start_idx].y0 AS y0,
-        r.word_meta[r.start_idx + r.token_count - 1].x1 AS x1,
-        list_max(list_transform(
-            list_slice(r.word_meta, r.start_idx::BIGINT, (r.start_idx + r.token_count - 1)::BIGINT),
-            lambda meta: meta.y1)) AS y1
+        struct_pack(
+            x0 := r.word_meta[r.start_idx].x0,
+            y0 := r.word_meta[r.start_idx].y0,
+            x1 := r.word_meta[r.start_idx + r.token_count - 1].x1,
+            y1 := list_max(list_transform(
+                list_slice(r.word_meta, r.start_idx::BIGINT,
+                           (r.start_idx + r.token_count - 1)::BIGINT),
+                lambda meta: meta.y1))
+        ) AS bbox
     FROM span_raw r
     JOIN query ON query.query_len > 0 AND r.token_count = query.query_token_count
 ),
 hits AS (
-    SELECT document_id, filename, page_no, x0, y0, x1, y1, text_raw, score,
+    SELECT document_id, filename, page_no, bbox, text_raw, score,
            CASE WHEN score = 100.0 THEN 'exact' ELSE 'fuzzy' END AS match_kind
     FROM (
-        SELECT document_id, filename, page_no, x0, y0, x1, y1, text_raw,
+        SELECT document_id, filename, page_no, bbox, text_raw,
                CASE
                    WHEN text_norm = query_norm THEN 100.0
                    WHEN token_count = 1 AND position(query_norm IN text_norm) > 0 THEN 100.0
@@ -69,10 +73,10 @@ hits AS (
 SELECT
     coalesce(list(struct_pack(
         document_id := document_id, filename := filename, page_no := page_no,
-        x0 := x0, y0 := y0, x1 := x1, y1 := y1,
+        x0 := bbox.x0, y0 := bbox.y0, x1 := bbox.x1, y1 := bbox.y1,
         text := text_raw, match_kind := match_kind, score := score
     ) ORDER BY CASE match_kind WHEN 'exact' THEN 0 ELSE 1 END,
-              score DESC, document_id, page_no, y0, x0), []) AS matches,
+              score DESC, document_id, page_no, bbox.y0, bbox.x0), []) AS matches,
     count(*)::INTEGER AS count,
     count(*) FILTER (WHERE match_kind = 'exact')::INTEGER AS exact_count,
     count(*) FILTER (WHERE match_kind = 'fuzzy')::INTEGER AS fuzzy_count

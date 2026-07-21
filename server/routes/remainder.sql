@@ -4,20 +4,22 @@
 CREATE OR REPLACE ROUTE api_doc_missed GET '/api/documents/:id/missed' AS
 SELECT
     r.id, r.document_id, d.filename, d.case_id, r.page,
-    r.x0, r.y0, r.x1, r.y1, r.text, r.kind, r.why, r.detector, r.score, r.entity_id
+    r.bbox.x0 AS x0, r.bbox.y0 AS y0, r.bbox.x1 AS x1, r.bbox.y1 AS y1,
+    r.text, r.kind, r.why, r.detector, r.score, r.entity_id
 FROM residual_pii_hits r
 JOIN documents d ON cast(d.id AS VARCHAR) = cast(r.document_id AS VARCHAR)
 WHERE cast(r.document_id AS VARCHAR) = $id
-ORDER BY r.page, r.y0, r.x0, r.id;
+ORDER BY r.page, r.bbox.y0, r.bbox.x0, r.id;
 
 CREATE OR REPLACE ROUTE api_case_missed GET '/api/cases/:id/missed' AS
 SELECT
     r.id, r.document_id, d.filename, d.case_id, r.page,
-    r.x0, r.y0, r.x1, r.y1, r.text, r.kind, r.why, r.detector, r.score, r.entity_id
+    r.bbox.x0 AS x0, r.bbox.y0 AS y0, r.bbox.x1 AS x1, r.bbox.y1 AS y1,
+    r.text, r.kind, r.why, r.detector, r.score, r.entity_id
 FROM residual_pii_hits r
 JOIN documents d ON cast(d.id AS VARCHAR) = cast(r.document_id AS VARCHAR)
 WHERE d.case_id = $id
-ORDER BY d.filename, r.page, r.y0, r.x0, r.id;
+ORDER BY d.filename, r.page, r.bbox.y0, r.bbox.x0, r.id;
 
 CREATE OR REPLACE ROUTE api_case_entity_groups GET '/api/cases/:id/entity-groups' AS
 SELECT

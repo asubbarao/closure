@@ -37,11 +37,14 @@ SET VARIABLE pdf_io_ocr_sql = (
         WHEN getvariable('pdf_io_empty_n') = 0
           OR NOT coalesce((SELECT ocr_available FROM pdf_ocr_capability), false)
         THEN 'SELECT cast(NULL AS UUID) AS document_id, NULL::INTEGER AS page_no, '
-             || 'cast(NULL AS VARCHAR) AS word, NULL::DOUBLE AS x0, NULL::DOUBLE AS y0, '
-             || 'NULL::DOUBLE AS x1, NULL::DOUBLE AS y1, NULL::DOUBLE AS font_size WHERE false'
+             || 'cast(NULL AS VARCHAR) AS word, '
+             || 'NULL::STRUCT(x0 DOUBLE, y0 DOUBLE, x1 DOUBLE, y1 DOUBLE) AS bbox, '
+             || 'NULL::DOUBLE AS font_size WHERE false'
         ELSE 'SELECT d.id AS document_id, w.page::INTEGER AS page_no, '
-             || 'cast(w.word AS VARCHAR) AS word, w.x0::DOUBLE AS x0, w.y0::DOUBLE AS y0, '
-             || 'w.x1::DOUBLE AS x1, w.y1::DOUBLE AS y1, w.font_size::DOUBLE AS font_size '
+             || 'cast(w.word AS VARCHAR) AS word, '
+             || 'struct_pack(x0 := w.x0::DOUBLE, y0 := w.y0::DOUBLE, '
+             || 'x1 := w.x1::DOUBLE, y1 := w.y1::DOUBLE) AS bbox, '
+             || 'w.font_size::DOUBLE AS font_size '
              || 'FROM read_pdf_words('''
              || coalesce(cast(getvariable('samples_dir') AS VARCHAR), 'samples')
              || '/*.pdf'', auto_ocr := true) w '
@@ -52,9 +55,9 @@ SET VARIABLE pdf_io_ocr_sql = (
 );
 
 CREATE OR REPLACE TABLE words AS
-SELECT document_id, page_no, word, x0, y0, x1, y1, font_size, 'text'::VARCHAR AS source FROM words
+SELECT document_id, page_no, word, bbox, font_size, 'text'::VARCHAR AS source FROM words
 UNION ALL BY NAME
-SELECT document_id, page_no, word, x0, y0, x1, y1, font_size, 'ocr'::VARCHAR AS source
+SELECT document_id, page_no, word, bbox, font_size, 'ocr'::VARCHAR AS source
 FROM query(getvariable('pdf_io_ocr_sql'));
 
 DROP TABLE IF EXISTS _empty_pages;

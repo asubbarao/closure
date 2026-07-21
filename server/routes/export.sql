@@ -20,10 +20,10 @@ WITH boxes AS (
     SELECT s.document_id,
            list(struct_pack(
                     page := s.page_no::INTEGER,
-                    x    := s.x0::DOUBLE,
-                    y    := (p.height_pt - s.y1)::DOUBLE,
-                    w    := (s.x1 - s.x0)::DOUBLE,
-                    h    := (s.y1 - s.y0)::DOUBLE)
+                    x    := s.bbox.x0::DOUBLE,
+                    y    := (p.height_pt - s.bbox.y1)::DOUBLE,
+                    w    := (s.bbox.x1 - s.bbox.x0)::DOUBLE,
+                    h    := (s.bbox.y1 - s.bbox.y0)::DOUBLE)
                 ORDER BY s.page_no, s.id) AS boxes
     FROM v_suggestions s
     JOIN pages p ON cast(p.document_id AS VARCHAR) = s.document_id

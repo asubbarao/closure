@@ -58,14 +58,16 @@ SELECT
 FROM read_pdf(getvariable('samples_dir') || '/*.pdf') p
 JOIN documents d ON d.filename = parse_filename(p.filename, true);
 
--- No fabricated seq (no row_number). Order by (page_no, y0, x0) or use ngrams().
+-- No fabricated seq (no row_number). Order by (page_no, bbox.y0, bbox.x0) or use ngrams().
 CREATE OR REPLACE TABLE words AS
 SELECT
     d.id                    AS document_id,
     w.page::INTEGER         AS page_no,
     cast(w.word AS VARCHAR) AS word,
-    w.x0::DOUBLE AS x0, w.y0::DOUBLE AS y0,
-    w.x1::DOUBLE AS x1, w.y1::DOUBLE AS y1,
+    struct_pack(
+        x0 := w.x0::DOUBLE, y0 := w.y0::DOUBLE,
+        x1 := w.x1::DOUBLE, y1 := w.y1::DOUBLE
+    ) AS bbox,
     w.font_size::DOUBLE     AS font_size
 FROM read_pdf_words(getvariable('samples_dir') || '/*.pdf') w
 JOIN documents d ON d.filename = parse_filename(w.filename, true);
