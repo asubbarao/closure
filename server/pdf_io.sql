@@ -9,7 +9,7 @@ WITH fn AS (
 ),
 probe AS (
     SELECT count(*) FILTER (WHERE coalesce(source, 'text') = 'ocr')::BIGINT AS ocr_words
-    FROM read_pdf_words('spikes/scans/fixtures/image_only_scanned.pdf', auto_ocr := true)
+    FROM read_pdf_words('samples/messy/image_only_scanned.pdf', auto_ocr := true)
 )
 SELECT
     coalesce((SELECT has_auto_ocr FROM fn), false) AS has_auto_ocr_param,

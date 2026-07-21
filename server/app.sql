@@ -27,33 +27,6 @@ SET VARIABLE static_dir  = (SELECT value FROM app_config WHERE key = 'static_dir
 SET VARIABLE samples_dir = (SELECT value FROM app_config WHERE key = 'samples_dir');
 SET VARIABLE exports_dir = (SELECT value FROM app_config WHERE key = 'exports_dir');
 
--- Decision-log sentinel pins VARCHAR id types for read_json_auto.
-COPY (
-    SELECT
-        'sentinel' AS kind,
-        NULL::VARCHAR AS suggestion_id,
-        NULL::VARCHAR AS status,
-        NULL::VARCHAR AS actor,
-        NULL::VARCHAR AS reason,
-        NULL::VARCHAR AS ts,
-        NULL::VARCHAR AS document_id,
-        NULL::INTEGER AS page_no,
-        NULL::DOUBLE AS x0,
-        NULL::DOUBLE AS y0,
-        NULL::DOUBLE AS x1,
-        NULL::DOUBLE AS y1,
-        NULL::VARCHAR AS text,
-        NULL::VARCHAR AS context,
-        NULL::INTEGER AS confidence,
-        NULL::VARCHAR AS flag_tag,
-        NULL::VARCHAR AS source,
-        NULL::VARCHAR AS entity_id,
-        NULL::VARCHAR AS case_id,
-        NULL::VARCHAR AS batch_id,
-        NULL::VARCHAR AS batch_label,
-        NULL::VARCHAR AS undoes_batch_id
-) TO 'exports/decisions/_sentinel.json' (FORMAT JSON, ARRAY false);
-
 -- Domain modules (order matters).
 .read server/ids.sql
 .read server/sources.sql
