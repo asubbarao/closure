@@ -1,5 +1,31 @@
 import { Page, expect } from "@playwright/test";
 
+/**
+ * SSR seeds live under #ssr-seed[hidden], so `#q-list .sugg` matches hidden
+ * nodes first. Playwright waitForSelector(visible) then waits forever on that
+ * first match. Hydration is attach-based: residual render finishes
+ * (window.__review) and #triage-loading is gone.
+ */
+export async function waitForQueueHydrated(page: Page, timeout = 30_000) {
+  await page.waitForFunction(
+    () => {
+      const w = window as Window & { __review?: unknown };
+      if (!w.__review) return false;
+      const list = document.querySelector("#q-list");
+      if (!list) return false;
+      if (list.querySelector("#triage-loading")) return false;
+      const live = Array.from(list.querySelectorAll(".sugg[data-id]")).filter(
+        (el) => !el.closest("#ssr-seed")
+      );
+      if (live.length > 0) return true;
+      if (list.querySelector(".rg")) return true;
+      const empty = list.querySelector(".empty-q");
+      return !!empty && empty.id !== "triage-loading";
+    },
+    { timeout }
+  );
+}
+
 export async function openDocument(
   page: Page,
   docId: string | number,
@@ -11,8 +37,14 @@ export async function openDocument(
   await expect(page.locator("body")).toHaveAttribute("data-doc-id", String(docId), {
     timeout: 20_000,
   });
-  // review.js hydrates queue from DOM then /api — wait for either real rows or empty state
-  await page.waitForSelector("#q-list .sugg, #q-list .empty-q", { timeout: 20_000 });
+  await waitForQueueHydrated(page);
+  await page
+    .evaluate(() => {
+      const h = (window as Window & { __history?: { close?: () => void } })
+        .__history;
+      if (h && typeof h.close === "function") h.close();
+    })
+    .catch(() => {});
 }
 
 /** Open case library; caseId is required (resolve via firstCaseId in the spec). */
@@ -21,30 +53,29 @@ export async function openCaseLibrary(page: Page, caseId: string | number) {
   await expect(page.locator("#doc-table")).toBeVisible({ timeout: 20_000 });
 }
 
-export async function queueRows(page: Page) {
-  return page.locator("#q-list .sugg[data-id]");
+/** Live residual/queue rows only (exclude hidden SSR seed). */
+export function queueRows(page: Page) {
+  return page.locator("#q-list .rg .sugg[data-id], #q-list > .sugg[data-id]");
 }
 
 /** Raw data-id string (uuids or numeric ids); do not Number()-coerce. */
 export async function currentSuggestionId(page: Page): Promise<string | null> {
-  const cur = page.locator("#q-list .sugg.current").first();
+  const cur = page
+    .locator("#q-list .rg .sugg.current, #q-list > .sugg.current")
+    .first();
   if ((await cur.count()) === 0) return null;
   const id = await cur.getAttribute("data-id");
   return id || null;
 }
 
-export async function waitForQueueHydrated(page: Page) {
-  // After live fetch, window.__review may be exposed
-  await page.waitForFunction(() => {
-    const list = document.querySelectorAll("#q-list .sugg[data-id]");
-    const empty = document.querySelector("#q-list .empty-q");
-    return list.length > 0 || !!empty;
-  });
-}
-
 /** Press a review-workspace key (j/k/a/r/…) with focus outside inputs. */
 export async function pressReviewKey(page: Page, key: string) {
-  await page.locator("body").click({ position: { x: 8, y: 8 }, force: true }).catch(() => {});
+  const focusTarget = page.locator("#stage, #kbd-legend, main").first();
+  await focusTarget
+    .click({ position: { x: 4, y: 4 }, force: true })
+    .catch(async () => {
+      await page.locator("body").click({ position: { x: 8, y: 8 }, force: true });
+    });
   await page.keyboard.press(key);
 }
 
@@ -55,12 +86,16 @@ export async function pressReviewKey(page: Page, key: string) {
 export async function openDocFromLibrary(page: Page, docId: string | number) {
   const row = page.locator(`#doc-table tr[data-doc-id="${docId}"]`);
   await expect(row).toBeVisible({ timeout: 15_000 });
-  const openBtn = row.locator(`a.btn[href="/documents/${docId}"], a[href="/documents/${docId}"]`).first();
+  const openBtn = row
+    .locator(`a.btn[href="/documents/${docId}"], a[href="/documents/${docId}"]`)
+    .first();
   await expect(openBtn).toBeVisible();
   await openBtn.click();
   await expect(page).toHaveURL(new RegExp(`/documents/${docId}`));
+  await expect(page.locator("body")).toHaveAttribute("data-doc-id", String(docId), {
+    timeout: 20_000,
+  });
   await waitForQueueHydrated(page);
-  await expect(page.locator("body")).toHaveAttribute("data-doc-id", String(docId));
 }
 
 /** Flexible locator for a judge panel surface (wave-2 UI). */

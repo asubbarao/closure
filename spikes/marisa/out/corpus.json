@@ -1,1 +1,0 @@
-[{"n_words":464390,"n_grams":1674380,"n_grams_uniq":6743,"n_dict_10k":10000,"n_dict_100k":100000,"word_repeats":10,"plant_phrases":200,"trie_10k_bytes":36104,"trie_100k_bytes":296440,"dict_10k_text_bytes":"135598","dict_100k_text_bytes":"1346459","grams_text_bytes":"25094020","duckdb_version":"v1.5.3","threads":4,"memory_limit":"3.7 GiB"}]
