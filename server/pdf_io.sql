@@ -36,7 +36,7 @@ SET VARIABLE pdf_io_ocr_sql = (
     SELECT CASE
         WHEN getvariable('pdf_io_empty_n') = 0
           OR NOT coalesce((SELECT ocr_available FROM pdf_ocr_capability), false)
-        THEN 'SELECT cast(NULL AS UUID) AS document_id, NULL::INTEGER AS page_no, '
+        THEN 'SELECT cast(NULL AS VARCHAR) AS document_id, NULL::INTEGER AS page_no, '
              || 'cast(NULL AS VARCHAR) AS word, '
              || 'NULL::STRUCT(x0 DOUBLE, y0 DOUBLE, x1 DOUBLE, y1 DOUBLE) AS bbox, '
              || 'NULL::DOUBLE AS font_size WHERE false'
@@ -111,7 +111,7 @@ SELECT document_id, case_id, filename, source_path, page_count,
        native_word_count, ocr_word_count, total_word_count, image_count,
        ocr_available, ocr_status_note, is_scanned, ocr_ingested, scan_gap,
        scan_badge, scan_badge_class, scan_detail
-FROM document_scan_status WHERE cast(document_id AS VARCHAR) = $id;
+FROM document_scan_status WHERE document_id = $id;
 
 CREATE OR REPLACE ROUTE api_case_scan GET '/api/cases/:id/scan' AS
 SELECT document_id, case_id, filename, page_count,

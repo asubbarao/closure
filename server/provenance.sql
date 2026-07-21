@@ -74,9 +74,9 @@ exports AS (
 seal AS (
     SELECT lower(hex(crypto_hash_agg(
                'sha2-256',
-               concat_ws('|', kind, cast(suggestion_id AS VARCHAR), status, actor,
-                         cast(ts AS VARCHAR), cast(document_id AS VARCHAR))
-               ORDER BY cast(ts AS VARCHAR), cast(suggestion_id AS VARCHAR)
+               concat_ws('|', kind, suggestion_id, status, actor,
+                         cast(ts AS VARCHAR), document_id)
+               ORDER BY cast(ts AS VARCHAR), suggestion_id
            ))) AS decision_chain_seal,
            count(*)::BIGINT AS decision_event_count
     FROM v_src_decisions WHERE suggestion_id IS NOT NULL
@@ -110,7 +110,7 @@ SELECT c.document_id, c.case_id, c.filename, c.source_path,
 FROM document_custody c
 JOIN live ON live.source_path = c.source_path
 LEFT JOIN live_revs ON live_revs.source_path = c.source_path
-LEFT JOIN working ON working.document_id = cast(c.document_id AS VARCHAR)
+LEFT JOIN working ON working.document_id = c.document_id
 LEFT JOIN exports ON exports.export_path = 'exports/' || c.filename || '_redacted.pdf'
 , seal;
 

@@ -22,6 +22,6 @@ SELECT
         ELSE 'flagged'
     END AS judge_band
 FROM judge_votes j
-JOIN v_judge_panel p ON cast(p.suggestion_id AS VARCHAR) = cast(j.suggestion_id AS VARCHAR)
-WHERE cast(j.suggestion_id AS VARCHAR) = $id
+JOIN v_judge_panel p ON p.suggestion_id = j.suggestion_id
+WHERE j.suggestion_id = $id
 ORDER BY j.judge_id;

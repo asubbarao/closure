@@ -4,12 +4,12 @@
 -- uuid() for documents/suggestions/entities every boot while exports/decisions
 -- kept the old ids → stream-table duality broken (orphans with confidence).
 --
--- Pattern: md5(payload) formatted as UUID (stable, joinable as UUID/VARCHAR).
+-- Pattern: md5(payload) formatted as VARCHAR uuid string (stable, joinable as VARCHAR uuid string).
 -- Natural payload must NOT include process time or random bits.
 --
 -- NO MACROS. Call sites use the same expression shape:
 --   CAST(substr(h,1,8)||'-'||substr(h,9,4)||'-'||substr(h,13,4)||'-'||
---        substr(h,17,4)||'-'||substr(h,21,12) AS UUID)
+--        substr(h,17,4)||'-'||substr(h,21,12) )::VARCHAR
 --   FROM (SELECT md5(<payload>) AS h)
 --
 -- Payloads (documented contract):

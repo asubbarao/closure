@@ -21,12 +21,9 @@ FROM (
 -- Join via parse_filename (built-in basename) — no regex.
 CREATE OR REPLACE TABLE documents AS
 SELECT
-    CAST(
-        substr(h, 1, 8) || '-' || substr(h, 9, 4) || '-' ||
-        substr(h, 13, 4) || '-' || substr(h, 17, 4) || '-' ||
-        substr(h, 21, 12)
-        AS UUID
-    ) AS id,
+    (substr(h, 1, 8) || '-' || substr(h, 9, 4) || '-' ||
+     substr(h, 13, 4) || '-' || substr(h, 17, 4) || '-' ||
+     substr(h, 21, 12))::VARCHAR AS id,
     cast(m.case_no AS VARCHAR) AS case_id,
     p.filename,
     p.source_path,
@@ -37,7 +34,7 @@ SELECT
 FROM v_src_pdf_info p
 JOIN (
     SELECT
-        parse_filename(cast(f.filename AS VARCHAR), true) AS filename,
+        parse_filename(f.filename, true) AS filename,
         cast(f.case_no AS VARCHAR) AS case_no
     FROM (
         SELECT unnest(files) AS f
@@ -45,7 +42,7 @@ JOIN (
     )
 ) m ON m.filename = p.filename
 CROSS JOIN LATERAL (
-    SELECT md5(cast(m.case_no AS VARCHAR) || chr(31) || cast(p.filename AS VARCHAR)) AS h
+    SELECT md5(cast(m.case_no AS VARCHAR) || chr(31) || p.filename) AS h
 );
 
 -- pages / words: expensive extracts — pin to tables.
@@ -86,7 +83,7 @@ WHERE coalesce(trim(term), '') <> '';
 
 -- entities shell: detect.sql fills via finetype / addrust / watchlist matching.
 CREATE OR REPLACE TABLE entities AS
-SELECT cast(NULL AS UUID)    AS id,
+SELECT cast(NULL AS VARCHAR) AS id,
        cast(NULL AS VARCHAR) AS case_id,
        cast(NULL AS VARCHAR) AS canonical_text,
        cast(NULL AS VARCHAR) AS kind
@@ -105,7 +102,7 @@ CREATE OR REPLACE VIEW v_ingest_orphans AS
 WITH
 manifest AS (
     SELECT
-        parse_filename(cast(f.filename AS VARCHAR), true) AS filename,
+        parse_filename(f.filename, true) AS filename,
         cast(f.case_no AS VARCHAR) AS case_no
     FROM (
         SELECT unnest(files) AS f

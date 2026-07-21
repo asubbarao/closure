@@ -22,7 +22,7 @@ marked AS (
                ELSE 'done'
            END AS funnel
     FROM v_suggestions s
-    JOIN documents d ON cast(d.id AS VARCHAR) = s.document_id
+    JOIN documents d ON d.id = s.document_id
     WHERE d.case_id = $id
 ),
 counts AS (
@@ -63,7 +63,7 @@ WITH residual AS (
            s.group_key,
            coalesce(nullif(s.entity_text, ''), s.text, '(unknown)') AS group_label
     FROM v_suggestions s
-    JOIN documents d ON cast(d.id AS VARCHAR) = s.document_id
+    JOIN documents d ON d.id = s.document_id
     WHERE d.case_id = $id AND s.status = 'pending'
       AND NOT (s.confidence >= greatest(0, least(100, coalesce($threshold::INTEGER, 90)))
                AND s.band <> 'flagged' AND coalesce(s.flag_tag, '') <> 'false_positive')
@@ -104,7 +104,7 @@ COPY (
     WITH targets AS (
         SELECT s.id AS suggestion_id, s.document_id, d.case_id, s.text
         FROM v_suggestions s
-        JOIN documents d ON cast(d.id AS VARCHAR) = s.document_id
+        JOIN documents d ON d.id = s.document_id
         WHERE d.case_id = $id AND s.status = 'pending'
           AND s.confidence >= greatest(0, least(100, coalesce($threshold::INTEGER, 90)))
           AND s.band <> 'flagged' AND coalesce(s.flag_tag, '') <> 'false_positive'
@@ -142,7 +142,7 @@ COPY (
     targets AS (
         SELECT s.id AS suggestion_id, s.document_id, d.case_id, s.text, s.entity_text
         FROM v_suggestions s
-        JOIN documents d ON cast(d.id AS VARCHAR) = s.document_id
+        JOIN documents d ON d.id = s.document_id
         WHERE d.case_id = $id AND s.status = 'pending'
           AND NOT (s.confidence >= greatest(0, least(100, coalesce($threshold::INTEGER, 90)))
                    AND s.band <> 'flagged' AND coalesce(s.flag_tag, '') <> 'false_positive')

@@ -19,7 +19,7 @@ WITH city_anchor AS (
 ),
 addr AS (
     SELECT
-        cast(e.id AS VARCHAR) AS entity_id,
+        e.id AS entity_id,
         e.case_id,
         e.kind,
         e.canonical_text,

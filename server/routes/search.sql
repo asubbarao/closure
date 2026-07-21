@@ -10,10 +10,10 @@ CREATE OR REPLACE ROUTE api_search GET '/api/search' AS
 WITH
 query AS (
     SELECT
-        lower(trim(unaccent(cast($q AS VARCHAR)))) AS query_norm,
-        cast($case AS VARCHAR) AS case_id,
-        length(trim(cast($q AS VARCHAR))) AS query_len,
-        greatest(1, len(string_split(trim(cast($q AS VARCHAR)), ' '))) AS query_token_count
+        lower(trim(unaccent($q))) AS query_norm,
+        $case AS case_id,
+        length(trim($q)) AS query_len,
+        greatest(1, len(string_split(trim($q), ' '))) AS query_token_count
 ),
 line_bags AS (
     SELECT w.document_id, d.filename, w.page_no,
@@ -87,7 +87,7 @@ FROM hits;
 CREATE OR REPLACE ROUTE api_case_audit GET '/api/cases/:id/audit' AS
 SELECT ts, actor, action, suggestion_id, case_id, target, reason
 FROM v_audit
-WHERE case_id = cast($id AS VARCHAR)
+WHERE case_id = $id
 ORDER BY ts DESC;
 
 -- GET /api/stats — global corpus counters (one row).

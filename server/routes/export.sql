@@ -26,7 +26,7 @@ WITH boxes AS (
                     h    := (s.bbox.y1 - s.bbox.y0)::DOUBLE)
                 ORDER BY s.page_no, s.id) AS boxes
     FROM v_suggestions s
-    JOIN pages p ON cast(p.document_id AS VARCHAR) = s.document_id
+    JOIN pages p ON p.document_id = s.document_id
                 AND p.page_no = s.page_no
     WHERE s.status = 'accepted'
     GROUP BY s.document_id
@@ -39,13 +39,13 @@ doc_sentences AS (
                cast(coalesce(b.boxes, []) AS VARCHAR)
            ) AS sentence
     FROM documents d
-    LEFT JOIN boxes b ON b.document_id = cast(d.id AS VARCHAR)
+    LEFT JOIN boxes b ON b.document_id = d.id
 ),
 gates AS (
     SELECT d.case_id,
            bool_or(s.band = 'flagged' AND s.status = 'pending') AS blocked
     FROM documents d
-    LEFT JOIN v_suggestions s ON s.document_id = cast(d.id AS VARCHAR)
+    LEFT JOIN v_suggestions s ON s.document_id = d.id
     GROUP BY d.case_id
 )
 SELECT g.case_id,
@@ -61,7 +61,7 @@ GROUP BY g.case_id, g.blocked;
 CREATE OR REPLACE ROUTE api_case_export_plan GET '/api/cases/:id/export_plan' AS
 SELECT blocked, export_sql
 FROM v_export_plans
-WHERE cast(case_id AS VARCHAR) = $id;
+WHERE case_id = $id;
 
 -- POST body: sql=<export_plan.export_sql>. Returns one row per redacted
 -- document; a blocked plan's sentence returns zero rows. The guard only

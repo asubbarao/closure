@@ -123,12 +123,9 @@ UNION ALL BY NAME SELECT * FROM name_hits;
 -- land in exports/decisions — that breaks stream-table duality on reboot.
 CREATE OR REPLACE TABLE entities AS
 SELECT
-    CAST(
-        substr(h, 1, 8) || '-' || substr(h, 9, 4) || '-' ||
-        substr(h, 13, 4) || '-' || substr(h, 17, 4) || '-' ||
-        substr(h, 21, 12)
-        AS UUID
-    ) AS id,
+    (substr(h, 1, 8) || '-' || substr(h, 9, 4) || '-' ||
+     substr(h, 13, 4) || '-' || substr(h, 17, 4) || '-' ||
+     substr(h, 21, 12))::VARCHAR AS id,
     case_id, canonical_text, kind
 FROM (
     SELECT case_id, canonical_text, kind,
@@ -145,12 +142,9 @@ FROM (
 
 CREATE OR REPLACE TABLE suggestions AS
 SELECT
-    CAST(
-        substr(h, 1, 8) || '-' || substr(h, 9, 4) || '-' ||
-        substr(h, 13, 4) || '-' || substr(h, 17, 4) || '-' ||
-        substr(h, 21, 12)
-        AS UUID
-    ) AS id,
+    (substr(h, 1, 8) || '-' || substr(h, 9, 4) || '-' ||
+     substr(h, 13, 4) || '-' || substr(h, 17, 4) || '-' ||
+     substr(h, 21, 12))::VARCHAR AS id,
     h.document_id, h.page_no,
     h.bbox,
     h.text, coalesce(h.context, h.text) AS context, h.confidence,
@@ -159,14 +153,14 @@ SELECT
 FROM (
     SELECT hit.*,
            md5(
-               cast(hit.document_id AS VARCHAR) || chr(31) ||
+               hit.document_id || chr(31) ||
                cast(hit.page_no AS VARCHAR) || chr(31) ||
                cast(round(hit.bbox.x0, 1) AS VARCHAR) || chr(31) ||
                cast(round(hit.bbox.y0, 1) AS VARCHAR) || chr(31) ||
                cast(round(hit.bbox.x1, 1) AS VARCHAR) || chr(31) ||
                cast(round(hit.bbox.y1, 1) AS VARCHAR) || chr(31) ||
-               cast(hit.text AS VARCHAR) || chr(31) ||
-               cast(hit.kind AS VARCHAR) || chr(31) || 'ai'
+               hit.text || chr(31) ||
+               hit.kind || chr(31) || 'ai'
            ) AS h
     FROM _detect_hits hit
 ) h
@@ -174,34 +168,30 @@ LEFT JOIN entities e ON e.case_id = h.case_id AND e.kind = h.kind
  AND (e.canonical_text = h.text OR starts_with(e.canonical_text, h.text)
    OR starts_with(h.text, e.canonical_text));
 
--- Latest decision status (VARCHAR cast: empty sentinel log infers JSON cols).
+-- Latest decision status (v_src_decisions already typed).
 CREATE OR REPLACE VIEW v_latest_decision AS
-SELECT cast(suggestion_id AS VARCHAR) AS suggestion_id,
-       arg_max(cast(status AS VARCHAR), coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS status,
-       arg_max(cast(actor AS VARCHAR),  coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS actor,
-       arg_max(cast(reason AS VARCHAR), coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS reason,
-       max(try_cast(ts AS TIMESTAMP)) AS ts
+SELECT suggestion_id,
+       arg_max(status, coalesce(ts, TIMESTAMP '1970-01-01')) AS status,
+       arg_max(actor,  coalesce(ts, TIMESTAMP '1970-01-01')) AS actor,
+       arg_max(reason, coalesce(ts, TIMESTAMP '1970-01-01')) AS reason,
+       max(ts) AS ts
 FROM v_src_decisions
 WHERE kind = 'decision' AND suggestion_id IS NOT NULL
-GROUP BY cast(suggestion_id AS VARCHAR);
+GROUP BY suggestion_id;
 
 -- Manual adds: decision log keeps flat x0..y1; reconstruct bbox here.
 CREATE OR REPLACE VIEW v_manual_suggestions AS
-SELECT cast(m.suggestion_id AS VARCHAR) AS id,
-       cast(m.latest.document_id AS VARCHAR) AS document_id,
-       try_cast(m.latest.page_no AS INTEGER) AS page_no,
+SELECT m.suggestion_id AS id,
+       m.latest.document_id,
+       m.latest.page_no,
        struct_pack(
-           x0 := try_cast(m.latest.x0 AS DOUBLE),
-           y0 := try_cast(m.latest.y0 AS DOUBLE),
-           x1 := try_cast(m.latest.x1 AS DOUBLE),
-           y1 := try_cast(m.latest.y1 AS DOUBLE)
+           x0 := m.latest.x0, y0 := m.latest.y0,
+           x1 := m.latest.x1, y1 := m.latest.y1
        ) AS bbox,
-       cast(m.latest.text AS VARCHAR) AS text,
-       coalesce(cast(m.latest.context AS VARCHAR), cast(m.latest.text AS VARCHAR)) AS context,
-       coalesce(try_cast(m.latest.confidence AS INTEGER), 99) AS confidence,
-       cast(m.latest.flag_tag AS VARCHAR) AS flag_tag,
-       cast(m.latest.reason AS VARCHAR) AS reason,
-       cast(m.latest.entity_id AS VARCHAR) AS entity_id,
+       m.latest.text,
+       coalesce(m.latest.context, m.latest.text) AS context,
+       coalesce(m.latest.confidence, 99) AS confidence,
+       m.latest.flag_tag, m.latest.reason, m.latest.entity_id,
        cast(NULL AS VARCHAR) AS kind,
        'manual' AS source,
        coalesce(m.ts, now()) AS created_at
@@ -209,8 +199,8 @@ FROM (
     SELECT suggestion_id,
            arg_max(struct_pack(document_id, page_no, x0, y0, x1, y1, text, context,
                                confidence, flag_tag, reason, entity_id),
-                   coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS latest,
-           max(try_cast(ts AS TIMESTAMP)) AS ts
+                   coalesce(ts, TIMESTAMP '1970-01-01')) AS latest,
+           max(ts) AS ts
     FROM v_src_decisions
     WHERE kind = 'added' AND suggestion_id IS NOT NULL
     GROUP BY suggestion_id
@@ -218,10 +208,8 @@ FROM (
 
 CREATE OR REPLACE VIEW v_suggestions AS
 WITH base AS (
-    SELECT cast(s.id AS VARCHAR) AS id, cast(s.document_id AS VARCHAR) AS document_id,
-           s.page_no, s.bbox, s.text, s.context, s.confidence,
-           s.flag_tag, s.reason, cast(s.entity_id AS VARCHAR) AS entity_id,
-           s.source, s.created_at, s.kind AS kind_stored
+    SELECT s.id, s.document_id, s.page_no, s.bbox, s.text, s.context, s.confidence,
+           s.flag_tag, s.reason, s.entity_id, s.source, s.created_at, s.kind AS kind_stored
     FROM suggestions s
     UNION ALL BY NAME
     SELECT id, document_id, page_no, bbox, text, context, confidence,
@@ -237,7 +225,7 @@ SELECT b.id, b.document_id, b.page_no, b.bbox, b.text, b.context,
        CASE WHEN b.entity_id IS NOT NULL THEN 'e:' || b.entity_id
             ELSE concat('t:', lower(b.text), '|', coalesce(e.kind, b.kind_stored)) END AS group_key
 FROM base b
-LEFT JOIN entities e ON cast(e.id AS VARCHAR) = b.entity_id
+LEFT JOIN entities e ON e.id = b.entity_id
 LEFT JOIN v_latest_decision ld ON ld.suggestion_id = b.id;
 
 DROP TABLE IF EXISTS _detect_hits;

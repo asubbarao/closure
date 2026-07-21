@@ -21,18 +21,18 @@ AS COPY (
                ELSE 'Updated — ' || coalesce(t.text, '') END AS batch_label,
            cast(NULL AS VARCHAR) AS undoes_batch_id
     FROM (
-        SELECT cast(s.id AS VARCHAR) AS suggestion_id, cast(s.document_id AS VARCHAR) AS document_id,
+        SELECT s.id AS suggestion_id, s.document_id AS document_id,
                d.case_id, s.text
         FROM suggestions s JOIN documents d ON d.id = s.document_id
-        WHERE cast(s.id AS VARCHAR) = cast($id AS VARCHAR)
+        WHERE s.id = $id
         UNION ALL BY NAME
-        SELECT cast(suggestion_id AS VARCHAR), cast(document_id AS VARCHAR),
-               coalesce(cast(case_id AS VARCHAR),
-                   (SELECT case_id FROM documents WHERE cast(id AS VARCHAR) = cast(document_id AS VARCHAR))),
+        SELECT suggestion_id, document_id,
+               coalesce(case_id,
+                   (SELECT case_id FROM documents WHERE id = document_id)),
                cast(text AS VARCHAR)
         FROM v_src_decisions
-        WHERE kind = 'added' AND cast(suggestion_id AS VARCHAR) = cast($id AS VARCHAR)
-          AND NOT EXISTS (SELECT 1 FROM suggestions WHERE cast(id AS VARCHAR) = cast($id AS VARCHAR))
+        WHERE kind = 'added' AND suggestion_id = $id
+          AND NOT EXISTS (SELECT 1 FROM suggestions WHERE id = $id)
         LIMIT 1
     ) t
 ) TO 'exports/decisions'
@@ -42,15 +42,15 @@ CREATE OR REPLACE ROUTE api_entity_decision POST '/api/entities/:id/decision'
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
 AS COPY (
     WITH targets AS (
-        SELECT cast(s.id AS VARCHAR) AS suggestion_id,
-               cast(s.document_id AS VARCHAR) AS document_id,
+        SELECT s.id AS suggestion_id,
+               s.document_id AS document_id,
                d.case_id, s.text,
                e.canonical_text
         FROM suggestions s
         JOIN documents d ON d.id = s.document_id
         JOIN entities e ON e.id = s.entity_id
-        LEFT JOIN v_latest_decision ld ON ld.suggestion_id = cast(s.id AS VARCHAR)
-        WHERE cast(s.entity_id AS VARCHAR) = cast($id AS VARCHAR)
+        LEFT JOIN v_latest_decision ld ON ld.suggestion_id = s.id
+        WHERE s.entity_id = $id
           AND s.confidence >= 60 AND coalesce(ld.status, 'pending') = 'pending'
     ),
     meta AS (
@@ -78,13 +78,13 @@ CREATE OR REPLACE ROUTE api_doc_band_decision POST '/api/documents/:id/band/:ban
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
 AS COPY (
     WITH targets AS (
-        SELECT cast(s.id AS VARCHAR) AS suggestion_id,
-               cast(s.document_id AS VARCHAR) AS document_id,
+        SELECT s.id AS suggestion_id,
+               s.document_id AS document_id,
                d.case_id, s.text
         FROM suggestions s
         JOIN documents d ON d.id = s.document_id
-        LEFT JOIN v_latest_decision ld ON ld.suggestion_id = cast(s.id AS VARCHAR)
-        WHERE cast(s.document_id AS VARCHAR) = cast($id AS VARCHAR)
+        LEFT JOIN v_latest_decision ld ON ld.suggestion_id = s.id
+        WHERE s.document_id = $id
           AND CASE WHEN s.confidence >= 90 THEN 'high'
                    WHEN s.confidence >= 60 THEN 'review' ELSE 'flagged' END = $band
           AND $band <> 'flagged' AND coalesce(ld.status, 'pending') = 'pending'
@@ -111,14 +111,14 @@ CREATE OR REPLACE ROUTE api_suggestions_batch_decision POST '/api/suggestions/ba
   PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
 AS COPY (
     WITH targets AS (
-        SELECT cast(s.id AS VARCHAR) AS suggestion_id,
-               cast(s.document_id AS VARCHAR) AS document_id,
+        SELECT s.id AS suggestion_id,
+               s.document_id AS document_id,
                d.case_id, s.text
         FROM suggestions s
         JOIN documents d ON d.id = s.document_id
         JOIN (SELECT DISTINCT trim(u) AS suggestion_id
               FROM unnest(string_split(coalesce($ids, ''), ',')) AS t(u)
-              WHERE length(trim(u)) > 0) ids ON ids.suggestion_id = cast(s.id AS VARCHAR)
+              WHERE length(trim(u)) > 0) ids ON ids.suggestion_id = s.id
     ),
     meta AS (
         SELECT cast(uuid() AS VARCHAR) AS batch_id, now() AS ts,
@@ -150,13 +150,13 @@ CREATE OR REPLACE ROUTE api_document_add POST '/api/documents/:id/add'
   PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT 'missed by AI'
 AS COPY (
     SELECT 'added' AS kind, cast(uuid() AS VARCHAR) AS suggestion_id,
-           cast($id AS VARCHAR) AS document_id, $page::INTEGER AS page_no,
+           $id AS document_id, $page::INTEGER AS page_no,
            $x0::DOUBLE AS x0, $y0::DOUBLE AS y0, $x1::DOUBLE AS x1, $y1::DOUBLE AS y1,
            $text AS text, coalesce($text, '') AS context, 99 AS confidence,
            coalesce($kind, 'MANUAL') AS flag_tag, coalesce($reason, 'manual add') AS reason,
            cast(NULL AS VARCHAR) AS entity_id, 'manual' AS source, 'accepted' AS status,
            coalesce($actor, 'reviewer') AS actor, now() AS ts,
-           (SELECT case_id FROM documents WHERE cast(id AS VARCHAR) = cast($id AS VARCHAR)) AS case_id,
+           (SELECT case_id FROM documents WHERE id = $id) AS case_id,
            coalesce($scope, 'one') AS scope, cast(uuid() AS VARCHAR) AS batch_id,
            'Added missed — ' || coalesce($text, '') AS batch_label,
            cast(NULL AS VARCHAR) AS undoes_batch_id

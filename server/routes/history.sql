@@ -8,22 +8,22 @@
 -- Composes v_src_decisions (sources.sql, the ONE decision-log reader; its
 -- getenv fold is bind-safe inside CREATE ROUTE handlers).
 CREATE OR REPLACE VIEW v_history_events AS
-SELECT cast(d.suggestion_id AS VARCHAR) AS suggestion_id,
-       cast(d.document_id AS VARCHAR) AS document_id,
-       coalesce(cast(d.case_id AS VARCHAR), cast(doc.case_id AS VARCHAR)) AS case_id,
-       cast(d.text AS VARCHAR) AS text,
-       cast(d.status AS VARCHAR) AS status,
-       cast(d.kind AS VARCHAR) AS kind,
-       cast(d.actor AS VARCHAR) AS actor,
-       cast(d.batch_label AS VARCHAR) AS batch_label,
-       nullif(cast(d.undoes_batch_id AS VARCHAR), '') AS undoes_batch_id,
-       cast(d.batch_id AS VARCHAR) AS batch_id,
-       coalesce(try_cast(d.ts AS TIMESTAMP), TIMESTAMP '1970-01-01') AS event_ts
+SELECT d.suggestion_id AS suggestion_id,
+       d.document_id AS document_id,
+       coalesce(d.case_id, doc.case_id) AS case_id,
+       d.text AS text,
+       d.status AS status,
+       d.kind AS kind,
+       d.actor AS actor,
+       d.batch_label AS batch_label,
+       nullif(d.undoes_batch_id, '') AS undoes_batch_id,
+       d.batch_id AS batch_id,
+       coalesce(d.ts, TIMESTAMP '1970-01-01') AS event_ts
 FROM v_src_decisions d
-LEFT JOIN documents doc ON cast(doc.id AS VARCHAR) = cast(d.document_id AS VARCHAR)
+LEFT JOIN documents doc ON doc.id = d.document_id
 WHERE d.kind IN ('decision', 'added')
   AND d.suggestion_id IS NOT NULL
-  AND nullif(cast(d.batch_id AS VARCHAR), '') IS NOT NULL;
+  AND nullif(d.batch_id, '') IS NOT NULL;
 
 -- Prior state ledger: one row per (suggestion, batch); prior_status via lag.
 CREATE OR REPLACE VIEW v_prior_states AS
@@ -67,7 +67,7 @@ FROM agg a LEFT JOIN undone_ids u ON u.batch_id = a.batch_id;
 CREATE OR REPLACE ROUTE api_case_history GET '/api/cases/:id/history' AS
 SELECT batch_id, label, actor, ts, ts_end, decision_count, accepted_count, rejected_count,
        pending_count, added_count, is_undo, undoes_batch_id, undone, case_id
-FROM v_decision_batches WHERE case_id = cast($id AS VARCHAR)
+FROM v_decision_batches WHERE case_id = $id
 ORDER BY ts DESC, batch_id DESC;
 
 CREATE OR REPLACE ROUTE api_undo POST '/api/undo'
@@ -78,12 +78,12 @@ COPY (
     WITH target AS (
         SELECT batch_id, label FROM v_decision_batches
         WHERE undo_role IS NULL
-          AND CASE WHEN nullif(nullif(cast($case_id AS VARCHAR), ''), '0') IS NULL THEN true
-                   ELSE case_id = cast($case_id AS VARCHAR) END
+          AND CASE WHEN nullif(nullif($case_id, ''), '0') IS NULL THEN true
+                   ELSE case_id = $case_id END
         ORDER BY ts DESC, batch_id DESC LIMIT 1
     )
     SELECT 'decision' AS kind, p.suggestion_id, p.prior_status AS status,
-           coalesce(cast($actor AS VARCHAR), 'reviewer') AS actor, 'undo' AS reason,
+           coalesce($actor, 'reviewer') AS actor, 'undo' AS reason,
            (SELECT now()) AS ts, p.document_id, p.case_id, p.text,
            (SELECT cast(uuid() AS VARCHAR)) AS batch_id,
            'Undid: ' || coalesce(t.label, 'batch') AS batch_label,
@@ -100,11 +100,11 @@ AS
 COPY (
     WITH checkpoint AS (
         SELECT batch_id, label, ts FROM v_decision_batches
-        WHERE batch_id = cast($batch_id AS VARCHAR) AND case_id = cast($id AS VARCHAR) LIMIT 1
+        WHERE batch_id = $batch_id AND case_id = $id LIMIT 1
     ),
     after_batches AS (
         SELECT b.batch_id FROM v_decision_batches b
-        JOIN checkpoint ck ON b.case_id = cast($id AS VARCHAR)
+        JOIN checkpoint ck ON b.case_id = $id
         WHERE b.undo_role IS NULL AND b.batch_id <> ck.batch_id
           AND CASE WHEN b.ts > ck.ts THEN true
                    WHEN b.ts = ck.ts AND b.batch_id > ck.batch_id THEN true
@@ -128,9 +128,9 @@ COPY (
         JOIN restored r ON r.suggestion_id = (SELECT min(suggestion_id) FROM restored)
     )
     SELECT 'decision' AS kind, w.suggestion_id, w.target_status AS status,
-           coalesce(cast($actor AS VARCHAR), 'reviewer') AS actor, 'restore' AS reason,
+           coalesce($actor, 'reviewer') AS actor, 'restore' AS reason,
            (SELECT now()) AS ts, w.document_id,
-           coalesce(w.case_id, cast($id AS VARCHAR)) AS case_id, w.text,
+           coalesce(w.case_id, $id) AS case_id, w.text,
            (SELECT cast(uuid() AS VARCHAR)) AS batch_id,
            'Restored to: ' || coalesce((SELECT label FROM checkpoint), 'checkpoint') AS batch_label,
            w.undoes_batch_id
@@ -146,6 +146,6 @@ SELECT batch_id AS latest_batch_id, label AS latest_label, actor, ts,
        decision_count, undone, is_undo
 FROM v_decision_batches
 WHERE undo_role IS NULL
-  AND CASE WHEN nullif(nullif(cast($case_id AS VARCHAR), ''), '0') IS NULL THEN true
-           ELSE case_id = cast($case_id AS VARCHAR) END
+  AND CASE WHEN nullif(nullif($case_id, ''), '0') IS NULL THEN true
+           ELSE case_id = $case_id END
 ORDER BY ts DESC, batch_id DESC LIMIT 1;

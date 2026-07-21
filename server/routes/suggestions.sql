@@ -18,6 +18,6 @@ SELECT
     s.entity_id, s.source, s.status, s.band, s.kind, s.entity_text,
     d.filename
 FROM v_suggestions s
-JOIN documents d ON cast(d.id AS VARCHAR) = s.document_id
+JOIN documents d ON d.id = s.document_id
 WHERE d.case_id = $id
 ORDER BY s.document_id, s.page_no, s.id;

@@ -4,7 +4,7 @@
 
 CREATE OR REPLACE VIEW v_doc_ui AS
 SELECT
-    cast(d.id AS VARCHAR) AS id, d.case_id, d.filename, d.page_count,
+    d.id AS id, d.case_id, d.filename, d.page_count,
     coalesce(wc.word_count, 0)::BIGINT AS word_count,
     d.width_pt, d.height_pt, d.file_size, d.source_path,
     sc.scan_badge, sc.scan_badge_class, sc.scan_detail,
@@ -29,9 +29,9 @@ SELECT
          ELSE d.file_size::VARCHAR || ' B' END AS size_label
 FROM documents d
 LEFT JOIN (
-    SELECT cast(document_id AS VARCHAR) AS document_id, count(*)::BIGINT AS word_count
+    SELECT document_id AS document_id, count(*)::BIGINT AS word_count
     FROM words GROUP BY 1
-) wc ON wc.document_id = cast(d.id AS VARCHAR)
+) wc ON wc.document_id = d.id
 LEFT JOIN (
     SELECT document_id,
            count(*)::BIGINT AS suggestion_count,
@@ -42,48 +42,48 @@ LEFT JOIN (
            count(*) FILTER (WHERE band = 'high')::BIGINT AS high_count,
            count(*) FILTER (WHERE band = 'review')::BIGINT AS review_count
     FROM v_suggestions GROUP BY document_id
-) sg ON sg.document_id = cast(d.id AS VARCHAR)
-LEFT JOIN document_scan_status sc ON cast(sc.document_id AS VARCHAR) = cast(d.id AS VARCHAR);
+) sg ON sg.document_id = d.id
+LEFT JOIN document_scan_status sc ON sc.document_id = d.id;
 
 CREATE OR REPLACE VIEW v_audit AS
-SELECT coalesce(try_cast(l.ts AS TIMESTAMP), now()) AS ts,
+SELECT coalesce(l.ts, now()) AS ts,
        coalesce(l.actor, 'reviewer') AS actor,
        coalesce(l.kind, 'decision') AS action,
-       cast(l.suggestion_id AS VARCHAR) AS suggestion_id,
-       coalesce(cast(l.case_id AS VARCHAR), d.case_id) AS case_id,
-       coalesce(l.text, cast(l.suggestion_id AS VARCHAR), '') AS target,
+       l.suggestion_id AS suggestion_id,
+       coalesce(l.case_id, d.case_id) AS case_id,
+       coalesce(l.text, l.suggestion_id, '') AS target,
        l.reason
 FROM v_src_decisions l
-LEFT JOIN documents d ON cast(d.id AS VARCHAR) = cast(l.document_id AS VARCHAR)
+LEFT JOIN documents d ON d.id = l.document_id
 WHERE l.kind IN ('decision', 'added');
 
 CREATE OR REPLACE VIEW v_page_geom AS
-SELECT cast(p.document_id AS VARCHAR) AS document_id, p.page_no,
+SELECT p.document_id AS document_id, p.page_no,
        p.width_pt, p.height_pt, 680.0 / p.width_pt AS scale,
        680.0 AS display_w, round(p.height_pt * (680.0 / p.width_pt), 1) AS display_h
 FROM pages p;
 
 CREATE OR REPLACE VIEW v_page_words AS
-SELECT cast(w.document_id AS VARCHAR) AS document_id, w.page_no, w.word,
+SELECT w.document_id AS document_id, w.page_no, w.word,
        w.bbox,
        round(w.bbox.x0 * g.scale, 2) AS left_px, round(w.bbox.y0 * g.scale, 2) AS top_px,
        round((w.bbox.x1 - w.bbox.x0) * g.scale, 2) AS width_px,
        round(greatest(w.bbox.y1 - w.bbox.y0, 4) * g.scale, 2) AS height_px,
        round(coalesce(w.font_size, 9) * g.scale * 0.95, 1) AS font_px, false AS is_hit
 FROM words w
-JOIN v_page_geom g ON g.document_id = cast(w.document_id AS VARCHAR) AND g.page_no = w.page_no;
+JOIN v_page_geom g ON g.document_id = w.document_id AND g.page_no = w.page_no;
 
 CREATE OR REPLACE VIEW v_page_marks AS
-SELECT cast(s.document_id AS VARCHAR) AS document_id, s.page_no,
+SELECT s.document_id AS document_id, s.page_no,
        s.id, s.text, s.confidence, s.status, s.band, coalesce(s.kind, '') AS kind,
        round(s.bbox.x0 * g.scale, 2) AS left_px, round(s.bbox.y0 * g.scale, 2) AS top_px,
        round((s.bbox.x1 - s.bbox.x0) * g.scale, 2) AS width_px,
        round((s.bbox.y1 - s.bbox.y0) * g.scale, 2) AS height_px, false AS is_current
 FROM v_suggestions s
-JOIN v_page_geom g ON g.document_id = cast(s.document_id AS VARCHAR) AND g.page_no = s.page_no;
+JOIN v_page_geom g ON g.document_id = s.document_id AND g.page_no = s.page_no;
 
 CREATE OR REPLACE VIEW v_page_map AS
-SELECT cast(p.document_id AS VARCHAR) AS document_id, p.page_no,
+SELECT p.document_id AS document_id, p.page_no,
        coalesce(c.n, 0)::BIGINT AS total,
        coalesce(c.pending, 0)::BIGINT AS pending,
        coalesce(c.accepted, 0)::BIGINT AS accepted,
@@ -97,11 +97,11 @@ LEFT JOIN (
            count(*) FILTER (WHERE status = 'rejected')::BIGINT AS rejected,
            count(*) FILTER (WHERE band = 'flagged' AND status = 'pending')::BIGINT AS flagged
     FROM v_suggestions GROUP BY document_id, page_no
-) c ON cast(c.document_id AS VARCHAR) = cast(p.document_id AS VARCHAR) AND c.page_no = p.page_no;
+) c ON c.document_id = p.document_id AND c.page_no = p.page_no;
 
 CREATE OR REPLACE VIEW v_case_page AS
 SELECT
-    cast(c.id AS VARCHAR) AS case_id,
+    c.id AS case_id,
     struct_pack(id := c.id, case_no := c.case_no, title := c.title) AS case_obj,
     (SELECT struct_pack(
          doc_count := s.doc_count, page_count := s.page_count,
@@ -120,16 +120,16 @@ SELECT
          SELECT count(*)::BIGINT AS doc_count,
                 coalesce(sum(u.page_count), 0)::BIGINT AS page_count,
                 (SELECT count(*)::BIGINT FROM entities e
-                 WHERE cast(e.case_id AS VARCHAR) = cast(c.id AS VARCHAR)) AS entity_count,
+                 WHERE e.case_id = c.id) AS entity_count,
                 coalesce(sum(u.suggestion_count), 0)::BIGINT AS suggestion_count,
                 coalesce(sum(u.pending_count), 0)::BIGINT AS pending_count,
                 coalesce(sum(u.accepted_count), 0)::BIGINT AS accepted_count,
                 coalesce(sum(u.rejected_count), 0)::BIGINT AS rejected_count,
                 coalesce(sum(u.flagged_count), 0)::BIGINT AS flagged_count
-         FROM v_doc_ui u WHERE cast(u.case_id AS VARCHAR) = cast(c.id AS VARCHAR)
+         FROM v_doc_ui u WHERE u.case_id = c.id
      ) s) AS stats,
     (SELECT coalesce(list(u ORDER BY u.filename), [])
-     FROM v_doc_ui u WHERE cast(u.case_id AS VARCHAR) = cast(c.id AS VARCHAR)) AS documents,
+     FROM v_doc_ui u WHERE u.case_id = c.id) AS documents,
     (SELECT coalesce(list(struct_pack(
          id := e.id, canonical_text := e.canonical_text, kind := e.kind,
          hit_count := coalesce(h.hit_count, 0)::BIGINT,
@@ -141,18 +141,18 @@ SELECT
          SELECT entity_id, count(*)::BIGINT AS hit_count,
                 count(DISTINCT document_id)::BIGINT AS doc_count
          FROM v_suggestions WHERE entity_id IS NOT NULL GROUP BY entity_id
-     ) h ON cast(h.entity_id AS VARCHAR) = cast(e.id AS VARCHAR)
-     WHERE cast(e.case_id AS VARCHAR) = cast(c.id AS VARCHAR)) AS entities,
+     ) h ON h.entity_id = e.id
+     WHERE e.case_id = c.id) AS entities,
     (SELECT coalesce(list(struct_pack(
          ts_short := strftime(a.ts, '%H:%M'), action := a.action, actor := a.actor,
          target := coalesce(a.target, ''), reason := coalesce(a.reason, '')
      ) ORDER BY a.ts DESC), [])
-     FROM v_audit a WHERE cast(a.case_id AS VARCHAR) = cast(c.id AS VARCHAR)) AS audit
+     FROM v_audit a WHERE a.case_id = c.id) AS audit
 FROM cases c;
 
 CREATE OR REPLACE VIEW v_review_page AS
 SELECT
-    cast(d.id AS VARCHAR) AS document_id, g.page_no,
+    d.id AS document_id, g.page_no,
     tera_render(
         (SELECT content FROM app_templates WHERE name = 'review.html'),
         {
@@ -165,9 +165,9 @@ SELECT
                 width_pt := g.width_pt, height_pt := g.height_pt,
                 scale := round(g.scale, 4), display_w := g.display_w, display_h := g.display_h,
                 word_count := (SELECT count(*)::BIGINT FROM v_page_words w
-                               WHERE w.document_id = cast(d.id AS VARCHAR) AND w.page_no = g.page_no),
+                               WHERE w.document_id = d.id AND w.page_no = g.page_no),
                 mark_count := (SELECT count(*)::BIGINT FROM v_page_marks m
-                               WHERE m.document_id = cast(d.id AS VARCHAR) AND m.page_no = g.page_no),
+                               WHERE m.document_id = d.id AND m.page_no = g.page_no),
                 png_href := '/pages/' || d.filename || '/p' || g.page_no || '.png'
             ),
             'words': (SELECT coalesce(list(struct_pack(
@@ -178,17 +178,17 @@ SELECT
                 width := w.width_px, height := w.height_px,
                 font_px := w.font_px, is_hit := w.is_hit
             )), []) FROM v_page_words w
-                WHERE w.document_id = cast(d.id AS VARCHAR) AND w.page_no = g.page_no),
+                WHERE w.document_id = d.id AND w.page_no = g.page_no),
             'marks': (SELECT coalesce(list(struct_pack(
                 id := m.id, text := m.text, confidence := m.confidence, status := m.status,
                 band := m.band, kind := m.kind, left_px := m.left_px, top_px := m.top_px,
                 width := m.width_px, height := m.height_px, current := m.is_current
             )), []) FROM v_page_marks m
-                WHERE m.document_id = cast(d.id AS VARCHAR) AND m.page_no = g.page_no),
+                WHERE m.document_id = d.id AND m.page_no = g.page_no),
             'docs': (SELECT coalesce(list(u ORDER BY u.filename), [])
-                FROM v_doc_ui u WHERE cast(u.case_id AS VARCHAR) = cast(d.case_id AS VARCHAR)),
+                FROM v_doc_ui u WHERE u.case_id = d.case_id),
             'page_map': (SELECT coalesce(list(pm ORDER BY pm.page_no), [])
-                FROM v_page_map pm WHERE pm.document_id = cast(d.id AS VARCHAR)),
+                FROM v_page_map pm WHERE pm.document_id = d.id),
             'suggestions': (SELECT coalesce(list(struct_pack(
                 id := q.id, text := q.text, context := q.context, confidence := q.confidence,
                 page_no := q.page_no, status := q.status, band := q.band, current := false,
@@ -200,7 +200,7 @@ SELECT
                            CASE WHEN s.page_no = g.page_no THEN 0 ELSE 1 END AS page_rank,
                            CASE WHEN s.status = 'pending' THEN 0 ELSE 1 END AS status_rank
                     FROM v_suggestions s
-                    WHERE cast(s.document_id AS VARCHAR) = cast(d.id AS VARCHAR)
+                    WHERE s.document_id = d.id
                       AND (s.page_no = g.page_no OR s.status = 'pending')
                     ORDER BY page_rank, status_rank, s.page_no, s.id
                     LIMIT 80
@@ -216,13 +216,13 @@ SELECT
                     review_count := coalesce(sum(review_count), 0)::BIGINT,
                     flagged_count := coalesce(sum(flagged_count), 0)::BIGINT
                 )
-                FROM v_doc_ui u WHERE cast(u.case_id AS VARCHAR) = cast(d.case_id AS VARCHAR)
+                FROM v_doc_ui u WHERE u.case_id = d.case_id
             )
         }::JSON
     ) AS html
 FROM documents d
-JOIN cases c ON cast(c.id AS VARCHAR) = cast(d.case_id AS VARCHAR)
-JOIN v_page_geom g ON g.document_id = cast(d.id AS VARCHAR);
+JOIN cases c ON c.id = d.case_id
+JOIN v_page_geom g ON g.document_id = d.id;
 
 CREATE OR REPLACE ROUTE case_dash GET '/cases/:id' AS
 SELECT tera_render(
@@ -250,14 +250,14 @@ SELECT tera_render(
     (SELECT content FROM app_templates WHERE name = 'audit.html'),
     {
         'case': (SELECT struct_pack(id := id, case_no := case_no, title := title)
-                 FROM cases WHERE cast(id AS VARCHAR) = $id),
+                 FROM cases WHERE id = $id),
         'events': (
             SELECT coalesce(list(struct_pack(
                 ts_short := strftime(a.ts, '%Y-%m-%d %H:%M:%S'),
                 action := a.action, actor := a.actor,
                 target := coalesce(a.target, ''), reason := coalesce(a.reason, '')
             ) ORDER BY a.ts DESC), [])
-            FROM v_audit a WHERE cast(a.case_id AS VARCHAR) = $id
+            FROM v_audit a WHERE a.case_id = $id
         )
     }::JSON
 ) AS html;
@@ -267,7 +267,7 @@ SELECT html FROM v_review_page
 WHERE document_id = $id
   AND page_no = least(
         greatest(coalesce(try_cast($page AS INTEGER), 1), 1),
-        (SELECT page_count FROM documents WHERE cast(id AS VARCHAR) = $id)
+        (SELECT page_count FROM documents WHERE id = $id)
       );
 
 CREATE OR REPLACE ROUTE document_review GET '/documents/:id' AS

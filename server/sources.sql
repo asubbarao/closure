@@ -24,10 +24,10 @@ FROM pdf_info(
          ELSE 'samples' END || '/*.pdf');
 
 -- Append-only decision log. ONE reader.
--- Decision shards stay FLAT x0..y1 (add-missed + decision writers). Manual
--- suggestions reconstruct bbox := struct_pack(...) in detect.sql.
--- read_text + from_json: empty-glob safe (0 rows); skip empty COPY stubs
--- (DuckDB can leave 0-byte shards under FILENAME_PATTERN); skip sentinel.
+-- Empty-glob safe: read_json_auto errors on zero matches; read_text returns 0 rows.
+-- Writers (routes/* COPY TO exports/decisions) emit NDJSON (one JSON object per
+-- line). Split lines, from_json each with the writer contract — no sentinel file,
+-- no columns:=, no per-column cast wall.
 CREATE OR REPLACE VIEW v_src_decisions AS
 WITH raw AS (
     SELECT filename, content
@@ -37,12 +37,16 @@ WITH raw AS (
              THEN getenv('CLOSURE_EXPORTS_DIR')
              ELSE 'exports' END || '/decisions/*.json'
     )
-    WHERE content IS NOT NULL AND length(trim(content)) > 0
+),
+lines AS (
+    SELECT filename, trim(line) AS line
+    FROM raw, UNNEST(string_split(content, chr(10))) AS _(line)
+    WHERE length(trim(line)) > 0
 ),
 parsed AS (
     SELECT
         from_json(
-            content,
+            line,
             '{"kind":"VARCHAR","suggestion_id":"VARCHAR","status":"VARCHAR",'
             '"actor":"VARCHAR","reason":"VARCHAR","ts":"TIMESTAMP",'
             '"document_id":"VARCHAR","page_no":"INTEGER",'
@@ -53,8 +57,7 @@ parsed AS (
             '"undoes_batch_id":"VARCHAR","scope":"VARCHAR"}'
         ) AS j,
         filename
-    FROM raw
+    FROM lines
 )
 SELECT j.*, filename
-FROM parsed
-WHERE j.kind IS DISTINCT FROM 'sentinel';
+FROM parsed;

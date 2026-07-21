@@ -9,4 +9,4 @@ CREATE OR REPLACE ROUTE api_case_provenance_recheck GET '/api/cases/:id/provenan
 SELECT * FROM v_case_provenance WHERE case_id = $id ORDER BY document_id;
 
 CREATE OR REPLACE ROUTE api_doc_provenance GET '/api/documents/:id/provenance' AS
-SELECT * FROM v_case_provenance WHERE cast(document_id AS VARCHAR) = $id;
+SELECT * FROM v_case_provenance WHERE document_id = $id;

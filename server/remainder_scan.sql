@@ -12,7 +12,7 @@ INSTALL splink_udfs FROM community; LOAD splink_udfs;
 
 -- Address canon → /api/cases/:id/address-canon + address entity groups.
 CREATE OR REPLACE TABLE entity_address_canon AS
-SELECT cast(e.id AS VARCHAR) AS entity_id, e.case_id, e.canonical_text AS raw_text, e.kind,
+SELECT e.id AS entity_id, e.case_id, e.canonical_text AS raw_text, e.kind,
        a.street_number, a.pre_direction, a.street_name, a.suffix,
        a.unit_type, a.unit, a.city, a.state, a.zip, a.po_box,
        ((a.street_number IS NOT NULL AND (a.city IS NOT NULL OR a.zip IS NOT NULL))
@@ -32,7 +32,7 @@ SELECT abs(hash(case_id || '|' || group_kind || '|' || group_key)) % 2147483647 
 FROM (
     SELECT case_id,
            'person:' || coalesce(soundex(list_extract(string_split(trim(canonical_text), ' '), -1)), 'x') AS group_key,
-           min(cast(id AS VARCHAR)) AS root_entity_id,
+           min(id) AS root_entity_id,
            max(canonical_text) AS canonical_label,
            'person_fuzz' AS group_kind
     FROM entities
@@ -51,12 +51,12 @@ SELECT abs(hash(cast(group_id AS VARCHAR) || '|' || entity_id || '|' || variant_
        variant_text, score, method, is_full_address, is_canonical
 FROM (
     SELECT g.group_id, g.case_id, g.group_kind, g.canonical_label,
-           cast(e.id AS VARCHAR) AS entity_id, e.canonical_text AS variant_text,
-           CASE WHEN cast(e.id AS VARCHAR) = g.root_entity_id THEN 100.0
+           e.id AS entity_id, e.canonical_text AS variant_text,
+           CASE WHEN e.id = g.root_entity_id THEN 100.0
                 ELSE rapidfuzz_ratio(lower(e.canonical_text), lower(g.canonical_label)) END AS score,
-           CASE WHEN cast(e.id AS VARCHAR) = g.root_entity_id THEN 'entity' ELSE 'soundex' END AS method,
+           CASE WHEN e.id = g.root_entity_id THEN 'entity' ELSE 'soundex' END AS method,
            cast(NULL AS BOOLEAN) AS is_full_address,
-           cast(e.id AS VARCHAR) = g.root_entity_id AS is_canonical
+           e.id = g.root_entity_id AS is_canonical
     FROM entity_groups g
     JOIN entities e ON e.case_id = g.case_id AND position('PERSON' IN e.kind) > 0
      AND soundex(list_extract(string_split(trim(e.canonical_text), ' '), -1))
@@ -90,13 +90,13 @@ WITH cover AS (
     FROM v_suggestions WHERE status IN ('accepted', 'pending')
 ),
 remainder AS (
-    SELECT cast(w.document_id AS VARCHAR) AS document_id, w.page_no, d.case_id,
+    SELECT w.document_id AS document_id, w.page_no, d.case_id,
            w.word, w.bbox
     FROM words w
-    JOIN documents d ON cast(d.id AS VARCHAR) = cast(w.document_id AS VARCHAR)
+    JOIN documents d ON d.id = w.document_id
     WHERE NOT EXISTS (
         SELECT 1 FROM cover c
-        WHERE c.document_id = cast(w.document_id AS VARCHAR) AND c.page_no = w.page_no
+        WHERE c.document_id = w.document_id AND c.page_no = w.page_no
           AND NOT (w.bbox.x1 <= c.bbox.x0 OR w.bbox.x0 >= c.bbox.x1
                 OR w.bbox.y1 <= c.bbox.y0 OR w.bbox.y0 >= c.bbox.y1)
     )
@@ -176,7 +176,7 @@ roster AS (
            lower(trim(unaccent(term))) AS term_norm, kind, cast(NULL AS VARCHAR) AS entity_id
     FROM watchlist WHERE term IS NOT NULL AND trim(term) <> ''
     UNION
-    SELECT case_id, canonical_text, lower(trim(unaccent(canonical_text))), kind, cast(id AS VARCHAR)
+    SELECT case_id, canonical_text, lower(trim(unaccent(canonical_text))), kind, id
     FROM entities
     WHERE canonical_text IS NOT NULL AND trim(canonical_text) <> ''
       AND (position('PERSON' IN kind) > 0 OR position('OFFICER' IN kind) > 0)
@@ -223,7 +223,7 @@ SELECT CAST(substr(h, 1, 8) || '-' || substr(h, 9, 4) || '-' || substr(h, 13, 4)
 FROM dedup
 CROSS JOIN LATERAL (
     SELECT md5(
-        cast(document_id AS VARCHAR) || chr(31) || cast(page_no AS VARCHAR) || chr(31) ||
+        document_id || chr(31) || cast(page_no AS VARCHAR) || chr(31) ||
         cast(round(bbox.x0, 1) AS VARCHAR) || chr(31) || cast(round(bbox.y0, 1) AS VARCHAR) || chr(31) ||
         cast(round(bbox.x1, 1) AS VARCHAR) || chr(31) || cast(round(bbox.y1, 1) AS VARCHAR) || chr(31) ||
         cast(text AS VARCHAR) || chr(31) || cast(kind AS VARCHAR) || chr(31) || 'residual'
