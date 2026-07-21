@@ -1,25 +1,13 @@
 -- routes/pages.sql — HTML page routes (no render mega-macros).
--- Contract: case.html {case,stats,documents,entities,audit};
---   audit.html {case,events};
---   review.html {case,doc,page,words,marks,docs,page_map,suggestions,stats} (no proof).
--- Ids VARCHAR. Shells = raw app_templates.
+-- Contracts: case.html {case,stats,documents,entities,audit};
+--   audit.html {case,events}; review.html {case,doc,page,words,marks,docs,page_map,suggestions,stats}.
 
--- Per-doc library/rail row: set-based tallies over v_suggestions + scan badges.
--- Consumers: v_case_page (case.html documents/stats), v_review_page (docs rail).
 CREATE OR REPLACE VIEW v_doc_ui AS
 SELECT
-    cast(d.id AS VARCHAR) AS id,
-    d.case_id,
-    d.filename,
-    d.page_count,
+    cast(d.id AS VARCHAR) AS id, d.case_id, d.filename, d.page_count,
     coalesce(wc.word_count, 0)::BIGINT AS word_count,
-    d.width_pt,
-    d.height_pt,
-    d.file_size,
-    d.source_path,
-    sc.scan_badge,
-    sc.scan_badge_class,
-    sc.scan_detail,
+    d.width_pt, d.height_pt, d.file_size, d.source_path,
+    sc.scan_badge, sc.scan_badge_class, sc.scan_detail,
     coalesce(sc.is_scanned, false) AS is_scanned,
     coalesce(sc.ocr_ingested, false) AS ocr_ingested,
     coalesce(sc.scan_gap, false) AS scan_gap,
@@ -31,8 +19,7 @@ SELECT
     coalesce(sg.high_count, 0)::BIGINT AS high_count,
     coalesce(sg.review_count, 0)::BIGINT AS review_count,
     CASE WHEN coalesce(sg.suggestion_count, 0) = 0 THEN 0
-         ELSE round(100.0 * (sg.accepted_count + sg.rejected_count)
-                    / sg.suggestion_count, 0)::INTEGER END AS progress_pct,
+         ELSE round(100.0 * (sg.accepted_count + sg.rejected_count) / sg.suggestion_count, 0)::INTEGER END AS progress_pct,
     CASE WHEN coalesce(sg.flagged_count, 0) > 0 THEN 'flagged'
          WHEN coalesce(sg.suggestion_count, 0) = 0 THEN 'empty'
          WHEN coalesce(sg.pending_count, 0) = 0 THEN 'done' ELSE 'review' END AS status,
@@ -42,10 +29,8 @@ SELECT
          ELSE d.file_size::VARCHAR || ' B' END AS size_label
 FROM documents d
 LEFT JOIN (
-    SELECT cast(document_id AS VARCHAR) AS document_id,
-           count(*)::BIGINT AS word_count
-    FROM words
-    GROUP BY cast(document_id AS VARCHAR)
+    SELECT cast(document_id AS VARCHAR) AS document_id, count(*)::BIGINT AS word_count
+    FROM words GROUP BY 1
 ) wc ON wc.document_id = cast(d.id AS VARCHAR)
 LEFT JOIN (
     SELECT document_id,
@@ -56,24 +41,18 @@ LEFT JOIN (
            count(*) FILTER (WHERE band = 'flagged' AND status = 'pending')::BIGINT AS flagged_count,
            count(*) FILTER (WHERE band = 'high')::BIGINT AS high_count,
            count(*) FILTER (WHERE band = 'review')::BIGINT AS review_count
-    FROM v_suggestions
-    GROUP BY document_id
+    FROM v_suggestions GROUP BY document_id
 ) sg ON sg.document_id = cast(d.id AS VARCHAR)
 LEFT JOIN document_scan_status sc ON cast(sc.document_id AS VARCHAR) = cast(d.id AS VARCHAR);
 
--- Audit strip rows: the append-only decision log IS the audit trail; this is
--- its one display projection (case_id backfilled by JOIN, never a subselect).
--- Fallbacks: legacy log shards may lack ts/actor/kind; target is display text
--- only ('' = nothing to show), never a join/group key.
 CREATE OR REPLACE VIEW v_audit AS
-SELECT
-    coalesce(try_cast(l.ts AS TIMESTAMP), now()) AS ts,
-    coalesce(l.actor, 'reviewer') AS actor,
-    coalesce(l.kind, 'decision') AS action,
-    cast(l.suggestion_id AS VARCHAR) AS suggestion_id,
-    coalesce(cast(l.case_id AS VARCHAR), d.case_id) AS case_id,
-    coalesce(l.text, cast(l.suggestion_id AS VARCHAR), '') AS target,
-    l.reason
+SELECT coalesce(try_cast(l.ts AS TIMESTAMP), now()) AS ts,
+       coalesce(l.actor, 'reviewer') AS actor,
+       coalesce(l.kind, 'decision') AS action,
+       cast(l.suggestion_id AS VARCHAR) AS suggestion_id,
+       coalesce(cast(l.case_id AS VARCHAR), d.case_id) AS case_id,
+       coalesce(l.text, cast(l.suggestion_id AS VARCHAR), '') AS target,
+       l.reason
 FROM v_src_decisions l
 LEFT JOIN documents d ON cast(d.id AS VARCHAR) = cast(l.document_id AS VARCHAR)
 WHERE l.kind IN ('decision', 'added');
@@ -103,8 +82,6 @@ SELECT cast(s.document_id AS VARCHAR) AS document_id, s.page_no,
 FROM v_suggestions s
 JOIN v_page_geom g ON g.document_id = cast(s.document_id AS VARCHAR) AND g.page_no = s.page_no;
 
--- Per-page suggestion tallies for the review rail page strip + /api/documents/:id/page_map.
--- Consumers: v_review_page → review.html page_map; api_doc_page_map.
 CREATE OR REPLACE VIEW v_page_map AS
 SELECT cast(p.document_id AS VARCHAR) AS document_id, p.page_no,
        coalesce(c.n, 0)::BIGINT AS total,
@@ -122,20 +99,18 @@ LEFT JOIN (
     FROM v_suggestions GROUP BY document_id, page_no
 ) c ON cast(c.document_id AS VARCHAR) = cast(p.document_id AS VARCHAR) AND c.page_no = p.page_no;
 
--- case.html context (one row / case). Consumers: /, /cases/:id, /cases/:id/library.
 CREATE OR REPLACE VIEW v_case_page AS
 SELECT
     cast(c.id AS VARCHAR) AS case_id,
     struct_pack(id := c.id, case_no := c.case_no, title := c.title) AS case_obj,
     (SELECT struct_pack(
-         doc_count := s.doc_count, page_count := s.page_count, word_count := s.word_count,
+         doc_count := s.doc_count, page_count := s.page_count,
          entity_count := s.entity_count, suggestion_count := s.suggestion_count,
          pending_count := s.pending_count, accepted_count := s.accepted_count,
          rejected_count := s.rejected_count, flagged_count := s.flagged_count,
          resolved := s.accepted_count + s.rejected_count,
          progress_pct := CASE WHEN s.suggestion_count = 0 THEN 0
-             ELSE round(100.0 * (s.accepted_count + s.rejected_count)
-                        / s.suggestion_count, 0)::INTEGER END,
+             ELSE round(100.0 * (s.accepted_count + s.rejected_count) / s.suggestion_count, 0)::INTEGER END,
          accepted_pct := CASE WHEN s.suggestion_count = 0 THEN 0
              ELSE round(100.0 * s.accepted_count / s.suggestion_count, 0)::INTEGER END,
          pending_pct := CASE WHEN s.suggestion_count = 0 THEN 0
@@ -144,7 +119,6 @@ SELECT
      FROM (
          SELECT count(*)::BIGINT AS doc_count,
                 coalesce(sum(u.page_count), 0)::BIGINT AS page_count,
-                coalesce(sum(u.word_count), 0)::BIGINT AS word_count,
                 (SELECT count(*)::BIGINT FROM entities e
                  WHERE cast(e.case_id AS VARCHAR) = cast(c.id AS VARCHAR)) AS entity_count,
                 coalesce(sum(u.suggestion_count), 0)::BIGINT AS suggestion_count,
@@ -173,40 +147,12 @@ SELECT
          ts_short := strftime(a.ts, '%H:%M'), action := a.action, actor := a.actor,
          target := coalesce(a.target, ''), reason := coalesce(a.reason, '')
      ) ORDER BY a.ts DESC), [])
-     FROM (
-         SELECT * FROM v_audit WHERE cast(case_id AS VARCHAR) = cast(c.id AS VARCHAR)
-         ORDER BY coalesce(ts, TIMESTAMP '1970-01-01') DESC LIMIT 12
-     ) a) AS audit
+     FROM v_audit a WHERE cast(a.case_id AS VARCHAR) = cast(c.id AS VARCHAR)) AS audit
 FROM cases c;
 
--- review.html for every (document, page). Consumers: /documents/:id[/pages/:page].
--- Page word/mark tallies via set-based joins (no per-row count(*) subselects).
 CREATE OR REPLACE VIEW v_review_page AS
-WITH
-page_word_n AS (
-    SELECT document_id, page_no, count(*)::BIGINT AS word_count
-    FROM v_page_words
-    GROUP BY document_id, page_no
-),
-page_mark_n AS (
-    SELECT document_id, page_no, count(*)::BIGINT AS mark_count
-    FROM v_page_marks
-    GROUP BY document_id, page_no
-),
-case_stats AS (
-    SELECT cast(case_id AS VARCHAR) AS case_id,
-           coalesce(sum(suggestion_count), 0)::BIGINT AS suggestion_count,
-           coalesce(sum(pending_count), 0)::BIGINT AS pending_count,
-           coalesce(sum(accepted_count + rejected_count), 0)::BIGINT AS resolved,
-           coalesce(sum(high_count), 0)::BIGINT AS high_count,
-           coalesce(sum(review_count), 0)::BIGINT AS review_count,
-           coalesce(sum(flagged_count), 0)::BIGINT AS flagged_count
-    FROM v_doc_ui
-    GROUP BY cast(case_id AS VARCHAR)
-)
 SELECT
-    cast(d.id AS VARCHAR) AS document_id,
-    g.page_no,
+    cast(d.id AS VARCHAR) AS document_id, g.page_no,
     tera_render(
         (SELECT content FROM app_templates WHERE name = 'review.html'),
         {
@@ -218,8 +164,10 @@ SELECT
                 next := least(g.page_no + 1, d.page_count),
                 width_pt := g.width_pt, height_pt := g.height_pt,
                 scale := round(g.scale, 4), display_w := g.display_w, display_h := g.display_h,
-                word_count := coalesce(pwn.word_count, 0)::BIGINT,
-                mark_count := coalesce(pmn.mark_count, 0)::BIGINT,
+                word_count := (SELECT count(*)::BIGINT FROM v_page_words w
+                               WHERE w.document_id = cast(d.id AS VARCHAR) AND w.page_no = g.page_no),
+                mark_count := (SELECT count(*)::BIGINT FROM v_page_marks m
+                               WHERE m.document_id = cast(d.id AS VARCHAR) AND m.page_no = g.page_no),
                 png_href := '/pages/' || d.filename || '/p' || g.page_no || '.png'
             ),
             'words': (SELECT coalesce(list(struct_pack(
@@ -256,24 +204,24 @@ SELECT
                     ORDER BY page_rank, status_rank, s.page_no, s.id
                     LIMIT 80
                 ) q),
-            'stats': struct_pack(
-                suggestion_count := coalesce(cs.suggestion_count, 0)::BIGINT,
-                pending_count := coalesce(cs.pending_count, 0)::BIGINT,
-                resolved := coalesce(cs.resolved, 0)::BIGINT,
-                progress_pct := CASE WHEN coalesce(cs.suggestion_count, 0) = 0 THEN 0
-                    ELSE round(100.0 * cs.resolved / cs.suggestion_count, 0)::INTEGER END,
-                high_count := coalesce(cs.high_count, 0)::BIGINT,
-                review_count := coalesce(cs.review_count, 0)::BIGINT,
-                flagged_count := coalesce(cs.flagged_count, 0)::BIGINT
+            'stats': (
+                SELECT struct_pack(
+                    suggestion_count := coalesce(sum(suggestion_count), 0)::BIGINT,
+                    pending_count := coalesce(sum(pending_count), 0)::BIGINT,
+                    resolved := coalesce(sum(accepted_count + rejected_count), 0)::BIGINT,
+                    progress_pct := CASE WHEN coalesce(sum(suggestion_count), 0) = 0 THEN 0
+                        ELSE round(100.0 * sum(accepted_count + rejected_count) / sum(suggestion_count), 0)::INTEGER END,
+                    high_count := coalesce(sum(high_count), 0)::BIGINT,
+                    review_count := coalesce(sum(review_count), 0)::BIGINT,
+                    flagged_count := coalesce(sum(flagged_count), 0)::BIGINT
+                )
+                FROM v_doc_ui u WHERE cast(u.case_id AS VARCHAR) = cast(d.case_id AS VARCHAR)
             )
         }::JSON
     ) AS html
 FROM documents d
 JOIN cases c ON cast(c.id AS VARCHAR) = cast(d.case_id AS VARCHAR)
-JOIN v_page_geom g ON g.document_id = cast(d.id AS VARCHAR)
-LEFT JOIN page_word_n pwn ON pwn.document_id = cast(d.id AS VARCHAR) AND pwn.page_no = g.page_no
-LEFT JOIN page_mark_n pmn ON pmn.document_id = cast(d.id AS VARCHAR) AND pmn.page_no = g.page_no
-LEFT JOIN case_stats cs ON cs.case_id = cast(d.case_id AS VARCHAR);
+JOIN v_page_geom g ON g.document_id = cast(d.id AS VARCHAR);
 
 CREATE OR REPLACE ROUTE case_dash GET '/cases/:id' AS
 SELECT tera_render(

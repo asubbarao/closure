@@ -171,17 +171,8 @@ LEFT JOIN entities e ON e.case_id = h.case_id AND e.kind = h.kind
  AND (e.canonical_text = h.text OR starts_with(e.canonical_text, h.text)
    OR starts_with(h.text, e.canonical_text));
 
--- Decision fold (arg_max, no row_number). VARCHAR ids unify UUID + legacy BIGINT.
--- Reads v_src_decisions directly — the ONE decision-log reader (sources.sql);
--- this fold is the ONE latest-status view (route-bind safe: getenv fold).
+-- Latest decision status (VARCHAR cast: empty sentinel log infers JSON cols).
 CREATE OR REPLACE VIEW v_latest_decision AS
--- Cast status/actor/reason through VARCHAR: on a fresh clone the decision
--- glob is only _sentinel.json (all-null fields), so read_json_auto infers
--- those columns as JSON. coalesce(json_col, 'pending') then tries to cast
--- the string literal to JSON and fails ("Malformed JSON … Input: pending"),
--- which aborts remainder_scan and prevents serve. Casting here keeps the
--- reader schema-free (no columns:= map) while making the empty-log type
--- safe for every consumer of this view.
 SELECT cast(suggestion_id AS VARCHAR) AS suggestion_id,
        arg_max(cast(status AS VARCHAR), coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS status,
        arg_max(cast(actor AS VARCHAR),  coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01')) AS actor,
@@ -217,8 +208,6 @@ FROM (
     GROUP BY suggestion_id
 ) m;
 
--- status: latest decision wins; manual→accepted, ai→pending.
--- band: high≥90 / review 60–89 / flagged<60.
 CREATE OR REPLACE VIEW v_suggestions AS
 WITH base AS (
     SELECT cast(s.id AS VARCHAR) AS id, cast(s.document_id AS VARCHAR) AS document_id,
@@ -243,14 +232,9 @@ FROM base b
 LEFT JOIN entities e ON cast(e.id AS VARCHAR) = b.entity_id
 LEFT JOIN v_latest_decision ld ON ld.suggestion_id = b.id;
 
--- v_document_stats deleted: generic count(*) dump with no exclusive purpose.
--- Consumers (library rail, /api/cases/:id/documents, review stats) fold
--- suggestion tallies inline via GROUP BY over v_suggestions (or v_doc_ui).
-
 DROP TABLE IF EXISTS _detect_hits;
 DROP TABLE IF EXISTS _detect_lines;
 
 SELECT 'detect complete' AS status,
        (SELECT count(*) FROM suggestions) AS suggestions,
-       (SELECT count(*) FROM entities) AS entities,
-       (SELECT count(*) FROM suggestions WHERE flag_tag = 'false_positive') AS false_positives;
+       (SELECT count(*) FROM entities) AS entities;

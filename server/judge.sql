@@ -1,14 +1,9 @@
 -- judge.sql — 3-judge confidence ensemble (deterministic, no LLM).
--- Depends on: suggestions, entities, v_suggestions (detect.sql).
--- Product: confidence % + panel_signal (agree|split|conflict) + per-judge chips.
--- Ext: finetype types hard PII shapes (replaces digit-regex cascade).
--- kind strings load-bearing (SCHEMA_CONTRACT §1).
--- Doctrine: taxonomy is data — pure (judge_id, bucket) cells live in judge_rules.
+-- Depends on: suggestions, entities, v_suggestions. Ext: finetype.
+-- Product: confidence % + panel_signal + per-judge chips. Taxonomy is data.
 
 INSTALL finetype FROM community; LOAD finetype;
 
--- Pure rulebook: one row per (judge_id ∈ 1..3, bucket). Conditional overrides
--- live in the judge_votes SELECT (ctx flags, docs thresholds / interpolation).
 CREATE OR REPLACE TABLE judge_rules AS
 SELECT * FROM (VALUES
     (1, 'ssn',      'redact', 94, 4, 0, 0, 'hard SSN digit pattern'),
@@ -33,7 +28,7 @@ SELECT * FROM (VALUES
     (2, 'other',    'unsure', 55, 4, 0, 0, 'context inconclusive'),
     (3, 'ssn',      'redact', 96, 2, 0, 0, 'SSN prior: almost always redact'),
     (3, 'phone',    'redact', 90, 4, 3, 1, 'phone prior · seen in N doc(s)'),
-    (3, 'dob',      'redact', 90, 4, 3, 1, 'DOB prior: redact'),
+    (3, 'dob',      'redact', 90, 4, 0, 0, 'DOB prior: redact'),
     (3, 'address',  'redact', 84, 4, 0, 0, 'address prior: redact'),
     (3, 'person',   'unsure', 70, 4, 5, 4, 'person prior · single-doc only'),
     (3, 'citation', 'keep',   86, 4, 0, 0, 'citation prior: keep'),
@@ -55,7 +50,6 @@ feat AS (
            coalesce(ed.doc_count, 1)::INTEGER AS docs,
            (abs(hash(cast(s.id AS VARCHAR))) % 5)::INTEGER AS jitter,
            finetype([s.text]) AS ft,
-           -- context cues (regex only for surrounding-word signals extensions miss)
            regexp_matches(coalesce(s.context, ''), '(?i)\sv\.\s|u\.s\.') AS ctx_cite,
            regexp_matches(coalesce(s.context, ''), '(?i)\bsubject\b|\bwitness\b|\bvictim\b|\bsuspect\b') AS ctx_subj,
            regexp_matches(coalesce(s.context, s.text, ''), '(?i)\bofc\.|\bdet\.|\bsgt\.|\bofficer of record\b') AS ctx_ofc,
@@ -79,8 +73,7 @@ buck AS (
         ELSE 'other'
     END AS bucket FROM feat
 )
-SELECT
-    b.suggestion_id, j.judge_id,
+SELECT b.suggestion_id, j.judge_id,
     CASE j.judge_id WHEN 1 THEN 'Pattern' WHEN 2 THEN 'Context' ELSE 'Prior' END AS judge_name,
     CASE j.judge_id
         WHEN 1 THEN 'pattern-match strength'
@@ -89,26 +82,20 @@ SELECT
     END AS factor,
     coalesce(
         CASE
-            -- judge 2: ctx_cite forces keep outside hard-redact buckets
             WHEN j.judge_id = 2 AND b.bucket NOT IN ('ssn','phone','dob','address') AND b.ctx_cite THEN 'keep'
             WHEN j.judge_id = 2 AND b.bucket = 'person' AND (b.ctx_cite OR b.txt_st OR b.ctx_ofc) THEN 'keep'
             WHEN j.judge_id = 2 AND b.bucket = 'person' AND b.ctx_subj THEN 'redact'
             WHEN j.judge_id = 2 AND b.bucket = 'person' THEN 'unsure'
             WHEN j.judge_id = 2 AND b.bucket = 'other' AND b.ctx_id THEN 'redact'
-            -- judge 3: docs thresholds on person / officer
             WHEN j.judge_id = 3 AND b.bucket = 'person' AND b.docs >= 2 THEN 'redact'
             WHEN j.judge_id = 3 AND b.bucket = 'person' THEN 'unsure'
             WHEN j.judge_id = 3 AND b.bucket = 'officer' AND b.docs >= 3 THEN 'keep'
             WHEN j.judge_id = 3 AND b.bucket = 'officer' THEN 'unsure'
-        END,
-        r.verdict
+        END, r.verdict
     ) AS verdict,
     least(99,
-        coalesce(
-            CASE WHEN j.judge_id = 2 AND b.ctx_cite AND b.bucket NOT IN ('ssn','phone','dob','address')
-                 THEN 90 END,
-            r.base
-        )
+        coalesce(CASE WHEN j.judge_id = 2 AND b.ctx_cite AND b.bucket NOT IN ('ssn','phone','dob','address')
+                      THEN 90 END, r.base)
         + least(b.jitter, r.jitter_cap)
         + least(b.docs, r.docs_cap) * r.docs_mult
     )::INTEGER AS score,
@@ -116,30 +103,22 @@ SELECT
         CASE
             WHEN j.judge_id = 2 AND b.bucket NOT IN ('ssn','phone','dob','address') AND b.ctx_cite
                 THEN 'citation wording in surrounding text'
-            WHEN j.judge_id = 2 AND b.bucket = 'person' AND b.txt_st
-                THEN 'street-name context, not subject'
-            WHEN j.judge_id = 2 AND b.bucket = 'person' AND b.ctx_ofc
-                THEN 'officer/badge context'
-            WHEN j.judge_id = 2 AND b.bucket = 'person' AND b.ctx_subj
-                THEN 'subject/witness context nearby'
-            WHEN j.judge_id = 2 AND b.bucket = 'other' AND b.ctx_id
-                THEN 'identifier cue in surrounding text'
-            WHEN j.judge_id = 3 AND b.bucket = 'phone'
-                THEN 'phone prior · seen in ' || b.docs || ' doc(s)'
+            WHEN j.judge_id = 2 AND b.bucket = 'person' AND b.txt_st THEN 'street-name context, not subject'
+            WHEN j.judge_id = 2 AND b.bucket = 'person' AND b.ctx_ofc THEN 'officer/badge context'
+            WHEN j.judge_id = 2 AND b.bucket = 'person' AND b.ctx_subj THEN 'subject/witness context nearby'
+            WHEN j.judge_id = 2 AND b.bucket = 'other' AND b.ctx_id THEN 'identifier cue in surrounding text'
+            WHEN j.judge_id = 3 AND b.bucket = 'phone' THEN 'phone prior · seen in ' || b.docs || ' doc(s)'
             WHEN j.judge_id = 3 AND b.bucket = 'person' AND b.docs >= 2
                 THEN 'person prior · corroborated across ' || b.docs || ' docs'
-            WHEN j.judge_id = 3 AND b.bucket = 'person'
-                THEN 'person prior · single-doc only'
+            WHEN j.judge_id = 3 AND b.bucket = 'person' THEN 'person prior · single-doc only'
             WHEN j.judge_id = 3 AND b.bucket = 'street'
                 THEN 'street-name prior · ' || b.docs || ' docs (often FP bait)'
-        END,
-        r.reason
+        END, r.reason
     ) AS reason
 FROM buck b, UNNEST([1, 2, 3]) AS j(judge_id)
 JOIN judge_rules r ON r.judge_id = j.judge_id AND r.bucket = b.bucket;
 
--- Panel blend: one set-based GROUP BY over judge_votes (vote counts are the purpose).
--- Consumer: /api/suggestions/:id/judges (routes/judge.sql) + v_suggestions_judged.
+-- Consumer: /api/suggestions/:id/judges (routes/judge.sql).
 CREATE OR REPLACE VIEW v_judge_panel AS
 SELECT suggestion_id,
     round(avg(CASE verdict WHEN 'redact' THEN score WHEN 'keep' THEN 100 - score
@@ -155,24 +134,6 @@ SELECT suggestion_id,
          ORDER BY judge_id) AS judges
 FROM judge_votes GROUP BY suggestion_id;
 
--- Live suggestion + panel + judge_band (projection join; no baked stats).
--- Consumer: confidence/triage design path; routes join panel directly today.
-CREATE OR REPLACE VIEW v_suggestions_judged AS
-SELECT s.*, p.confidence AS judge_confidence, p.panel_signal, p.judge_count,
-       p.redact_votes, p.keep_votes, p.unsure_votes, p.judges,
-       CASE WHEN p.panel_signal IN ('split', 'conflict') THEN 'flagged'
-            WHEN p.confidence >= 90 THEN 'high'
-            WHEN p.confidence >= 60 THEN 'review' ELSE 'flagged' END AS judge_band
-FROM v_suggestions s
-LEFT JOIN v_judge_panel p ON p.suggestion_id = s.id;
-
 SELECT 'judge ensemble ready' AS status,
        (SELECT count(*) FROM judge_votes) AS votes,
-       p.panels, p.agree_n, p.split_n, p.conflict_n
-FROM (
-    SELECT count(*) AS panels,
-           count(*) FILTER (WHERE panel_signal = 'agree') AS agree_n,
-           count(*) FILTER (WHERE panel_signal = 'split') AS split_n,
-           count(*) FILTER (WHERE panel_signal = 'conflict') AS conflict_n
-    FROM v_judge_panel
-) p;
+       (SELECT count(*) FROM v_judge_panel) AS panels;

@@ -1,40 +1,15 @@
 -- pdf_store.sql — PDF lifecycle: source / working / export.
---
--- Two tables + unmaterialized views. No macros: parameterized plan lives in
--- v_working_plans (one row per document; routes filter WHERE document_id = $id).
--- working_sql embeds the accepted box list as a foldable literal so the
--- HTTP plan→POST path stays self-contained (variables do not span requests).
---
--- document_id is VARCHAR (uuid). Paths: data/working/doc{id}_working{gen}.pdf
--- Route shapes: document_store / working_plan keys unchanged (SCHEMA_CONTRACT).
--- Depends on: documents, pages, v_suggestions. Does NOT write exports/.
+-- Two tables + views. No macros. document_id VARCHAR (uuid).
+-- Paths: data/working/doc{id}_working{gen}.pdf. Depends on: documents, pages, v_suggestions.
 
--- Store roots are committed layout LITERALS (data/working, data/export,
--- exports): the write side (COPY TO) only accepts grammar literals, so a
--- variable read side would be fake flexibility — and route bind cannot see
--- SET VARIABLEs anyway (getvariable binds NULL inside CREATE ROUTE handlers).
-
--- ── tables ──────────────────────────────────────────────────────────────────
-
--- Immutable source stage: references samples/ (never copy-mutate).
 CREATE OR REPLACE TABLE pdf_store_source AS
-SELECT
-    cast(d.id AS VARCHAR) AS document_id,
-    d.case_id,
-    d.filename,
-    'source' AS stage,
-    d.source_path AS path,
-    0::INTEGER AS gen,
-    b.fingerprint,
-    cast(NULL AS VARCHAR) AS decision_batch,
-    0::INTEGER AS accepted_count,
-    cast(NULL AS INTEGER) AS pages_redacted,
-    b.size_bytes,
-    1::INTEGER AS revision_count,
-    now() AS created_ts,
-    'system' AS actor,
-    'immutable' AS mutability,
-    'references samples/; never mutated by this module' AS note
+SELECT cast(d.id AS VARCHAR) AS document_id, d.case_id, d.filename,
+       'source' AS stage, d.source_path AS path, 0::INTEGER AS gen,
+       b.fingerprint, cast(NULL AS VARCHAR) AS decision_batch,
+       0::INTEGER AS accepted_count, cast(NULL AS INTEGER) AS pages_redacted,
+       b.size_bytes, 1::INTEGER AS revision_count, now() AS created_ts,
+       'system' AS actor, 'immutable' AS mutability,
+       'references samples/; never mutated by this module' AS note
 FROM documents d
 JOIN (
     SELECT filename AS source_path, sha256(content) AS fingerprint, size AS size_bytes
@@ -43,10 +18,9 @@ JOIN (
     )
 ) b ON b.source_path = d.source_path;
 
--- Mutable working + cleanup events (boot-empty; INSERT OR REPLACE at runtime).
 CREATE OR REPLACE TABLE pdf_store_events (
     document_id VARCHAR NOT NULL,
-    stage VARCHAR NOT NULL,            -- working | cleanup
+    stage VARCHAR NOT NULL,
     path VARCHAR NOT NULL,
     gen INTEGER NOT NULL,
     fingerprint VARCHAR,
@@ -57,48 +31,39 @@ CREATE OR REPLACE TABLE pdf_store_events (
     revision_count INTEGER,
     created_ts TIMESTAMP,
     actor VARCHAR,
-    kind VARCHAR NOT NULL,             -- working | cleanup
+    kind VARCHAR NOT NULL,
     PRIMARY KEY (document_id, stage, gen, kind)
 );
 
--- ── ONE view: unified store (source ∪ active working ∪ export) ──────────────
-
 CREATE OR REPLACE VIEW v_pdf_store AS
-WITH
-working_raw AS (
+WITH working_raw AS (
     SELECT cast(document_id AS VARCHAR) AS document_id, path, gen, fingerprint,
            decision_batch, accepted_count, pages_redacted, size_bytes,
            revision_count, created_ts, actor, 0 AS src_rank
-    FROM pdf_store_events
-    WHERE kind = 'working' AND stage = 'working'
+    FROM pdf_store_events WHERE kind = 'working' AND stage = 'working'
     UNION ALL BY NAME
-    SELECT
-        regexp_extract(filename, 'doc(.+)_working\d+\.pdf$', 1) AS document_id,
-        filename AS path,
-        try_cast(regexp_extract(filename, '_working(\d+)\.pdf$', 1) AS INTEGER) AS gen,
-        sha256(content) AS fingerprint,
-        cast(NULL AS VARCHAR) AS decision_batch,
-        cast(NULL AS INTEGER) AS accepted_count,
-        cast(NULL AS INTEGER) AS pages_redacted,
-        size AS size_bytes,
-        1::INTEGER AS revision_count,
-        try_cast(last_modified AS TIMESTAMP) AS created_ts,
-        'disk' AS actor,
-        1 AS src_rank
+    SELECT regexp_extract(filename, 'doc(.+)_working\d+\.pdf$', 1) AS document_id,
+           filename AS path,
+           try_cast(regexp_extract(filename, '_working(\d+)\.pdf$', 1) AS INTEGER) AS gen,
+           sha256(content) AS fingerprint,
+           cast(NULL AS VARCHAR) AS decision_batch,
+           cast(NULL AS INTEGER) AS accepted_count,
+           cast(NULL AS INTEGER) AS pages_redacted,
+           size AS size_bytes, 1::INTEGER AS revision_count,
+           try_cast(last_modified AS TIMESTAMP) AS created_ts,
+           'disk' AS actor, 1 AS src_rank
     FROM read_blob('data/working/*.pdf')
     WHERE regexp_matches(filename, 'doc.+_working\d+\.pdf$')
 ),
 cleaned AS (
     SELECT cast(document_id AS VARCHAR) AS document_id, gen
-    FROM pdf_store_events
-    WHERE kind = 'cleanup' OR stage = 'cleanup'
+    FROM pdf_store_events WHERE kind = 'cleanup' OR stage = 'cleanup'
 ),
 working_live AS (
     SELECT document_id, gen,
            unnest(arg_min(struct_pack(path, fingerprint, decision_batch, accepted_count,
                                       pages_redacted, size_bytes, revision_count,
-                                      created_ts, actor),
-                          src_rank))
+                                      created_ts, actor), src_rank))
     FROM working_raw
     WHERE document_id IS NOT NULL AND gen IS NOT NULL AND path IS NOT NULL
     GROUP BY document_id, gen
@@ -121,99 +86,71 @@ SELECT w.document_id, d.case_id, d.filename,
        'working' AS stage, w.path, w.gen, w.fingerprint, w.decision_batch,
        w.accepted_count, w.pages_redacted, w.size_bytes,
        coalesce(w.revision_count, 1)::INTEGER AS revision_count,
-       w.created_ts, w.actor, 'regenerable' AS mutability,
-       'data/working' AS note
+       w.created_ts, w.actor, 'regenerable' AS mutability, 'data/working' AS note
 FROM working_live w
 JOIN documents d ON cast(d.id AS VARCHAR) = w.document_id
 LEFT JOIN cleaned c ON c.document_id = w.document_id AND c.gen = w.gen
 WHERE c.gen IS NULL
 UNION ALL BY NAME
 SELECT cast(d.id AS VARCHAR) AS document_id, d.case_id, d.filename,
-       'export' AS stage, e.path,
-       cast(NULL AS INTEGER) AS gen, e.fingerprint,
+       'export' AS stage, e.path, cast(NULL AS INTEGER) AS gen, e.fingerprint,
        cast(NULL AS VARCHAR) AS decision_batch,
        cast(NULL AS INTEGER) AS accepted_count,
        cast(NULL AS INTEGER) AS pages_redacted,
        e.size_bytes, 1::INTEGER AS revision_count, e.created_ts,
        'export_route' AS actor, 'append_only' AS mutability,
-       CASE WHEN starts_with(e.path, 'data/export')
-            THEN 'data/export' ELSE 'exports_compat' END AS note
+       CASE WHEN starts_with(e.path, 'data/export') THEN 'data/export' ELSE 'exports_compat' END AS note
 FROM documents d
 JOIN export_blobs e
   ON e.path = 'exports/' || d.filename || '_redacted.pdf'
   OR e.path = 'data/export/' || d.filename || '_redacted.pdf';
 
--- ── working plan: one row per document; sentence is a COLUMN (like export) ──
--- Consumer: /api/documents/:id/working/plan (routes/store.sql).
--- Purpose: bind-safe pdf_redact SQL + accepted-box STRUCT[] (not a stats dump).
--- count(*) appears only inside the format() sentence string for pdf_redact.
-
+-- Consumer: /api/documents/:id/working/plan. Geometry: y = height_pt - y1.
 CREATE OR REPLACE VIEW v_working_plans AS
-WITH
-gens AS (
-    SELECT cast(document_id AS VARCHAR) AS document_id, gen
-    FROM pdf_store_events
+WITH gens AS (
+    SELECT cast(document_id AS VARCHAR) AS document_id, gen FROM pdf_store_events
     UNION ALL
-    SELECT
-        regexp_extract(filename, 'doc(.+)_working\d+\.pdf$', 1) AS document_id,
-        try_cast(regexp_extract(filename, '_working(\d+)\.pdf$', 1) AS INTEGER) AS gen
+    SELECT regexp_extract(filename, 'doc(.+)_working\d+\.pdf$', 1),
+           try_cast(regexp_extract(filename, '_working(\d+)\.pdf$', 1) AS INTEGER)
     FROM read_blob('data/working/*.pdf')
     WHERE regexp_matches(filename, 'doc.+_working\d+\.pdf$')
 ),
 next_gen AS (
-    SELECT document_id,
-           coalesce(max(gen), 0) + 1 AS gen
-    FROM gens
-    WHERE document_id IS NOT NULL AND gen IS NOT NULL
-    GROUP BY document_id
+    SELECT document_id, coalesce(max(gen), 0) + 1 AS gen
+    FROM gens WHERE document_id IS NOT NULL AND gen IS NOT NULL GROUP BY document_id
 ),
 boxes AS (
-    -- accepted boxes as a typed STRUCT[], geometry converted once
-    -- (words are top-left, pdf_redact is bottom-left: y = height_pt - y1)
     SELECT s.document_id,
-           list(struct_pack(
-                    page := s.page_no::INTEGER,
-                    x    := s.x0::DOUBLE,
-                    y    := (p.height_pt - s.y1)::DOUBLE,
-                    w    := (s.x1 - s.x0)::DOUBLE,
-                    h    := (s.y1 - s.y0)::DOUBLE)
+           list(struct_pack(page := s.page_no::INTEGER, x := s.x0::DOUBLE,
+                            y := (p.height_pt - s.y1)::DOUBLE,
+                            w := (s.x1 - s.x0)::DOUBLE, h := (s.y1 - s.y0)::DOUBLE)
                 ORDER BY s.page_no, s.id) AS boxes
     FROM v_suggestions s
-    JOIN pages p ON cast(p.document_id AS VARCHAR) = s.document_id
-                AND p.page_no = s.page_no
+    JOIN pages p ON cast(p.document_id AS VARCHAR) = s.document_id AND p.page_no = s.page_no
     WHERE s.status = 'accepted'
     GROUP BY s.document_id
 ),
 batches AS (
     SELECT s.document_id,
            sha256(string_agg(format('{}:{}', s.id, s.status), '|' ORDER BY s.id)) AS decision_batch
-    FROM v_suggestions s
-    WHERE s.status = 'accepted'
-    GROUP BY s.document_id
-),
-base AS (
-    SELECT cast(d.id AS VARCHAR) AS document_id,
-           d.source_path,
-           coalesce(g.gen, 1) AS gen
-    FROM documents d
-    LEFT JOIN next_gen g ON g.document_id = cast(d.id AS VARCHAR)
+    FROM v_suggestions s WHERE s.status = 'accepted' GROUP BY s.document_id
 )
-SELECT b.document_id,
-       b.gen,
-       format('data/working/doc{}_working{}.pdf', b.document_id, b.gen) AS path,
+SELECT cast(d.id AS VARCHAR) AS document_id,
+       coalesce(g.gen, 1) AS gen,
+       format('data/working/doc{}_working{}.pdf', d.id, coalesce(g.gen, 1)) AS path,
        coalesce(bt.decision_batch, sha256('no-accepted')) AS decision_batch,
        coalesce(bx.boxes, []) AS boxes,
        format(
            'SELECT count(*)::INTEGER AS pages FROM pdf_redact(''{}'', ''{}'', {}::STRUCT(page INTEGER, x DOUBLE, y DOUBLE, w DOUBLE, h DOUBLE)[])',
-           b.source_path,
-           format('data/working/doc{}_working{}.pdf', b.document_id, b.gen),
+           d.source_path,
+           format('data/working/doc{}_working{}.pdf', d.id, coalesce(g.gen, 1)),
            cast(coalesce(bx.boxes, []) AS VARCHAR)
        ) AS working_sql
-FROM base b
-LEFT JOIN boxes bx ON bx.document_id = b.document_id
-LEFT JOIN batches bt ON bt.document_id = b.document_id;
+FROM documents d
+LEFT JOIN next_gen g ON g.document_id = cast(d.id AS VARCHAR)
+LEFT JOIN boxes bx ON bx.document_id = cast(d.id AS VARCHAR)
+LEFT JOIN batches bt ON bt.document_id = cast(d.id AS VARCHAR);
 
 SELECT 'pdf_store loaded' AS phase,
        (SELECT count(*) FROM pdf_store_source) AS source_rows,
-       (SELECT count(*) FROM v_pdf_store) AS store_rows,
        'data/working' AS working_root;
