@@ -11,12 +11,19 @@ test.describe("10. Corpus search", () => {
     const suggs = await getCaseSuggestions(request);
     test.skip(suggs.length === 0, "no suggestions to derive search terms from");
 
+    // Prefer AI seed hits — earlier specs POST E2E_MISSED_* manual adds that
+    // sort first and yield tokens (EEMISSED / MISSED) not present in the PDFs.
     const token =
       suggs
+        .filter(
+          (s) =>
+            (s.source ?? "ai") !== "manual" &&
+            !/^e2e[_-]?missed/i.test(s.text || "")
+        )
         .map((s) => (s.text || "").split(/\s+/))
         .flat()
         .map((p) => p.replace(/[^A-Za-z]/g, ""))
-        .filter((p) => p.length >= 4)[0] || null;
+        .filter((p) => p.length >= 4 && !/^e2e/i.test(p))[0] || null;
 
     test.skip(!token, "could not derive a searchable alphabetic token");
 
