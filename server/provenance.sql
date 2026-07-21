@@ -3,8 +3,6 @@
 -- UI (provenance_panel): source_fingerprint, recheck_ok, revision_count,
 -- export_fingerprint/path/exported_at, live_sha256, filename, source_path.
 
-INSTALL crypto FROM community; LOAD crypto;
-
 CREATE OR REPLACE TABLE document_custody AS
 WITH blobs AS (
     SELECT filename AS source_path,

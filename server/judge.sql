@@ -2,8 +2,6 @@
 -- Depends on: suggestions, entities, v_suggestions. Ext: finetype.
 -- Product: confidence % + panel_signal + per-judge chips. Taxonomy is data.
 
-INSTALL finetype FROM community; LOAD finetype;
-
 CREATE OR REPLACE TABLE judge_rules AS
 SELECT * FROM (VALUES
     (1, 'ssn',      'redact', 94, 4, 0, 0, 'hard SSN digit pattern'),

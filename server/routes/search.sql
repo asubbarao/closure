@@ -2,9 +2,6 @@
 -- Exact + fuzzy (rapidfuzz) over words; multi-token via splink ngrams (n const).
 -- Contract: matches[], count, exact_count, fuzzy_count. Params VARCHAR (case_no).
 
-INSTALL rapidfuzz FROM community; LOAD rapidfuzz;
-INSTALL splink_udfs FROM community; LOAD splink_udfs;
-
 -- GET /api/search?q=TEXT&case=CASE_NO — find-all exact then similar hits in a case.
 CREATE OR REPLACE ROUTE api_search GET '/api/search' AS
 WITH

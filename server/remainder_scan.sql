@@ -5,11 +5,6 @@
 -- Ext: finetype, rapidfuzz, us_address_standardizer, splink_udfs.
 -- Geometry: words.bbox / v_suggestions.bbox / residual_pii_hits.bbox.
 
-INSTALL finetype FROM community; LOAD finetype;
-INSTALL rapidfuzz FROM community; LOAD rapidfuzz;
-INSTALL us_address_standardizer FROM community; LOAD us_address_standardizer;
-INSTALL splink_udfs FROM community; LOAD splink_udfs;
-
 -- Address canon → /api/cases/:id/address-canon + address entity groups.
 CREATE OR REPLACE TABLE entity_address_canon AS
 SELECT e.id AS entity_id, e.case_id, e.canonical_text AS raw_text, e.kind,

@@ -3,8 +3,6 @@
 -- Routes: /api/cases/:id/addresses, /geo, /addresses/:entity_id/suggestions, /ui/geo.
 -- Params VARCHAR (case_no / uuid). Shared body lives in v_address_map once.
 
-INSTALL us_address_standardizer FROM community; LOAD us_address_standardizer;
-
 -- Address minimap placement + suggestion tallies per entity (set-based GROUP BY).
 -- Consumers: /api/cases/:id/addresses, /api/cases/:id/geo.
 CREATE OR REPLACE VIEW v_address_map AS

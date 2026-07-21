@@ -4,11 +4,6 @@
 -- No ngram union, no row_number. Taxonomy is data (kinds not sprinkled).
 -- Geometry: words.bbox STRUCT; suggestions.bbox only (no flat x0..y1 columns).
 
-INSTALL finetype FROM community; LOAD finetype;
-INSTALL us_address_standardizer FROM community; LOAD us_address_standardizer;
-INSTALL rapidfuzz FROM community; LOAD rapidfuzz;
-INSTALL splink_udfs FROM community; LOAD splink_udfs;
-
 CREATE OR REPLACE TABLE pii_taxonomy AS
 SELECT * FROM (VALUES
     ('finetype_ssn',   'SSN',               true),

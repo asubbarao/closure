@@ -12,6 +12,7 @@ INSTALL rapidfuzz FROM community; LOAD rapidfuzz;
 INSTALL crypto FROM community; LOAD crypto;
 INSTALL finetype FROM community; LOAD finetype;
 INSTALL us_address_standardizer FROM community; LOAD us_address_standardizer;
+INSTALL splink_udfs FROM community; LOAD splink_udfs;
 
 -- quackapi-built duckdb carries the extension; fails if routes missing.
 SELECT format('quackapi present — {} routes pre-registered', count(*)) AS quackapi_gate
