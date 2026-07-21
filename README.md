@@ -43,24 +43,27 @@ High-fidelity design (Part 1): [`design/`](design/).
    `DUCKDB_BIN` / `CLOSURE_QUACKAPI_EXT` at your build.
 2. **Network on first run** — setup/boot auto-INSTALL DuckDB community
    extensions: `pdf`, `tera`, `fakeit` (setup), `rapidfuzz`, `finetype`,
-   `us_address_standardizer` (boot).
+   `us_address_standardizer` (boot). Community **pdf requires DuckDB ≥1.5.4**
+   (`pdf_info`, `pdf_redact`, …). `make setup` / `run.sh` prefer a sibling
+   `../quackapi/build/release/duckdb`; a stock 1.5.3 `duckdb` on PATH is not enough.
 3. **poppler** (`pdftoppm`, `brew install poppler`) — fast page-PNG previews;
    without it setup falls back to the slower in-DuckDB `pdf_to_png`.
-4. **Node 18+** — only for the e2e suite:
-   `cd tests/e2e && npm install && npx playwright install chromium`.
+4. **Node 18+** — only for the e2e suite (`make test` runs `npm install` +
+   chromium install under `tests/e2e` automatically).
 
 ## Quick start
 
 ```sh
+# Default layout: this repo + sibling quackapi/ (built release binary).
 make setup && make run
 # → http://127.0.0.1:8117/
 ```
 
 `make setup` generates the sample PDF corpus + page PNGs (`scripts/setup.sh`);
 `make run` boots Closure fresh (`run.sh`, which resets the DB and delegates to
-`server/app.sql`). Run `make test` to boot the app (if not already up) and run
-the Playwright e2e suite; `make clean` removes generated runtime state
-(`closure.db`, `closure.db.wal`, `exports/decisions/*.json`).
+`server/app.sql`). Run `make test` (or `PORT=8127 make test`) to npm-install
+e2e deps, boot the app, and run Playwright; `make clean` removes generated
+runtime state (`closure.db`, `closure.db.wal`, `exports/decisions/*.json`).
 
 ### No-make path
 
@@ -104,7 +107,7 @@ non-empty, else the committed default. The boot log prints the resolved table.
 | `CLOSURE_DECISIONS_GLOB` | `decisions_glob` | `exports/decisions/*.json` | decision-log **read** glob (writes are `COPY TO` literals under `exports/decisions/`) |
 | `CLOSURE_QUACKAPI_EXT` | `quackapi_ext` | sibling quackapi build path | extension path for the generic-binary boot above |
 | `CLOSURE_ACTOR` | `actor` | `A. Subbarao` | "Reviewing as" identity stamped into templates |
-| `DUCKDB_BIN` | — | `duckdb` on PATH | binary for `scripts/*.sh` (scripts error with a hint if unset and not on PATH) |
+| `DUCKDB_BIN` | — | sibling `../quackapi/build/release/duckdb`, else `duckdb` on PATH | binary for `scripts/*.sh` / `run.sh` (must be ≥1.5.4 with full community pdf) |
 
 `GET /api/routes` returns the full route map as JSON — generated from the live
 `quackapi_routes()` registry joined to the parsed `CREATE ROUTE` declarations

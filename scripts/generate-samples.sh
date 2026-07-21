@@ -34,11 +34,19 @@ CONSOLIDATED_PAGES="${CONSOLIDATED_PAGES:-110}"
 REUSE_IDENTITIES="${REUSE_IDENTITIES:-0}"
 SAMPLES_DIR="${SAMPLES_DIR:-samples}"
 
-# Resolution: $DUCKDB_BIN env, else duckdb on PATH, else error.
-# Needs a v1.5.4+ binary with community pdf (write_pdf / pdf_encrypt / pdf_rotate).
-DUCKDB_BIN="${DUCKDB_BIN:-$(command -v duckdb 2>/dev/null || true)}"
+# Resolution: $DUCKDB_BIN env, else sibling quackapi build, else duckdb on PATH.
+# Needs DuckDB ≥1.5.4 with community pdf (pdf_info / write_pdf / pdf_encrypt / …).
+# Stock 1.5.3 community pdf lacks pdf_info — PATH brew/local duckdb often fails here.
+if [[ -z "${DUCKDB_BIN:-}" ]]; then
+  _sibling="$(dirname "$ROOT")/quackapi/build/release/duckdb"
+  if [[ -x "$_sibling" ]]; then
+    DUCKDB_BIN="$_sibling"
+  else
+    DUCKDB_BIN="$(command -v duckdb 2>/dev/null || true)"
+  fi
+fi
 if [[ -z "$DUCKDB_BIN" ]]; then
-  echo "error: duckdb not found — set DUCKDB_BIN (e.g. DUCKDB_BIN=\$HOME/personal/quackapi/build/release/duckdb) or put duckdb on PATH" >&2
+  echo "error: duckdb not found — set DUCKDB_BIN to a ≥1.5.4 binary (sibling ../quackapi/build/release/duckdb preferred) or put duckdb on PATH" >&2
   exit 1
 fi
 
@@ -68,6 +76,20 @@ done
 [[ -x "$DUCKDB_BIN" || -n "$(command -v "$DUCKDB_BIN" 2>/dev/null)" ]] || {
   echo "error: not executable: $DUCKDB_BIN" >&2; exit 1;
 }
+
+# Fail early if this binary's community pdf lacks pdf_info (common with 1.5.3).
+# -csv so the count is a bare integer (duckdbrc noise still possible on stderr only).
+_pdf_info_n="$("$DUCKDB_BIN" -unsigned -csv :memory: -c "
+INSTALL pdf FROM community; LOAD pdf;
+SELECT count(*) FROM duckdb_functions() WHERE function_name = 'pdf_info';
+" 2>/dev/null | tail -1 | tr -d '[:space:]')"
+if [[ ! "$_pdf_info_n" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: $DUCKDB_BIN has no pdf_info after INSTALL pdf FROM community" >&2
+  echo "  need DuckDB ≥1.5.4 (e.g. sibling quackapi: ../quackapi/build/release/duckdb)" >&2
+  echo "  set DUCKDB_BIN / QUACKAPI_ROOT, or place quackapi as a sibling of this repo" >&2
+  exit 1
+fi
+unset _pdf_info_n
 
 mkdir -p "$SAMPLES_DIR/gen" "$SAMPLES_DIR/messy"
 

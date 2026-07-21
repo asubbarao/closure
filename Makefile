@@ -1,14 +1,20 @@
-.PHONY: setup run test clean
+.PHONY: install setup run test clean
 
 # Every knob derives from env with a committed default — nothing user-specific.
 PORT ?= 8117
 BASE  = http://127.0.0.1:$(PORT)
 
+# One-time: download (or build) the quackapi DuckDB runtime into .deps/runtime.
+# Graders: this is the only dependency step that is not pure Closure SQL/JS.
+install:
+	./scripts/install-runtime.sh
+
 # Generate the sample PDF corpus + page PNG previews (idempotent).
+# Auto-runs install-runtime if .deps/runtime is missing.
 setup:
 	./scripts/setup.sh
 
-# Boot Closure fresh on the real quackapi extension ($(BASE)).
+# Boot Closure fresh ($(BASE)). Requires install + setup once.
 run:
 	PORT=$(PORT) ./run.sh
 
@@ -29,7 +35,7 @@ test:
 	cd tests/e2e && CLOSURE_BASE_URL=$(BASE) npx playwright test --reporter=line
 
 # Remove generated runtime state: the DB, its WAL, and decision-log JSON
-# files. Does not touch exports/.gitkeep or any committed content.
+# files. Does not touch exports/.gitkeep, .deps/, or committed content.
 clean:
 	rm -f closure.db closure.db.wal
 	rm -f exports/decisions/*.json

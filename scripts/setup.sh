@@ -28,7 +28,18 @@ SKIP_PNG="${SKIP_PNG:-0}"
 SAMPLES_DIR="${SAMPLES_DIR:-samples}"
 PAGES_DIR="${PAGES_DIR:-pages}"
 
+# Same binary resolution as generate-samples.sh / run.sh: env → sibling quackapi → PATH.
+if [[ -z "${DUCKDB_BIN:-}" ]]; then
+  _sibling="$(dirname "$ROOT")/quackapi/build/release/duckdb"
+  if [[ -x "$_sibling" ]]; then
+    export DUCKDB_BIN="$_sibling"
+  elif command -v duckdb >/dev/null 2>&1; then
+    export DUCKDB_BIN="$(command -v duckdb)"
+  fi
+fi
+
 echo "==> Closure setup (repo root: $ROOT)"
+[[ -n "${DUCKDB_BIN:-}" ]] && echo "    DUCKDB_BIN=$DUCKDB_BIN"
 
 # ── 1. Generate PDFs + identities + manifest ───────────────────────────────
 ./scripts/generate-samples.sh "$@"
@@ -84,10 +95,10 @@ render_one_pdftoppm() {
 render_all_duckdb() {
   # Fallback when poppler is missing: pdf_to_png → write each page via Python-free
   # shell hexdump is painful; use DuckDB COPY of base64 then decode.
-  # Resolution: $DUCKDB_BIN env, else duckdb on PATH, else error.
+  # Resolution: $DUCKDB_BIN (set above / generate-samples), else duckdb on PATH.
   local duck="${DUCKDB_BIN:-$(command -v duckdb 2>/dev/null || true)}"
   [[ -n "$duck" ]] || {
-    echo "error: neither pdftoppm nor duckdb available for page PNG render — set DUCKDB_BIN or install poppler" >&2
+    echo "error: neither pdftoppm nor duckdb available for page PNG render — set DUCKDB_BIN (≥1.5.4) or install poppler" >&2
     exit 1
   }
 
