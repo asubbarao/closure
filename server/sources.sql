@@ -24,10 +24,10 @@ FROM pdf_info(
          ELSE 'samples' END || '/*.pdf');
 
 -- Append-only decision log. ONE reader.
--- Empty-glob safe: read_json_auto errors on zero matches; read_text returns 0 rows.
--- Writer contract (routes/* COPY TO exports/decisions) must emit these fields with
--- consistent JSON types; from_json materializes that contract (no cast wall, no
--- columns:= on read_json_auto, no sentinel file).
+-- Decision shards stay FLAT x0..y1 (add-missed + decision writers). Manual
+-- suggestions reconstruct bbox := struct_pack(...) in detect.sql.
+-- read_text + from_json: empty-glob safe (0 rows); skip empty COPY stubs
+-- (DuckDB can leave 0-byte shards under FILENAME_PATTERN); skip sentinel.
 CREATE OR REPLACE VIEW v_src_decisions AS
 WITH raw AS (
     SELECT filename, content
@@ -37,6 +37,7 @@ WITH raw AS (
              THEN getenv('CLOSURE_EXPORTS_DIR')
              ELSE 'exports' END || '/decisions/*.json'
     )
+    WHERE content IS NOT NULL AND length(trim(content)) > 0
 ),
 parsed AS (
     SELECT
@@ -55,4 +56,5 @@ parsed AS (
     FROM raw
 )
 SELECT j.*, filename
-FROM parsed;
+FROM parsed
+WHERE j.kind IS DISTINCT FROM 'sentinel';
