@@ -7,15 +7,14 @@
 INSTALL fakeit FROM community; LOAD fakeit;
 INSTALL pdf FROM community; LOAD pdf;
 
+-- Knobs typed by setup.sh / setup.sql. Read as-is (no try_cast).
 CREATE OR REPLACE TEMP TABLE _cfg AS
 SELECT
-    coalesce(try_cast(getvariable('n_cases') AS INTEGER), 4) AS n_cases,
-    coalesce(try_cast(getvariable('docs_per_case') AS INTEGER), 2) AS docs_per_case,
-    coalesce(try_cast(getvariable('consolidated_pages') AS INTEGER), 110) AS consolidated_pages,
-    coalesce(try_cast(getvariable('reuse_identities') AS INTEGER), 0) AS reuse,
-    coalesce(nullif(cast(getvariable('samples_dir') AS VARCHAR), ''), 'samples') AS dir;
-
-SET VARIABLE samples_dir = (SELECT dir FROM _cfg);
+    getvariable('n_cases') AS n_cases,
+    getvariable('docs_per_case') AS docs_per_case,
+    getvariable('consolidated_pages') AS consolidated_pages,
+    getvariable('reuse_identities') AS reuse,
+    getvariable('samples_dir') AS dir;
 
 -- ── cast: fakeit draw  OR  identities.json ────────────────────────────────
 

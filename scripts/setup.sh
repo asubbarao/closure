@@ -44,8 +44,9 @@ SET VARIABLE n_cases = ${N_CASES:-4};
 SET VARIABLE docs_per_case = ${DOCS_PER_CASE:-2};
 SET VARIABLE consolidated_pages = ${CONSOLIDATED_PAGES:-110};
 SET VARIABLE reuse_identities = ${REUSE_IDENTITIES:-0};
+-- Typed once here. SQL only coalesce-defaults if unset (no try_cast).
 SET VARIABLE samples_dir = '${SAMPLES_DIR:-samples}';
-SET VARIABLE pages_dir = '${PAGES_DIR:-pages}';
+SET VARIABLE pages_dir = 'pages';
 SET VARIABLE png_dpi = ${PNG_DPI:-100};
 SET VARIABLE skip_png = ${SKIP_PNG:-0};
 .read scripts/setup.sql

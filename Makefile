@@ -12,8 +12,9 @@ smoke:
 install:
 	./scripts/install.sh
 
-# Sample PDF corpus + page PNG previews (pdf_page_images → pages/<stem>/pN.png).
-# No host poppler/pdftoppm. Optional: PDF_EXTENSION=/path/to/pdf.duckdb_extension
+# Sample PDF corpus + page PNG previews (hostfs + scalarfs + pdf_to_png).
+# No host poppler/pdftoppm. Prefer DUCKDB_BIN ≥ 1.5.4 (brew). Optional:
+#   PDF_EXTENSION=/path/to/font-bundled/pdf.duckdb_extension  (blank-PNG fix)
 setup:
 	./scripts/setup.sh
 
