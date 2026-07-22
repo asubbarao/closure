@@ -29,7 +29,7 @@ Page HTML is **VARCHAR** from `tera_render` only — never `parse_html` on pages
 | `suggestions` | AI + fold via `v_suggestions` |
 | `words` / token spine | finetype + rules + detect |
 
-Detect: type hits + rapidfuzz watchlist + metaphone → suggestions / entities.
+Detect: type hits + rapidfuzz watchlist → suggestions / entities.
 
 ## Host / packs / shell / cache
 

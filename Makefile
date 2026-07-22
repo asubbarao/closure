@@ -6,7 +6,7 @@ BASE  = http://127.0.0.1:$(PORT)
 # SQL invariants only (needs prior model / samples). Example:
 #   duckdb closure.db -c ".read server/smoke.sql"
 smoke:
-	@duckdb $(or $(DB),closure.db) -c ".read server/smoke.sql"
+	@$$(./scripts/duckdb-bin.sh) $(or $(DB),closure.db) -c ".read server/smoke.sql"
 
 # One-time: DuckDB on PATH + INSTALL quackapi FROM community.
 install:

@@ -16,7 +16,7 @@ DROP SEMANTIC VIEW IF EXISTS suggestion_metrics;
 DROP SEMANTIC VIEW IF EXISTS closure;
 CREATE SEMANTIC VIEW closure FROM YAML FILE 'server/config/closure_semantic.yaml';
 
--- Allowlist for GET /api/rel + /api/summarize (not every internal extract table).
+-- Allowlist for GET /api/catalog/:relation/rows|summary (not every internal table).
 CREATE OR REPLACE VIEW v_cols AS
 SELECT table_name AS relation,
        array_agg([column_name, data_type] ORDER BY ordinal_position) AS cols

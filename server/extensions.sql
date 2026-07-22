@@ -6,7 +6,7 @@
 -- Earned (product SELECTs):
 --   dns          v_url_hosts (dns_lookup on extracted hostnames)
 --   read_lines   v_suggestion_line_context (scalarfs page_uri + lateral window)
---   splink_udfs  unaccent (norm) + double_metaphone (watchlist phonetic hits)
+--   splink_udfs  unaccent only (normalize watchlist / tokens)
 --   cache_httpfs v_http_cache_* status + remote https/s3 reads land on disk cache
 -- Earned (runtime):
 --   curl_httpfs  quackapi outbound HTTPUtil — LOAD before serve

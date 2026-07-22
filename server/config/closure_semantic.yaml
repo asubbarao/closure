@@ -16,7 +16,7 @@
 #             SELECT * FROM show_semantic_dimensions('closure');
 #   Open:     SELECT * FROM query(format('SELECT * FROM {}', 'v_suggestions'));
 #   Profile:  SELECT * FROM query(format('FROM (SUMMARIZE {})', 'v_suggestions'));
-#   HTTP:     GET /api/cols  /api/rel/:relation  /api/summarize/:relation
+#   HTTP:     GET /api/catalog  /api/catalog/:relation/rows|/summary
 #
 # HOW TO EXTEND
 #   1. tables + joins + dimensions + metrics (real measures only)

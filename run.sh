@@ -10,14 +10,7 @@ cd "$(dirname "$0")"
 PORT="${PORT:-8117}"
 DATA_DIR="${DATA_DIR:-samples}"
 DB="${DB:-closure.db}"
-DUCKDB_BIN="${DUCKDB_BIN:-$(command -v duckdb || true)}"
-
-[[ -n "${DUCKDB_BIN}" && -x "$DUCKDB_BIN" ]] || {
-  echo "error: duckdb not on PATH (need ≥1.5.4 for community quackapi)" >&2
-  echo "  https://duckdb.org/docs/installation/" >&2
-  echo "  override: DUCKDB_BIN=/path/to/duckdb ./run.sh" >&2
-  exit 1
-}
+DUCKDB_BIN="$(./scripts/duckdb-bin.sh)"
 
 if [[ ! -d "$DATA_DIR" ]]; then
   echo "error: data dir missing: $DATA_DIR" >&2

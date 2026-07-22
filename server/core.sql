@@ -190,9 +190,7 @@ SELECT term, kind, case_no,
        lower(unaccent(trim(term))) AS term_norm,
        string_split(lower(unaccent(trim(term))), ' ') AS term_tokens,
        replace(replace(replace(replace(trim(term), '-', ''), '(', ''), ')', ''), '.', '') AS term_compact,
-       (position('NOT PII' IN kind) > 0) AS is_not_pii,
-       -- splink: primary double_metaphone key for phonetic name hits
-       double_metaphone(lower(unaccent(trim(term))))[1] AS term_dm
+       (position('NOT PII' IN kind) > 0) AS is_not_pii
 FROM v_src_watchlist
 WHERE nullif(trim(term), '') IS NOT NULL;
 
@@ -274,28 +272,9 @@ name_hits AS (
         JOIN watchlist wl ON wl.case_no = l.case_id
     ) scored
     WHERE sc >= 90 AND len(mw) > 0
-),
--- splink double_metaphone: phonetic watchlist hits (human-in-loop; collisions ok)
-metaphone_hits AS (
-    SELECT w.document_id, w.page_no, w.case_id,
-           wl.term AS text, w.token AS context, w.bbox,
-           wl.kind,
-           80 AS confidence,
-           'metaphone: ' || w.token || ' ~ ' || wl.term AS reason,
-           CASE WHEN wl.is_not_pii THEN 'false_positive' END AS flag_tag,
-           'detector:metaphone-watchlist' AS detector_key
-    FROM words w
-    JOIN watchlist wl
-      ON wl.case_no = w.case_id
-     AND wl.term_dm IS NOT NULL
-     AND length(wl.term_dm) > 0
-     AND length(w.token_norm) >= 4
-     AND double_metaphone(w.token_norm)[1] = wl.term_dm
-     AND w.token_norm <> wl.term_norm
 )
 SELECT * FROM type_hits
-UNION ALL BY NAME SELECT * FROM name_hits
-UNION ALL BY NAME SELECT * FROM metaphone_hits;
+UNION ALL BY NAME SELECT * FROM name_hits;
 
 CREATE OR REPLACE TABLE entities AS
 SELECT format('{:x}', rapidhash(case_id || chr(31) || kind || chr(31) || canonical_text)) AS id,

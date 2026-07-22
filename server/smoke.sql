@@ -18,7 +18,7 @@ FROM (DESCRIBE SELECT * FROM v_cols);
 -- Earned-extension surfaces (bind only — no dns_lookup / network cols)
 FROM (DESCRIBE SELECT suggestion_id, hit_line, line_text, dist FROM v_suggestion_line_context);
 FROM (DESCRIBE SELECT hostname, token_n FROM v_url_hosts);
-FROM (DESCRIBE SELECT term, term_norm, term_dm FROM watchlist);
+FROM (DESCRIBE SELECT term, term_norm FROM watchlist);
 FROM (DESCRIBE SELECT ondisk_bytes, filesystems, data_cache_type FROM v_http_cache);
 FROM (DESCRIBE SELECT * FROM v_http_cache_config);
 FROM (DESCRIBE SELECT * FROM v_http_cache_filesystems);

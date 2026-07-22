@@ -73,6 +73,9 @@ FROM page_png_meta;
 
 -- Wipe = fixed relative path only (no variable in rm -rf). Then mkdir stems.
 -- // hatch: hostfs has no mkdir TVF — shellfs for the effect.
+-- Commands are a relation; shellfs's write direction pipes them straight into
+-- bash. No .tmp/*.sh to materialize and read back — the sink IS the shell.
+-- skip_png filters the rows, so bash gets empty stdin and does nothing.
 COPY (
     SELECT line
     FROM (
@@ -85,12 +88,9 @@ COPY (
         FROM sample_pdfs
     ) c,
     unnest(c.cmds) WITH ORDINALITY AS u(line, ord)
+    WHERE getvariable('skip_png') = 0
     ORDER BY ord
-) TO '.tmp/mkdir_pages.sh' (FORMAT CSV, HEADER false, QUOTE '', ESCAPE '');
-
-SELECT content AS pages_mkdir
-FROM read_text('bash .tmp/mkdir_pages.sh |')
-WHERE getvariable('skip_png') = 0;
+) TO '| bash' (FORMAT CSV, HEADER false, QUOTE '', ESCAPE '');
 
 -- Per-page COPY BLOB under fixed product root pages/
 COPY (

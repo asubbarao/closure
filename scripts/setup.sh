@@ -7,21 +7,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
 [[ "${1:-}" == "--reuse-identities" ]] && REUSE_IDENTITIES=1
 
-DUCKDB_BIN="${DUCKDB_BIN:-$(command -v duckdb || true)}"
-[[ -n "${DUCKDB_BIN}" && -x "$DUCKDB_BIN" ]] || {
-  echo "error: duckdb not on PATH (need ≥ 1.5.4 for community pdf/fakeit/shellfs)" >&2
-  echo "  https://duckdb.org/docs/installation/" >&2
-  exit 1
-}
+DUCKDB_BIN="$(./scripts/duckdb-bin.sh)"
 ver="$("$DUCKDB_BIN" --version 2>/dev/null | head -1 || true)"
-case "$ver" in
-  *v1.5.[4-9]*|*v1.[6-9]*|*v[2-9].*) ;;
-  *)
-    echo "error: need DuckDB ≥ 1.5.4 (got: $ver)" >&2
-    echo "  set DUCKDB_BIN to a 1.5.4+ binary if PATH has an older duckdb first" >&2
-    exit 1
-    ;;
-esac
 
 # Optional font-bundled local pdf for rasters (after corpus; write_pdf uses community).
 PAGES_PDF_LOAD=""
@@ -37,6 +24,18 @@ if [[ -n "${PDF_EXTENSION:-}" ]]; then
 fi
 
 mkdir -p .tmp
+# Real public court filings alongside the generated corpus — opt-in, because
+# they carry no watchlist (a published opinion has no known-PII list) and would
+# otherwise become the default landing case, showing a reviewer a case with no
+# name matches. COURT_DOCS=1 make setup  → the real-document cold-start demo.
+# Either way the manifest is written, so corpus.sql's read never faults.
+if [[ "${COURT_DOCS:-0}" == "1" ]]; then
+  SAMPLES_DIR="${SAMPLES_DIR:-samples}" ./scripts/fetch-public.sh
+else
+  mkdir -p "${SAMPLES_DIR:-samples}"
+  echo '[]' > "${SAMPLES_DIR:-samples}/court_manifest.json"
+fi
+
 echo "==> setup (corpus + page PNGs) via $DUCKDB_BIN ($ver)"
 # CLI meta-commands (.read) need the SQL shell, not -c.
 "$DUCKDB_BIN" "${DUCK_FLAGS[@]}" :memory: <<SQL

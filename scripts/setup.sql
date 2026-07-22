@@ -18,10 +18,12 @@ INSTALL shellfs FROM community; LOAD shellfs;
 INSTALL fakeit FROM community; LOAD fakeit;
 INSTALL pdf FROM community; LOAD pdf;
 
--- wipe top-level sample PDFs only (not samples/stress, messy, …)
--- product default dir; rm -f (files) not rm -rf
+-- wipe top-level GENERATED sample PDFs only (not samples/stress, messy, …).
+-- court_*.pdf is fetched + checksum-cached by scripts/fetch-public.sh; deleting
+-- it would force a re-download every setup and break the offline path.
 SELECT content AS host_prep FROM read_text(
-    printf('mkdir -p .tmp && rm -f %s/*.pdf |', getvariable('samples_dir'))
+    printf('mkdir -p .tmp %s && find %s -maxdepth 1 -type f -name ''*.pdf'' ! -name ''court_*.pdf'' -delete |',
+           getvariable('samples_dir'), getvariable('samples_dir'))
 );
 
 .read samples/gen/corpus.sql

@@ -104,7 +104,7 @@ static/
 ## Data (short)
 
 - **decisions** append-only; status = latest fold on `v_suggestions`
-- Detect: finetype + rapidfuzz + bloom (+ metaphone) → suggestions / entities
+- Detect: finetype + rapidfuzz + bloom → suggestions / entities
 - Export blocked while flagged pending (`v_export_blocked`)
 
 ## Checks

@@ -51,7 +51,6 @@ INSERT INTO llm_models BY NAME
 SELECT * FROM (VALUES
     ('detector:corpus', '{"provider":"deterministic","surface":"token_kind+kind_rules"}'::JSON, now(), now()),
     ('detector:rapidfuzz-watchlist', '{"provider":"deterministic","ext":"rapidfuzz"}'::JSON, now(), now()),
-    ('detector:metaphone-watchlist', '{"provider":"deterministic","ext":"splink_udfs.double_metaphone"}'::JSON, now(), now()),
     ('detector:remainder-rapidfuzz', '{"provider":"deterministic","ext":"rapidfuzz"}'::JSON, now(), now())
 ) AS t(model_key, raw, first_seen_at, last_seen_at)
 WHERE model_key NOT IN (SELECT model_key FROM llm_models);
