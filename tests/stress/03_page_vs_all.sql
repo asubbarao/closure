@@ -32,7 +32,7 @@ CREATE OR REPLACE TABLE _page_list AS
 SELECT list(struct_pack(
     word := word,
     seq := seq,
-    x0 := x0, y0 := y0, x1 := x1, y1 := y1
+    bbox := bbox
 ) ORDER BY seq) AS words
 FROM stress_words
 WHERE page_no = (SELECT page_no FROM _pg);

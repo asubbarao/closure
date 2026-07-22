@@ -33,10 +33,8 @@ SELECT
         ORDER BY round(y0, 1), x0, word
     )::INTEGER AS seq,
     word::VARCHAR AS word,
-    x0::DOUBLE AS x0,
-    y0::DOUBLE AS y0,
-    x1::DOUBLE AS x1,
-    y1::DOUBLE AS y1,
+    -- same shape the app carries: cast once here, never re-pack downstream
+    (x0, y0, x1, y1)::STRUCT(x0 DOUBLE, y0 DOUBLE, x1 DOUBLE, y1 DOUBLE) AS bbox,
     font_size::DOUBLE AS font_size
 FROM read_pdf_words('samples/stress/monster.pdf');
 

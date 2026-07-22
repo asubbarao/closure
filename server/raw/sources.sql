@@ -1,6 +1,6 @@
--- server/raw/sources.sql — wire as the reader binds it.
--- Decisions: see typed/sources.sql (columns= schema). Pin file only keeps
--- the glob non-empty so read_json can bind on a fresh clone.
+-- server/raw/sources.sql — unmaterialized reads only. No casts. No filters.
+-- Pin: exports/decisions/_schema.json (from server/decision.schema.json) keeps the
+-- decisions glob non-empty on a fresh clone.
 
 CREATE OR REPLACE VIEW v_raw_pdf_info AS
 SELECT * FROM pdf_info(getvariable('samples_dir') || '/*.pdf');
@@ -17,7 +17,6 @@ SELECT * FROM read_json_auto(getvariable('samples_dir') || '/manifest.json');
 CREATE OR REPLACE VIEW v_raw_watchlist AS
 SELECT * FROM read_json_auto(getvariable('samples_dir') || '/watchlist.json');
 
--- Discovery surface only (auto types). Domain uses v_src_decisions (columns=).
 CREATE OR REPLACE VIEW v_raw_decisions AS
 SELECT *
 FROM read_json_auto(

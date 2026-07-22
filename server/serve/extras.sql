@@ -83,10 +83,10 @@ SELECT d.id AS document_id, 1 AS gen,
 FROM documents d;
 
 CREATE OR REPLACE VIEW v_history_events AS
-SELECT kind, suggestion_id, status, actor, reason, ts AS event_ts,
+SELECT kind, suggestion_id, status, actor, reason, ts_ts AS event_ts,
        document_id, case_id, text, batch_id, batch_label, undoes_batch_id
 FROM v_src_decisions
-WHERE kind IN ('decision', 'added') AND nullif(batch_id, '') IS NOT NULL;
+WHERE nullif(batch_id, '') IS NOT NULL;
 
 CREATE OR REPLACE VIEW v_decision_batches AS
 SELECT batch_id, min(event_ts) AS ts, max(event_ts) AS ts_end,

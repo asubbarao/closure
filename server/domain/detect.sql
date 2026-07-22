@@ -26,12 +26,10 @@ WITH type_hits AS (
 ),
 name_hits AS (
     SELECT l.document_id, l.page_no, l.case_id, wl.term AS text, l.line_text AS context,
-           struct_pack(
-               x0 := list_min(list_transform(mw, lambda m: m.bbox.x0)),
-               y0 := list_min(list_transform(mw, lambda m: m.bbox.y0)),
-               x1 := list_max(list_transform(mw, lambda m: m.bbox.x1)),
-               y1 := list_max(list_transform(mw, lambda m: m.bbox.y1))
-           ) AS bbox,
+           (list_min(list_transform(mw, lambda m: m.bbox.x0)),
+            list_min(list_transform(mw, lambda m: m.bbox.y0)),
+            list_max(list_transform(mw, lambda m: m.bbox.x1)),
+            list_max(list_transform(mw, lambda m: m.bbox.y1)))::bbox AS bbox,
            wl.kind, greatest(1, least(99, round(sc)::INTEGER)) AS confidence,
            'rapidfuzz: ' || wl.term AS reason,
            CASE WHEN position('NOT PII' IN wl.kind) > 0 THEN 'false_positive' END AS flag_tag

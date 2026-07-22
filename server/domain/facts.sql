@@ -36,10 +36,8 @@ SELECT w.document_id, w.page_no, d.case_id,
        lower(trim(unaccent(string_agg(w.word, ' ' ORDER BY w.bbox.x0)))) AS line_norm,
        list(w.word ORDER BY w.bbox.x0) AS word_list,
        list(struct_pack(word := w.word, bbox := w.bbox) ORDER BY w.bbox.x0) AS word_meta,
-       struct_pack(
-           x0 := min(w.bbox.x0), y0 := min(w.bbox.y0),
-           x1 := max(w.bbox.x1), y1 := max(w.bbox.y1)
-       ) AS bbox
+       (min(w.bbox.x0), min(w.bbox.y0),
+        max(w.bbox.x1), max(w.bbox.y1))::bbox AS bbox
 FROM words w
 JOIN documents d ON d.id = w.document_id
 GROUP BY w.document_id, w.page_no, d.case_id, round(w.bbox.y0, 0);

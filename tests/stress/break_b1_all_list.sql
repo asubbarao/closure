@@ -23,7 +23,7 @@ CREATE OR REPLACE TABLE stress_words AS
 SELECT
     page::INTEGER AS page_no,
     word::VARCHAR AS word,
-    x0::DOUBLE AS x0, y0::DOUBLE AS y0, x1::DOUBLE AS x1, y1::DOUBLE AS y1
+    (x0, y0, x1, y1)::STRUCT(x0 DOUBLE, y0 DOUBLE, x1 DOUBLE, y1 DOUBLE) AS bbox
 FROM read_pdf_words('samples/stress/monster.pdf');
 
 SELECT count(*) AS words, count(DISTINCT page_no) AS pages FROM stress_words;
@@ -32,6 +32,6 @@ SELECT count(*) AS words, count(DISTINCT page_no) AS pages FROM stress_words;
 SELECT len(list(struct_pack(
     word := word,
     page_no := page_no,
-    x0 := x0, y0 := y0, x1 := x1, y1 := y1
+    bbox := bbox
 ))) AS all_words_list_len
 FROM stress_words;

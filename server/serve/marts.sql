@@ -91,14 +91,13 @@ FROM v_suggestions s
 JOIN v_page_geom g ON g.document_id = s.document_id AND g.page_no = s.page_no;
 
 CREATE OR REPLACE VIEW v_audit AS
-SELECT coalesce(l.ts, now()) AS ts,
+SELECT coalesce(l.ts_ts, now()) AS ts,
        coalesce(l.actor, 'reviewer') AS actor,
        coalesce(l.kind, 'decision') AS action,
        l.suggestion_id, coalesce(l.case_id, d.case_id) AS case_id,
        coalesce(l.text, l.suggestion_id, '') AS target, l.reason
 FROM v_src_decisions l
-LEFT JOIN documents d ON d.id = l.document_id
-WHERE l.kind IN ('decision', 'added');
+LEFT JOIN documents d ON d.id = l.document_id;
 
 CREATE OR REPLACE TABLE app_templates AS
 SELECT replace(parse_filename(filename, true), '.html', '') AS name, content

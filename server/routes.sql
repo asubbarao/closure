@@ -279,8 +279,7 @@ CREATE OR REPLACE ROUTE api_document_add POST '/api/documents/:id/add'
 AS COPY (
     SELECT 'added' AS kind, uuid()::VARCHAR AS suggestion_id, $id AS document_id,
            $page::INTEGER AS page_no,
-           struct_pack(x0 := $x0::DOUBLE, y0 := $y0::DOUBLE,
-                       x1 := $x1::DOUBLE, y1 := $y1::DOUBLE) AS bbox,
+           ($x0, $y0, $x1, $y1)::bbox AS bbox,
            $text AS text, coalesce($text, '') AS context,
            99 AS confidence, $kind AS flag_tag, coalesce($reason, 'manual add') AS reason,
            NULL::VARCHAR AS entity_id, 'manual' AS source, 'accepted' AS status,
