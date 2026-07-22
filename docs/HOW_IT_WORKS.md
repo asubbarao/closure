@@ -1,99 +1,122 @@
 # How Closure works
 
-One DuckDB process is the application: DB + HTTP + PDF + HTML + FS + shell. Handlers are SQL. UI is tera SSR. Browser mutates then reloads.
+One DuckDB process is the app: HTTP, PDF, HTML, FS, shell. Handlers are SQL. UI is **tera SSR**. Browser is progressive enhancement (`static/app.js` → POST → reload).
 
-This is intentional as a **better FastAPI for data products** — not a downgrade. Platform notes: [`PLATFORM.md`](PLATFORM.md).
+Platform thesis: [`PLATFORM.md`](PLATFORM.md). Data: [`DATA_MODEL.md`](DATA_MODEL.md). Design write-up: [`rationale.md`](rationale.md).
 
 ## FastAPI map
 
 | You know | Here |
 |----------|------|
-| `uvicorn` + routers | `app.sql` + `CREATE ROUTE` |
-| OpenAPI / Swagger | **`/docs`**, **`/openapi.json`**, **`/redoc`** (quackapi, live) |
-| Depends / API key / JWT | `CREATE AUTH` + `REQUIRE` (`server/auth.sql`; `CLOSURE_API_KEY`) |
-| httpx / async client | **curl_httpfs** (pool, HTTP/2, async outbound) |
-| models / services | `store` → `core` (tables) → `views` (live + pages) |
-| Jinja | `tera_render(…, template_path := …)` → `parse_html` |
-| subprocess / pathlib | **shellfs** / **hostfs** / **scalarfs** / **zipfs** |
-| Postgres | Optional `ATTACH` (`CLOSURE_POSTGRES`, `server/postgres.sql`) |
-| pytest types | **`server/smoke.sql`** / optional dqtest — schema is the contract |
-| SPA re-paint | POST + `location.reload()` (`static/app.js`) |
+| `uvicorn` + routers | `app.sql` + `CREATE ROUTE` (from `v_route_get` + POSTs) |
+| OpenAPI | Live `/docs` · `/openapi.json` · `/redoc` |
+| Auth | `CREATE AUTH` + optional `REQUIRE` (`CLOSURE_API_KEY`) |
+| Outbound HTTP | **curl_httpfs** (transport) + **cache_httpfs** (read cache) |
+| Models / services | `store` → `core` (tables) → `views` (ctx + html) |
+| Jinja | `tera_render(template, ctx, template_path := 'server/templates/**/*.html')` |
+| Templates | Pages + `fragments/*`; CSS/JS in `static/` (not inlined in SQL) |
+| pathlib / shell | **hostfs** / **scalarfs** / **shellfs** / **zipfs** |
+| Postgres | Optional `ATTACH` (`CLOSURE_POSTGRES`) |
+| Contract checks | `server/smoke.sql` · Playwright e2e |
+
+**Do not** wrap page HTML in `parse_html` — webbed voids `<script src>` and kills `app.js`.
 
 ## Boot
 
 ```
-config → extensions (curl_httpfs + …) → auth
-  → hostfs views → scalarfs path pins
-  → optional postgres attach
-  → model → routes → smoke → quackapi_serve → re-raise memory_limit
+config → extensions (httpfs → curl_httpfs → cache_httpfs → …)
+  → auth → hostfs → scalarfs pins → [postgres]
+  → model (store · hostfs · shellfs · http_cache · core · views)
+  → routes (v_route_get → install GET DDL · POST writes)
+  → smoke → quackapi_serve(http_client := 'auto')
 ```
 
-Entry: `make run` → `run.sh` → `.read server/app.sql`.
+```sh
+make setup && make run    # http://127.0.0.1:8117/  and  /docs
+# DuckDB ≥ 1.5.4:  export DUCKDB_BIN=/opt/homebrew/bin/duckdb
+```
 
-## Model layers
+## Layers
 
-| Layer | Owns | Extend by |
-|-------|------|-----------|
-| **Tables** (`core.sql`) | Facts + display pins | New stable column at CTAS |
-| **Live views** | Decision fold, mark px, export gate | Thin join over live state |
-| **Page views** | `parse_html(tera…)` only | Pack JSON once at page edge |
-| **Routes** | `SELECT html` / `INSERT … RETURNING` | Never re-derive labels |
+| Layer | Owns |
+|-------|------|
+| **Tables** (`core.sql`) | Facts + display pins |
+| **Live views** | Decision fold, marks px, export gate |
+| **Ctx views** | `json_object` bags for tera (`v_*_ctx`) |
+| **Page views** | `path` + `html` (`v_case_html`, `v_review_page`, …) |
+| **GET routes** | `v_route_get` only → generated `CREATE ROUTE` |
+| **POST routes** | Resource-nested decisions / export (explicit PARAM) |
+| **Client** | `data-action` + keyboard; no SPA state |
 
-## Formats & planes
+## HTTP surface (current)
 
-| Kind | How |
-|------|-----|
-| Host tree | Unmat **`v_hostfs`** (hostfs scalars — not string path hacks) |
-| Path pins | scalarfs `COPY … (FORMAT variable)` → `pathvariable:` |
-| LE zip packs | **zipfs** `archive_contents` / `zip://…/member` (`v_zips`) |
-| Shell | **stream:** `read_csv` / `read_json(_auto)` on `cmd \|` · **batch:** `read_text` |
-| JSON | `read_json_auto` (manifest, watchlist, detector_rules) |
-| YAML | `read_yaml` + semantic `FROM YAML FILE` |
-| HTML | tera → webbed `parse_html` |
-| Metrics | `semantic_view('closure', …)` — dimensions not count pivots |
-| Charts (optional) | **ggsql** Grammar of Graphics — see PLATFORM.md |
+### Pages (SSR)
 
-## Product routes
+| Method | Path |
+|--------|------|
+| GET | `/`, `/cases/:id`, `/cases/:id/stream`, `/cases/:id/audit` |
+| GET | `/documents/:id`, `/documents/:id/pages/:page` |
+
+### Product API
 
 | Method | Path | Role |
 |--------|------|------|
-| GET | `/`, `/cases/:id` | Library |
-| GET | `/cases/:id/stream` | Entity stream |
-| GET | `/documents/:id`, `/pages/:n` | Review peek |
-| GET | `/cases/:id/audit` | Audit |
-| GET | `/docs`, `/openapi.json`, `/redoc` | OpenAPI |
-| GET | `/api/cases/:id/nav` | Doc + shell hrefs |
-| GET | `/api/cols`, `/api/rel/:relation` | Catalog (allowlisted) |
-| GET | `/api/hostfs`, `/api/zips`, `/api/shell/patterns` | Host / pack / shell recipes |
-| POST | `/api/suggestions/:id/decision` | Decide one |
-| POST | `/api/entities/:id/decision` | Entity bulk (no flagged) |
-| POST | `/api/documents/:id/band/:band/decision` | Band bulk |
-| POST | `/api/cases/:id/accept-high` | Accept high confidence |
-| POST | `/api/documents/:id/add` | Manual miss |
-| POST | `/api/undo` | Inverse latest batch |
-| POST | `/api/cases/:id/export` | `pdf_redact` when not blocked |
+| GET | `/api/cases/:id/nav` | Nav links |
+| GET | `/api/cases/:id/metrics` | Semantic status × band |
+| GET | `/api/suggestions/:id/context` | ±3 lines (read_lines) |
+| POST | `/api/suggestions/:id/decision` | Decide one · **201** |
+| POST | `/api/entities/:id/decision` | Entity bulk (skip flagged) · **201** |
+| POST | `/api/documents/:id/bands/:band/decision` | Band bulk · **201** |
+| POST | `/api/documents/:id/marks` | Manual miss · **201** |
+| POST | `/api/cases/:id/accept-high` | Case-wide HIGH · **201** |
+| POST | `/api/cases/:id/undo` | Undo last batch · **201** |
+| POST | `/api/cases/:id/export` | `pdf_redact` if not blocked |
 
-Lock a route: `REQUIRE closure_api` after `CLOSURE_API_KEY` is registered.
+### Catalog (allowlisted)
 
-## Data model (short)
+| Method | Path |
+|--------|------|
+| GET | `/api/catalog` |
+| GET | `/api/catalog/:relation` |
+| GET | `/api/catalog/:relation/rows` |
+| GET | `/api/catalog/:relation/summary` |
 
-- **decisions** append-only; status = fold (`max_by` latest event) on `v_suggestions`
-- Detect: finetype + rapidfuzz (+ bloom) → `suggestions` + `entities`
-- Export hard-block while any flagged pending (`v_export_blocked`)
+### Ops (machine / debug — not the FOIA loop)
+
+| Method | Path |
+|--------|------|
+| GET | `/api/ops/hostfs`, `/zips`, `/shell` |
+| GET | `/api/ops/cache`, `/cache/status`, `/cache/access` |
+| GET | `/api/ops/hosts`, `/templates`, `/semantic` |
+
+Lock routes: `REQUIRE closure_api` after `CLOSURE_API_KEY`.
+
+## Templates & assets
+
+```
+server/templates/
+  base.html · case.html · stream.html · review.html · audit.html
+  fragments/   case_actions · entity_row · mark · sugg_row · status_tally
+static/
+  app.css · app.js     # style + data-action / keyboard only
+```
+
+## Data (short)
+
+- **decisions** append-only; status = latest fold on `v_suggestions`
+- Detect: finetype + rapidfuzz + bloom (+ metaphone) → suggestions / entities
+- Export blocked while flagged pending (`v_export_blocked`)
 
 ## Checks
 
 ```sh
-make smoke    # after a boot that left closure.db
-# or: duckdb closure.db -c ".read server/smoke.sql"
+make test     # fresh DB + boot + Playwright (needs DuckDB ≥ 1.5.4)
+make smoke    # SQL invariants on existing closure.db
 ```
 
 ## Not product
 
-- Warehouse DAG tools (e.g. duck-orch) — wrong shape for interactive FOIA
-- Raw HTTP shell execution of arbitrary `cmd` — recipes only (`v_shell_patterns`)
-- SPA / second app tier for the graded loop
-
-## Size
-
-SQL + few templates + one JS file. If a line doesn’t delete a host/SPA layer or earn a real relation, it doesn’t belong.
+- SPA / second app tier for the review loop  
+- Warehouse DAGs for interactive FOIA  
+- Arbitrary shell over HTTP (ops recipes only)  
+- Historical surveys → [`archive/`](archive/)

@@ -1,3 +1,10 @@
+# SCHEMA CONTRACT (historical freeze note)
+
+> **Current runtime surface:** [`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) + [`DATA_MODEL.md`](DATA_MODEL.md) + `server/routes.sql`.  
+> This file was a mid-rebuild freeze checklist. Prefer those docs for product truth; keep this only if you are archaeology-debugging an old cut.
+
+---
+
 # SCHEMA FREEZE CONTRACT — the rebuild must preserve these exactly
 
 The SQL is being rebuilt schema-first (layered views over raw sources) and cut ≥50%.

@@ -1,0 +1,5 @@
+{# Shared case workflow controls — data-action only; app.js handles POST+reload #}
+<button type="button" class="btn" data-action="undo" data-case-id="{{ case.id }}">Undo</button>
+<button type="button" class="btn" data-action="accept-high" data-case-id="{{ case.id }}" title="H">Accept HIGH</button>
+<button type="button" class="btn primary" data-action="export" data-case-id="{{ case.id }}" id="export-btn"
+  {% if export_blocked %}disabled title="Resolve flagged first"{% endif %}>Export</button>

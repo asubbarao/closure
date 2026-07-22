@@ -1,0 +1,260 @@
+import { test, expect } from "@playwright/test";
+import {
+  api,
+  caseDocIds,
+  docHrefs,
+  documentsViaApi,
+  nPending,
+  openLibrary,
+  postDecision,
+  suggestionsViaApi,
+} from "../helpers/app";
+
+/**
+ * Hard proof: multi-doc + bulks + keyboard. Count deltas only — not greenwash.
+ */
+test.describe.configure({ mode: "serial" });
+
+test.describe("bulk · multi-doc · keyboard", () => {
+  let caseId: string;
+  let docSet: Set<string>;
+
+  test("multi-doc case (≥2)", async ({ page, request }) => {
+    caseId = await openLibrary(page);
+    const docs = await documentsViaApi(request);
+    docSet = caseDocIds(docs, caseId);
+    expect(docSet.size, "need ≥2 docs on open case").toBeGreaterThanOrEqual(2);
+    expect((await docHrefs(page)).length).toBeGreaterThanOrEqual(2);
+  });
+
+  test("accept-HIGH case-wide: high→0, flagged unchanged", async ({
+    request,
+  }) => {
+    const before = await suggestionsViaApi(request);
+    const inCase = (r: { document_id: string }) => docSet.has(r.document_id);
+    const high0 = nPending(before, (r) => inCase(r) && r.band === "high");
+    const flag0 = nPending(before, (r) => inCase(r) && r.band === "flagged");
+    expect(high0, "need pending HIGH").toBeGreaterThan(0);
+
+    await postDecision(request, api.acceptHigh(caseId));
+    const after = await suggestionsViaApi(request);
+    expect(nPending(after, (r) => inCase(r) && r.band === "high")).toBe(0);
+    expect(nPending(after, (r) => inCase(r) && r.band === "flagged")).toBe(flag0);
+  });
+
+  test("band bulk REVIEW reject on one doc", async ({ request }) => {
+    const before = await suggestionsViaApi(request);
+    const docId = [...docSet].find((id) =>
+      before.some(
+        (r) =>
+          r.document_id === id && r.status === "pending" && r.band === "review"
+      )
+    );
+    expect(docId, "need pending REVIEW on a case doc").toBeTruthy();
+    const high0 = nPending(
+      before,
+      (r) => r.document_id === docId && r.band === "high"
+    );
+    const flag0 = nPending(
+      before,
+      (r) => r.document_id === docId && r.band === "flagged"
+    );
+
+    await postDecision(request, api.band(docId!, "review", "rejected"));
+    const after = await suggestionsViaApi(request);
+    expect(
+      nPending(after, (r) => r.document_id === docId && r.band === "review")
+    ).toBe(0);
+    expect(
+      nPending(after, (r) => r.document_id === docId && r.band === "high")
+    ).toBe(high0);
+    expect(
+      nPending(after, (r) => r.document_id === docId && r.band === "flagged")
+    ).toBe(flag0);
+  });
+
+  test("entity bulk clears non-flagged (multi-doc when present)", async ({
+    request,
+  }) => {
+    const before = await suggestionsViaApi(request);
+    const cand = before.filter(
+      (r) =>
+        r.status === "pending" &&
+        r.band !== "flagged" &&
+        r.entity_id &&
+        docSet.has(r.document_id)
+    );
+    expect(cand.length, "need entity-linked pending").toBeGreaterThan(0);
+
+    // Prefer entity spanning ≥2 docs
+    const byE = new Map<string, Set<string>>();
+    for (const r of cand) {
+      if (!byE.has(r.entity_id!)) byE.set(r.entity_id!, new Set());
+      byE.get(r.entity_id!)!.add(r.document_id);
+    }
+    let entityId = cand[0].entity_id!;
+    for (const [id, docs] of byE) {
+      if (docs.size >= 2) {
+        entityId = id;
+        break;
+      }
+    }
+    const flag0 = nPending(
+      before,
+      (r) => r.entity_id === entityId && r.band === "flagged" && docSet.has(r.document_id)
+    );
+
+    await postDecision(request, api.entity(entityId, "accepted"));
+    const after = await suggestionsViaApi(request);
+    expect(
+      nPending(
+        after,
+        (r) =>
+          r.entity_id === entityId &&
+          r.band !== "flagged" &&
+          docSet.has(r.document_id)
+      )
+    ).toBe(0);
+    expect(
+      nPending(
+        after,
+        (r) =>
+          r.entity_id === entityId &&
+          r.band === "flagged" &&
+          docSet.has(r.document_id)
+      )
+    ).toBe(flag0);
+  });
+
+  test("flagged band API cannot bulk-accept", async ({ request }) => {
+    const before = await suggestionsViaApi(request);
+    const docId = [...docSet].find((id) =>
+      before.some(
+        (r) =>
+          r.document_id === id && r.status === "pending" && r.band === "flagged"
+      )
+    );
+    if (!docId) {
+      test.skip(true, "no flagged pending");
+      return;
+    }
+    const flag0 = nPending(
+      before,
+      (r) => r.document_id === docId && r.band === "flagged"
+    );
+    await request.post(api.band(docId, "flagged", "accepted"), {
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      data: {},
+    });
+    const after = await suggestionsViaApi(request);
+    expect(
+      nPending(after, (r) => r.document_id === docId && r.band === "flagged")
+    ).toBe(flag0);
+  });
+
+  test("keyboard a reduces pending on focused doc", async ({ page, request }) => {
+    const before = await suggestionsViaApi(request);
+    const hit = before.find(
+      (r) =>
+        r.status === "pending" &&
+        r.band !== "flagged" &&
+        docSet.has(r.document_id)
+    );
+    expect(hit, "need a pending mark for keyboard").toBeTruthy();
+    const docId = hit!.document_id;
+    const pageNo = hit!.page_no ?? 1;
+    const id = hit!.id;
+
+    // Open the page that has the mark (marks are page-scoped in SSR)
+    const href =
+      pageNo <= 1
+        ? `/documents/${docId}`
+        : `/documents/${docId}/pages/${pageNo}`;
+    await page.goto(href);
+    await expect(page.locator("body[data-surface='review']")).toBeVisible();
+    const mark = page.locator(`.mark[data-status='pending'][data-id='${id}']`);
+    await expect(mark).toBeVisible();
+    // Click selects focus (same as user); then keyboard a decides
+    await mark.click();
+    await expect(page.locator(`.mark.current[data-id='${id}']`)).toBeVisible();
+    await page.keyboard.press("a");
+    await page.waitForLoadState("networkidle");
+
+    const after = await suggestionsViaApi(request);
+    const row = after.find((r) => r.id === id);
+    expect(row?.status, "keyboard a must fold that suggestion").not.toBe(
+      "pending"
+    );
+  });
+
+  test("keyboard Shift bulk on doc band", async ({ page, request }) => {
+    let before = await suggestionsViaApi(request);
+    let docId = [...docSet].find((id) =>
+      before.some(
+        (r) => r.document_id === id && r.status === "pending" && r.band === "high"
+      )
+    );
+    if (docId) {
+      await page.goto(`/documents/${docId}`);
+      await page.keyboard.press("Shift+A");
+      await page.waitForLoadState("networkidle");
+      const after = await suggestionsViaApi(request);
+      expect(
+        nPending(after, (r) => r.document_id === docId && r.band === "high")
+      ).toBe(0);
+      return;
+    }
+    docId = [...docSet].find((id) =>
+      before.some(
+        (r) =>
+          r.document_id === id && r.status === "pending" && r.band === "review"
+      )
+    );
+    expect(docId, "need high or review for Shift bulk").toBeTruthy();
+    before = await suggestionsViaApi(request);
+    const n0 = nPending(
+      before,
+      (r) => r.document_id === docId && r.band === "review"
+    );
+    await page.goto(`/documents/${docId}`);
+    await page.keyboard.press("Shift+R");
+    await page.waitForLoadState("networkidle");
+    const after = await suggestionsViaApi(request);
+    expect(
+      nPending(after, (r) => r.document_id === docId && r.band === "review")
+    ).toBe(0);
+    expect(n0).toBeGreaterThan(0);
+  });
+
+  test("every case doc still opens", async ({ page }) => {
+    await openLibrary(page);
+    for (const href of (await docHrefs(page)).slice(0, 4)) {
+      await page.goto(href);
+      await expect(page.locator("body[data-doc-id]")).toBeVisible();
+      await expect(page.locator(".pdf-page")).toBeVisible();
+    }
+  });
+
+  test("export blocked while flagged; clear → enabled", async ({
+    page,
+    request,
+  }) => {
+    let rows = await suggestionsViaApi(request);
+    const flagged = rows.filter(
+      (r) =>
+        r.status === "pending" && r.band === "flagged" && docSet.has(r.document_id)
+    );
+    await page.goto(`/cases/${caseId}`);
+    const btn = page.locator("#export-btn, [data-action='export']");
+    await expect(btn).toBeVisible();
+
+    if (flagged.length === 0) return;
+
+    await expect(btn).toBeDisabled();
+    for (const f of flagged) {
+      await postDecision(request, api.decide(f.id, "accepted"));
+    }
+    await page.goto(`/cases/${caseId}`);
+    await expect(page.locator("#export-btn, [data-action='export']")).toBeEnabled();
+  });
+});

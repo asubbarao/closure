@@ -1,95 +1,108 @@
--- routes.sql — product loop. Page HTML in v_* views; routes SELECT/INSERT.
--- OpenAPI: GET /docs · /openapi.json · /redoc (quackapi built-in).
--- Auth: CREATE AUTH closure_api in auth.sql; add REQUIRE closure_api to lock a route.
--- Open APIs: allowlisted relations only (not raw query on any name).
+-- routes.sql — HTTP surface (single contract).
+--
+-- Layers:
+--   pages     HTML SSR          /  /cases/…  /documents/…
+--   product   FOIA resources    /api/cases|documents|suggestions|entities/…
+--   catalog   allowlisted data  /api/catalog/…
+--   ops       machine/debug     /api/ops/…
+--
+-- Flow: views own data/html → v_route_get (GETs) → install DDL
+--       POSTs stay explicit (PARAM + INSERT).
+-- OpenAPI: /docs · /openapi.json · /redoc
 
--- ── HTML ───────────────────────────────────────────────────────────────────
+-- ═══════════════════════════════════════════════════════════════════════════
+-- GET catalog (only place GET paths are defined)
+-- ═══════════════════════════════════════════════════════════════════════════
 
-CREATE OR REPLACE ROUTE home GET '/' AS
-SELECT html FROM v_case_html
-WHERE case_id = (SELECT min(case_id) FROM v_case_html);
+CREATE OR REPLACE VIEW v_route_get AS
+SELECT * FROM (VALUES
+    -- ── pages (html column) ──────────────────────────────────────────────
+    ('page_home',     'GET', '/',
+     $$SELECT html FROM v_case_html WHERE case_id = (SELECT min(case_id) FROM v_case_html)$$),
+    ('page_case',     'GET', '/cases/:id',
+     $$SELECT html FROM v_case_html WHERE case_id = $id$$),
+    ('page_stream',   'GET', '/cases/:id/stream',
+     $$SELECT html FROM v_stream_page WHERE case_id = $id$$),
+    ('page_audit',    'GET', '/cases/:id/audit',
+     $$SELECT html FROM v_audit_page WHERE case_id = $id$$),
+    ('page_document', 'GET', '/documents/:id',
+     $$SELECT html FROM v_review_page WHERE document_id = $id AND page_no = 1$$),
+    ('page_document_page', 'GET', '/documents/:id/pages/:page',
+     $$SELECT html FROM v_review_page
+       WHERE document_id = $id
+         AND page_no = least(greatest(try_cast($page AS INTEGER), 1),
+                             (SELECT page_count FROM documents WHERE id = $id))$$),
 
-CREATE OR REPLACE ROUTE case_dash GET '/cases/:id' AS
-SELECT html FROM v_case_html WHERE case_id = $id;
+    -- ── product reads ────────────────────────────────────────────────────
+    ('case_nav',      'GET', '/api/cases/:id/nav',
+     $$SELECT href, text FROM v_nav WHERE case_id = $id ORDER BY href$$),
+    ('case_metrics',  'GET', '/api/cases/:id/metrics',
+     $$SELECT status, band, n, avg_confidence, min_confidence, max_confidence
+       FROM semantic_view(
+           'closure',
+           dimensions := ['case_id', 'status', 'band'],
+           metrics := ['n', 'avg_confidence', 'min_confidence', 'max_confidence']
+       )
+       WHERE case_id = $id ORDER BY status, band$$),
+    ('suggestion_context', 'GET', '/api/suggestions/:id/context',
+     $$SELECT suggestion_id, document_id, page_no, hit_line, line_number, line_text, dist
+       FROM v_suggestion_line_context
+       WHERE suggestion_id = $id ORDER BY line_number$$),
 
-CREATE OR REPLACE ROUTE case_stream GET '/cases/:id/stream' AS
-SELECT html FROM v_stream_page WHERE case_id = $id;
+    -- ── catalog (allowlisted relations via v_cols) ───────────────────────
+    ('catalog_list',  'GET', '/api/catalog',
+     $$SELECT * FROM v_cols ORDER BY relation$$),
+    ('catalog_one',   'GET', '/api/catalog/:relation',
+     $$SELECT * FROM v_cols WHERE relation = $relation$$),
+    ('catalog_rows',  'GET', '/api/catalog/:relation/rows',
+     $$SELECT * FROM query(format('SELECT * FROM {}', $relation))
+       WHERE $relation IN (SELECT relation FROM v_cols)$$),
+    ('catalog_summary','GET', '/api/catalog/:relation/summary',
+     $$SELECT * FROM query(format('FROM (SUMMARIZE {})', $relation))
+       WHERE $relation IN (SELECT relation FROM v_cols)$$),
 
-CREATE OR REPLACE ROUTE case_audit_html GET '/cases/:id/audit' AS
-SELECT html FROM v_audit_page WHERE case_id = $id;
+    -- ── ops (debug / machine; not the FOIA product loop) ─────────────────
+    ('ops_hostfs',    'GET', '/api/ops/hostfs',
+     $$SELECT * FROM v_hostfs ORDER BY root, path$$),
+    ('ops_zips',      'GET', '/api/ops/zips',
+     $$SELECT * FROM v_zips ORDER BY root, zip_path$$),
+    ('ops_shell',     'GET', '/api/ops/shell',
+     $$SELECT * FROM v_shell_patterns ORDER BY kind$$),
+    ('ops_cache',     'GET', '/api/ops/cache',
+     $$SELECT * FROM v_http_cache$$),
+    ('ops_cache_status','GET', '/api/ops/cache/status',
+     $$SELECT * FROM v_http_cache_status ORDER BY original_remote_path, start_offset$$),
+    ('ops_cache_access','GET', '/api/ops/cache/access',
+     $$SELECT * FROM v_http_cache_access$$),
+    ('ops_hosts',     'GET', '/api/ops/hosts',
+     $$SELECT * FROM v_url_hosts ORDER BY token_n DESC, hostname$$),
+    ('ops_templates', 'GET', '/api/ops/templates',
+     $$SELECT * FROM v_src_template_links ORDER BY template, line_number$$),
+    ('ops_semantic',  'GET', '/api/ops/semantic',
+     $$SELECT * FROM v_src_semantic_yaml$$)
+) AS t(name, method, path, body);
 
-CREATE OR REPLACE ROUTE document_review GET '/documents/:id' AS
-SELECT html FROM v_review_page WHERE document_id = $id AND page_no = 1;
+COPY (
+    SELECT format(
+        'CREATE OR REPLACE ROUTE {} {} ''{}'' AS {};',
+        name, method, path,
+        replace(replace(replace(body, chr(10), ' '), chr(13), ' '), '  ', ' ')
+    )
+    FROM v_route_get
+    ORDER BY name
+) TO '.tmp/routes_get.sql' (FORMAT CSV, HEADER false, QUOTE '', ESCAPE '');
 
-CREATE OR REPLACE ROUTE document_page GET '/documents/:id/pages/:page' AS
-SELECT html FROM v_review_page
-WHERE document_id = $id
-  AND page_no = least(greatest(try_cast($page AS INTEGER), 1),
-                      (SELECT page_count FROM documents WHERE id = $id));
+.read .tmp/routes_get.sql
 
--- ── catalog (relational; allowlist) ────────────────────────────────────────
+SELECT count(*)::BIGINT AS routes_get FROM v_route_get;
 
-CREATE OR REPLACE ROUTE api_nav GET '/api/cases/:id/nav' AS
-SELECT href, text FROM v_nav WHERE case_id = $id ORDER BY href;
+-- ═══════════════════════════════════════════════════════════════════════════
+-- POST product writes (resource-nested; STATUS 201 on decision creates)
+-- ═══════════════════════════════════════════════════════════════════════════
 
--- Case metrics: tall dims (status × band) + real measures — no count pivots.
-CREATE OR REPLACE ROUTE api_case_metrics GET '/api/cases/:id/metrics' AS
-SELECT status, band, n, avg_confidence, min_confidence, max_confidence
-FROM semantic_view(
-    'closure',
-    dimensions := ['case_id', 'status', 'band'],
-    metrics := ['n', 'avg_confidence', 'min_confidence', 'max_confidence']
-)
-WHERE case_id = $id
-ORDER BY status, band;
-
-CREATE OR REPLACE ROUTE api_cols GET '/api/cols' AS
-SELECT * FROM v_cols ORDER BY relation;
-
-CREATE OR REPLACE ROUTE api_cols_one GET '/api/cols/:relation' AS
-SELECT * FROM v_cols WHERE relation = $relation;
-
--- Open only main relations that appear in v_cols.
--- query() rejects subqueries in its args (route binder); $relation is the
--- format arg, allowlist is a post-filter. Identifiers only live in v_cols.
-CREATE OR REPLACE ROUTE api_rel GET '/api/rel/:relation' AS
-SELECT * FROM query(format('SELECT * FROM {}', $relation))
-WHERE $relation IN (SELECT relation FROM v_cols);
-
-CREATE OR REPLACE ROUTE api_summarize GET '/api/summarize/:relation' AS
-SELECT * FROM query(format('FROM (SUMMARIZE {})', $relation))
-WHERE $relation IN (SELECT relation FROM v_cols);
-
-CREATE OR REPLACE ROUTE api_template_links GET '/api/templates/links' AS
-SELECT * FROM v_src_template_links ORDER BY template, line_number;
-
-CREATE OR REPLACE ROUTE api_semantic_yaml GET '/api/config/semantic' AS
-SELECT * FROM v_src_semantic_yaml;
-
--- hostfs / shellfs surfaces (read-only; no raw shell cmd from HTTP)
-CREATE OR REPLACE ROUTE api_hostfs GET '/api/hostfs' AS
-SELECT * FROM v_hostfs ORDER BY root, path;
-
-CREATE OR REPLACE ROUTE api_zips GET '/api/zips' AS
-SELECT * FROM v_zips ORDER BY root, zip_path;
-
-CREATE OR REPLACE ROUTE api_shell_patterns GET '/api/shell/patterns' AS
-SELECT * FROM v_shell_patterns ORDER BY kind;
-
--- dns: hostnames seen in PDF tokens + A records (network on request)
-CREATE OR REPLACE ROUTE api_url_hosts GET '/api/url-hosts' AS
-SELECT * FROM v_url_hosts ORDER BY token_n DESC, hostname;
-
--- read_lines + scalarfs: ±3 lines of page text around a suggestion
-CREATE OR REPLACE ROUTE api_suggestion_context GET '/api/suggestions/:id/context' AS
-SELECT suggestion_id, document_id, page_no, hit_line, line_number, line_text, dist
-FROM v_suggestion_line_context
-WHERE suggestion_id = $id
-ORDER BY line_number;
-
--- ── writes ─────────────────────────────────────────────────────────────────
-
-CREATE OR REPLACE ROUTE api_suggestion_decision POST '/api/suggestions/:id/decision'
+-- Decide one suggestion
+CREATE OR REPLACE ROUTE suggestion_decide POST '/api/suggestions/:id/decision'
+  STATUS 201
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
 AS INSERT INTO decisions BY NAME
 WITH b AS (SELECT uuid()::VARCHAR AS batch_id)
@@ -100,7 +113,9 @@ FROM v_decide_targets t
 WHERE t.suggestion_id = $id
 RETURNING suggestion_id, status;
 
-CREATE OR REPLACE ROUTE api_entity_decision POST '/api/entities/:id/decision'
+-- Entity bulk (case-wide; skips flagged)
+CREATE OR REPLACE ROUTE entity_decide POST '/api/entities/:id/decision'
+  STATUS 201
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
 AS INSERT INTO decisions BY NAME
 WITH b AS (SELECT uuid()::VARCHAR AS batch_id)
@@ -112,7 +127,9 @@ FROM v_decide_targets t
 WHERE t.entity_id = $id AND t.status = 'pending' AND t.band <> 'flagged'
 RETURNING suggestion_id, status;
 
-CREATE OR REPLACE ROUTE api_doc_band_decision POST '/api/documents/:id/band/:band/decision'
+-- Band bulk on one document (never flagged)
+CREATE OR REPLACE ROUTE document_band_decide POST '/api/documents/:id/bands/:band/decision'
+  STATUS 201
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
 AS INSERT INTO decisions BY NAME
 WITH b AS (SELECT uuid()::VARCHAR AS batch_id)
@@ -124,7 +141,9 @@ FROM v_decide_targets t
 WHERE t.document_id = $id AND t.status = 'pending' AND t.band = $band AND $band <> 'flagged'
 RETURNING suggestion_id, status;
 
-CREATE OR REPLACE ROUTE api_case_accept_high POST '/api/cases/:id/accept-high'
+-- Accept HIGH case-wide
+CREATE OR REPLACE ROUTE case_accept_high POST '/api/cases/:id/accept-high'
+  STATUS 201
   PARAM threshold INTEGER DEFAULT 90 GE 0 LE 100
   PARAM actor VARCHAR DEFAULT 'reviewer'
 AS INSERT INTO decisions BY NAME
@@ -138,7 +157,9 @@ WHERE t.case_id = $id AND t.status = 'pending' AND t.confidence >= $threshold
   AND t.band <> 'flagged' AND t.flag_tag <> 'false_positive'
 RETURNING suggestion_id, status;
 
-CREATE OR REPLACE ROUTE api_document_add POST '/api/documents/:id/add'
+-- Manual mark (add missed)
+CREATE OR REPLACE ROUTE document_mark_add POST '/api/documents/:id/marks'
+  STATUS 201
   PARAM page INTEGER PARAM x0 DOUBLE PARAM y0 DOUBLE PARAM x1 DOUBLE PARAM y1 DOUBLE
   PARAM text VARCHAR PARAM kind VARCHAR DEFAULT 'MANUAL'
   PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT 'missed by AI'
@@ -155,14 +176,15 @@ SELECT 'added' AS kind, b.suggestion_id, $id AS document_id, $page::INTEGER AS p
 FROM b
 RETURNING suggestion_id, status;
 
-CREATE OR REPLACE ROUTE api_undo POST '/api/undo'
-  PARAM actor VARCHAR DEFAULT 'reviewer' PARAM case_id VARCHAR DEFAULT ''
+-- Undo last batch for case
+CREATE OR REPLACE ROUTE case_undo POST '/api/cases/:id/undo'
+  STATUS 201
+  PARAM actor VARCHAR DEFAULT 'reviewer'
 AS INSERT INTO decisions BY NAME
 WITH target AS (
     SELECT arg_max(batch_id, ts) AS batch_id, arg_max(label, ts) AS label
     FROM v_decision_batches
-    WHERE undoes_batch_id IS NULL
-      AND ($case_id IN ('', '0') OR case_id = $case_id)
+    WHERE undoes_batch_id IS NULL AND case_id = $id
 ),
 b AS (SELECT uuid()::VARCHAR AS batch_id)
 SELECT 'decision' AS kind, h.suggestion_id,
@@ -176,7 +198,8 @@ JOIN target t ON h.batch_id = t.batch_id
 WHERE h.kind = 'decision'
 RETURNING suggestion_id, status;
 
-CREATE OR REPLACE ROUTE api_case_export POST '/api/cases/:id/export' AS
+-- Export redacted PDFs (blocked while flagged pending)
+CREATE OR REPLACE ROUTE case_export POST '/api/cases/:id/export' AS
 SELECT p.document_id, p.out_path,
        (SELECT count(*)::INTEGER
         FROM pdf_redact(p.source_path, p.out_path, p.boxes)) AS pages

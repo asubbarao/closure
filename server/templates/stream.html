@@ -1,32 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Entity stream · {{ case.case_no }}{% endblock %}
-{% block body_attrs %} data-case-id="{{ case.id }}" data-actor="reviewer"{% endblock %}
+{% block body_attrs %} data-surface="stream" data-case-id="{{ case.id }}" data-actor="reviewer"{% endblock %}
 {% block body %}
 <header class="appbar">
   <a class="btn" href="/cases/{{ case.id }}">← Library</a>
   <strong>Entity stream</strong>
-  <span class="mono" style="color:var(--ink2)">{{ case.case_no }} — decide once, case-wide</span>
+  <span class="mono" style="color:var(--ink2)">{{ case.case_no }} — decide once, multi-doc</span>
   <span class="sp"></span>
   <a class="btn" href="/cases/{{ case.id }}/audit">Audit</a>
-  <button type="button" class="btn" id="btn-undo">Undo</button>
-  <button type="button" class="btn" id="btn-accept-high-case">Accept HIGH</button>
-  <button type="button" class="btn primary" id="export-btn"
-    {% if export_blocked %}disabled title="Resolve flagged first"{% endif %}>Export</button>
+  {% include "fragments/case_actions.html" %}
 </header>
 <div class="wrap">
-  <p style="color:var(--ink2);margin-bottom:12px">
-    Hit-ranked · open a document for page work
-  </p>
+  <p style="color:var(--ink2);margin-bottom:12px">Hit-ranked · bulk skips flagged · open a document for page work</p>
   {% for e in entities %}
-  <div class="card" id="e-{{ e.entity_id }}" style="display:flex;align-items:center;gap:12px;margin-top:8px">
-    <div style="flex:1">
-      <div class="{% if e.mono %}mono{% endif %}" style="font-weight:600;font-size:15px">{{ e.canonical_text }}</div>
-      <div class="mono" style="font-size:11px;color:var(--ink2);margin-top:4px">
-        {{ e.kind_label }}{% if e.hit_count %} · {{ e.hit_count }} hits{% endif %}
-      </div>
-    </div>
-    <button type="button" class="btn" data-entity-id="{{ e.entity_id }}" data-entity-decision="accepted">Accept all</button>
-    <button type="button" class="btn danger" data-entity-id="{{ e.entity_id }}" data-entity-decision="rejected">Reject all</button>
+  <div class="card" style="margin-top:8px">
+    {% include "fragments/entity_row.html" %}
   </div>
   {% else %}
   <div class="card" style="color:var(--ink2)">No entities in this case.</div>

@@ -1,5 +1,5 @@
 -- Durable state. DuckDB is the app (quackapi HTTP); files stay files.
--- shellfs / hostfs / scalarfs / zipfs live in-process.
+-- shellfs / hostfs / scalarfs / zipfs / curl_httpfs / cache_httpfs live in-process.
 -- Optional peer: ATTACH Postgres (server/postgres.sql). No MATERIALIZED VIEW.
 -- AI telemetry raw-first (pipeline_runs / llm_calls).
 

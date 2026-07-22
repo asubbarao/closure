@@ -1,20 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Closure · {{ case.case_no }}{% endblock %}
-{% block body_attrs %} data-case-id="{{ case.id }}" data-actor="reviewer"{% endblock %}
+{% block body_attrs %} data-surface="case" data-case-id="{{ case.id }}" data-actor="reviewer"{% endblock %}
 {% block body %}
 <header class="appbar">
   <strong>Closure</strong>
   <span class="mono" style="color:var(--ink2)">{{ case.case_no }} — {{ case.title }}</span>
   <span class="sp"></span>
-  <span class="mono">
-    {% for r in by_status %}{{ r.status }} {{ r.n }}{% if not loop.last %} · {% endif %}{% endfor %}
-  </span>
+  {% include "fragments/status_tally.html" %}
   <a class="btn" href="/cases/{{ case.id }}/stream">Entity stream</a>
   <a class="btn" href="/cases/{{ case.id }}/audit">Audit</a>
-  <button type="button" class="btn" id="btn-undo">Undo</button>
-  <button type="button" class="btn" id="btn-accept-high-case">Accept HIGH</button>
-  <button type="button" class="btn primary" id="export-btn"
-    {% if export_blocked %}disabled title="Resolve flagged first"{% endif %}>Export</button>
+  {% include "fragments/case_actions.html" %}
 </header>
 <div class="wrap">
   <p style="color:var(--ink2);margin-bottom:12px">
@@ -36,16 +31,9 @@
     </tbody>
   </table>
   <div class="card">
-    <h3 style="margin-bottom:8px">Entities — decide once</h3>
+    <h3 style="margin-bottom:8px">Entities — decide once (case-wide)</h3>
     {% for e in entities %}
-    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)">
-      <div style="flex:1">
-        <div class="{% if e.mono %}mono{% endif %}" style="font-weight:600">{{ e.canonical_text }}</div>
-        <div style="font-size:11px;color:var(--ink2)">{{ e.kind_label }}{% if e.n %} · {{ e.n }} hits{% endif %}</div>
-      </div>
-      <button type="button" class="btn" data-entity-id="{{ e.id }}" data-entity-decision="accepted">Accept all</button>
-      <button type="button" class="btn danger" data-entity-id="{{ e.id }}" data-entity-decision="rejected">Reject all</button>
-    </div>
+      {% include "fragments/entity_row.html" %}
     {% else %}
     <div style="color:var(--ink2)">No entities.</div>
     {% endfor %}

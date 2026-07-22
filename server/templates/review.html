@@ -1,52 +1,33 @@
 {% extends "base.html" %}
 {% block title %}Review · {{ doc.filename }}{% endblock %}
-{% block page_css %}
-html,body{height:100%;overflow:hidden}
-.body{display:flex;height:calc(100vh - 48px)}
-.canvas{flex:1;overflow:auto;padding:16px;background:#CBD2DB}
-.rail{width:300px;border-left:1px solid var(--line);background:var(--panel);overflow:auto;display:flex;flex-direction:column}
-.rail h3{padding:10px 12px;border-bottom:1px solid var(--line);font-size:12px}
-{% endblock %}
 {% block body_attrs %}
-  data-doc-id="{{ doc.id }}" data-case-id="{{ case.id }}" data-page-no="{{ page.page_no }}"
-  data-page-count="{{ doc.page_count }}" data-scale="{{ page.scale }}" data-actor="reviewer"
+  data-surface="review" data-doc-id="{{ doc.id }}" data-case-id="{{ case.id }}"
+  data-page-no="{{ page.page_no }}" data-page-count="{{ doc.page_count }}"
+  data-scale="{{ page.scale }}" data-actor="reviewer"
 {% endblock %}
 {% block body %}
 <header class="appbar">
   <a class="btn" href="/cases/{{ case.id }}">← Library</a>
   <span class="mono">{{ doc.filename }}.pdf · p.{{ page.page_no }}/{{ doc.page_count }}</span>
   <span class="sp"></span>
-  <span class="mono">{% for r in by_status %}{{ r.status }} {{ r.n }}{% if not loop.last %} · {% endif %}{% endfor %}</span>
+  {% include "fragments/status_tally.html" %}
   {% if page.page_no > 1 %}<a class="btn" href="/documents/{{ doc.id }}/pages/{{ page.prev }}">Prev</a>{% endif %}
   {% if page.page_no < doc.page_count %}<a class="btn" href="/documents/{{ doc.id }}/pages/{{ page.next }}">Next</a>{% endif %}
-  <button type="button" class="btn" data-band-decide="high" data-status="accepted">Accept HIGH on page</button>
+  <button type="button" class="btn" data-action="undo" data-case-id="{{ case.id }}">Undo</button>
+  <button type="button" class="btn" data-action="accept-high" data-case-id="{{ case.id }}" title="H">HIGH case</button>
+  <button type="button" class="btn" data-action="band" data-doc-id="{{ doc.id }}" data-band="high" data-status="accepted" title="Shift+A">HIGH doc</button>
+  <button type="button" class="btn" data-action="band" data-doc-id="{{ doc.id }}" data-band="review" data-status="rejected" title="Shift+R">Reject REVIEW</button>
 </header>
-<div class="body">
-  <div class="canvas">
+<div class="review-body">
+  <div class="review-canvas">
     <div class="pdf-page" style="height:{{ page.display_h }}px">
       <img src="{{ page.png_href }}" alt="page {{ page.page_no }}" width="{{ page.display_w }}" height="{{ page.display_h }}">
-      {% for m in marks %}
-      <div class="mark {{ m.status }}{% if m.band == 'flagged' and m.status == 'pending' %} flagged{% endif %}"
-           data-id="{{ m.id }}" data-status="{{ m.status }}"
-           style="left:{{ m.left_px }}px;top:{{ m.top_px }}px;width:{{ m.width }}px;height:{{ m.height }}px"
-           title="{{ m.text }} · {{ m.confidence }}"></div>
-      {% endfor %}
+      {% for m in marks %}{% include "fragments/mark.html" %}{% endfor %}
     </div>
   </div>
-  <aside class="rail queue">
-    <h3>Suggestions · j/k · a accept · r reject · n add-mode · u undo</h3>
-    {% for s in suggestions %}
-    <div class="sugg" data-id="{{ s.id }}" data-status="{{ s.status }}">
-      <div style="flex:1">
-        <div style="font-weight:600">{{ s.text }}</div>
-        <div class="mono" style="font-size:11px;opacity:.75">p.{{ s.page_no }} · {{ s.band }} · {{ s.confidence }} · {{ s.status }}</div>
-      </div>
-      {% if s.status == 'pending' %}
-      <button type="button" class="btn" data-decide="accepted" data-id="{{ s.id }}">A</button>
-      <button type="button" class="btn danger" data-decide="rejected" data-id="{{ s.id }}">R</button>
-      {% endif %}
-    </div>
-    {% endfor %}
+  <aside class="review-rail queue">
+    <h3>j/k · a/r · A HIGH · R REVIEW · H case · e entity · n add · u undo · [/]</h3>
+    {% for s in suggestions %}{% include "fragments/sugg_row.html" %}{% endfor %}
   </aside>
 </div>
 {% endblock %}

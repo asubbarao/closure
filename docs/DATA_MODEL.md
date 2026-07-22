@@ -4,68 +4,63 @@
 
 | What | How |
 |------|-----|
-| **Files** | Unmat readers (`pathvariable:` / hostfs). Not a second architecture layer. |
-| **Host tree** | Unmat **`v_hostfs`** (`server/hostfs.sql`) — full path scalars every query |
-| **Tables** | Facts + **display pins** (stable after boot). Durable: `decisions`, `pipeline_runs`, … Boot corpus: `cases`, `documents`, `pages` (with `scale`/`display_*`), `words`, `entities` (with `kind_label`/`mono`), `suggestions`, … |
-| **Live views** | Decision fold, mark px, export gate — change every POST. |
-| **Page views** | `parse_html(tera…)` only. |
-| **Routes** | `SELECT html` / `INSERT` — no second model. |
-| **Checks** | `smoke.sql` on relations — schema is the type system. |
+| **Files** | Unmat readers (`pathvariable:` / hostfs) |
+| **Host tree** | `v_hostfs` — path scalars every query |
+| **Tables** | Facts + display pins; durable: `decisions`, … |
+| **Live views** | Decision fold, mark px, export gate |
+| **Page pipeline** | `v_*_ctx` (JSON) → `v_*_html`/`v_*_page` (`path` + `html`) |
+| **HTTP** | `v_route_get` installs GETs; POSTs nest under resources |
+| **Checks** | `smoke.sql` + e2e against catalog/product APIs |
+
+Page HTML is **VARCHAR** from `tera_render` only — never `parse_html` on pages (breaks `<script src>`).
 
 ## Durable (`store.sql`)
 
 - **`decisions`** — append-only; never UPDATE status in place  
-- **`pipeline_runs`**, **`llm_calls`**, **`run_artifacts`** — optional LLM/export bookkeeping  
+- **`pipeline_runs`**, **`llm_calls`**, **`run_artifacts`** — optional telemetry  
 
 ## Boot corpus (`core.sql`)
 
-From samples + detect. Pins that used to be re-derived in every view:
-
-| Table | Display pins |
-|-------|----------------|
-| `documents` | `display_name`, `size_label` |
-| `pages` | `scale`, `display_w`, `display_h` (680px review) |
+| Table | Notes |
+|-------|--------|
+| `documents` | `display_name`, `size_label` pins |
+| `pages` | `scale`, `display_w`, `display_h` |
 | `entities` | `kind_label`, `mono` |
+| `suggestions` | AI + fold via `v_suggestions` |
+| `words` / token spine | finetype + rules + detect |
 
-Corpus spine (barcode-style intermediates):
+Detect: type hits + rapidfuzz watchlist + metaphone → suggestions / entities.
 
-`word_raw` → `token_types` → `kind_rules` → `token_rule_hits` → `token_kind` → `words` → detect → `suggestions` / `entities`
-
-## Host / packs / shell
-
-| View | Role |
-|------|------|
-| `v_hostfs` | samples/exports/pages/templates + hostfs scalars |
-| `v_zips` | `.zip` on host (LE case packs; empty OK) |
-| `v_shell_patterns` | How to call shellfs (stream vs batch) — not raw HTTP shell |
-
-Zip members: `zip://` + `archive_contents` (member names are not host paths). Pin a pack: `server/zip_pin.sql`.
-
-## Live projections (`views.sql`)
+## Host / packs / shell / cache
 
 | View | Role |
 |------|------|
-| `v_suggestions` | AI + manual + latest decision fold → `status` / `band` |
-| `v_page_marks` | suggestions ⨝ pages.scale → canvas px |
-| `v_export_blocked` | flagged pending gate |
-| `v_entity_stream` | entities + hit `n` |
-| `v_nav` | documents + case shell paths (`UNION ALL`) |
-| `v_case_html` / `v_stream_page` / `v_review_page` / `v_audit_page` | SSR only |
+| `v_hostfs` / `v_zips` | samples, exports, pages, templates; LE zips |
+| `v_shell_patterns` | shellfs recipes (not raw HTTP shell) |
+| `v_http_cache*` | cache_httpfs status (`server/http_cache.sql`) |
+
+## Live + page (`views.sql`)
+
+| View | Role |
+|------|------|
+| `v_suggestions` | Fold → `status` / `band` |
+| `v_page_marks` | Canvas px |
+| `v_export_blocked` / `v_export_plans` | Export gate + redact plan |
+| `v_entity_stream` / `v_nav` | Stream + nav |
+| `v_tpl_*` / `v_*_ctx` | Shared bags + tera context |
+| `v_case_html` · `v_stream_page` · `v_review_page` · `v_audit_page` | `path` + `html` |
+| `v_decide_targets` | POST decision source |
+| `v_route_get` | Defined in `routes.sql` — GET path catalog |
 
 ## Metrics
 
-`CREATE SEMANTIC VIEW closure FROM YAML FILE 'server/config/closure_semantic.yaml'`.  
-Query: `semantic_view('closure', dimensions := […], metrics := […])`.  
-Do not invent `pending_count` columns — filter the `status` dimension.
-
-Optional charts: [ggsql](https://duckdb.org/community_extensions/extensions/ggsql) over the same grains.
-
-## Optional Postgres
-
-When `CLOSURE_POSTGRES` is set, `server/postgres.sql` ATTACHes as `pg`. Same app SQL can join local review state to remote SoR — still no FastAPI middle tier required.
+```sql
+CREATE SEMANTIC VIEW closure FROM YAML FILE 'server/config/closure_semantic.yaml';
+SELECT * FROM semantic_view('closure', dimensions := ['status', 'band'], metrics := ['n', …]);
+```
 
 ## Load order
 
 ```
-config → extensions → auth → hostfs pins → [postgres] → model → routes → smoke → serve
+config → extensions → auth → pins → [postgres] → model → routes → smoke → serve
 ```

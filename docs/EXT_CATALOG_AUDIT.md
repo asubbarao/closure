@@ -1,5 +1,7 @@
 # Extension catalog audit — Closure + quack :9494
 
+> **Live pack:** `server/extensions.sql` (and `server/http_cache.sql`). This audit is a dated snapshot; reconcile against those files if they disagree.
+
 **Date:** 2026-07-22  
 **Channel:** `ext_catalog_clean` on quack `:9494` (token `vori-quack-2026`) — blocks first, never invented TVF args.  
 **Server truth:** `server/extensions.sql` + greps of `server/**/*.sql` (active boot path = `app.sql` → `extensions.sql` → `model.sql` → `core.sql` / `views.sql` / `routes.sql`).  

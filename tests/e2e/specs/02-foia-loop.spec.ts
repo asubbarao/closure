@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import {
+  api,
   firstDocHref,
   openLibrary,
   postDecision,
@@ -38,10 +39,7 @@ test.describe("FOIA loop (mutate + verify)", () => {
     page,
     request,
   }) => {
-    await postDecision(
-      request,
-      `/api/suggestions/${encodeURIComponent(suggestionId)}/decision?status=accepted&actor=e2e`
-    );
+    await postDecision(request, api.decide(suggestionId, "accepted"));
 
     const rows = await suggestionsViaApi(request);
     const row = rows.find((r) => r.id === suggestionId);
@@ -60,10 +58,7 @@ test.describe("FOIA loop (mutate + verify)", () => {
     page,
     request,
   }) => {
-    await postDecision(
-      request,
-      `/api/undo?case_id=${encodeURIComponent(caseId)}&actor=e2e`
-    );
+    await postDecision(request, api.undo(caseId));
 
     const rows = await suggestionsViaApi(request);
     const row = rows.find((r) => r.id === suggestionId);
@@ -82,23 +77,19 @@ test.describe("FOIA loop (mutate + verify)", () => {
     await page.goto(`/cases/${caseId}/stream`);
 
     const rejectBtn = page
-      .locator("[data-entity-decision='rejected']")
+      .locator("[data-action='entity'][data-status='rejected']")
       .first();
     await expect(rejectBtn).toBeVisible();
     const entityId = await rejectBtn.getAttribute("data-entity-id");
     expect(entityId).toBeTruthy();
 
-    // Prefer API for fold (same endpoint as app.js). UI click alone races
-    // fetch→reload; assert product SQL fold, not timing of location.reload.
-    await postDecision(
-      request,
-      `/api/entities/${encodeURIComponent(entityId!)}/decision?status=rejected&actor=e2e`
-    );
+    await postDecision(request, api.entity(entityId!, "rejected"));
 
-    // Control still present for the entity card surface
     await page.goto(`/cases/${caseId}/stream`);
     await expect(
-      page.locator(`[data-entity-id="${entityId}"][data-entity-decision='rejected']`)
+      page.locator(
+        `[data-action='entity'][data-entity-id="${entityId}"][data-status='rejected']`
+      )
     ).toBeVisible();
 
     const rows = await suggestionsViaApi(request);
@@ -128,14 +119,12 @@ test.describe("FOIA loop (mutate + verify)", () => {
 
   test("export button reflects blocked vs open", async ({ page }) => {
     await page.goto(`/cases/${caseId}`);
-    const exportBtn = page.locator("#export-btn");
+    const exportBtn = page.locator("[data-action='export']");
     await expect(exportBtn).toBeVisible();
-    // When flagged remain, button is disabled — corpus often has flagged
     const disabled = await exportBtn.isDisabled();
     if (disabled) {
       await expect(exportBtn).toHaveAttribute("title", /flagged/i);
     } else {
-      // Unblocked: click should POST export (reload); do not require files on disk
       await Promise.all([
         page.waitForLoadState("networkidle"),
         exportBtn.click(),

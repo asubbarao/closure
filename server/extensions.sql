@@ -1,20 +1,34 @@
--- extensions.sql — earned pack only (every LOAD has a product SELECT).
+-- extensions.sql — earned pack. DuckDB is the app runtime (better FastAPI).
 -- Format: yaml→yaml · json→json · HTML→webbed · paths→scalarfs/hostfs · zip→zipfs
--- Inbound HTTP: quackapi. No outbound product fetch → no curl_httpfs.
+-- HTTP stack (order matters):
+--   httpfs → curl_httpfs (quackapi MultiCurl transport) → cache_httpfs (read cache)
 --
--- Earned:
+-- Earned (product SELECTs):
 --   dns          v_url_hosts (dns_lookup on extracted hostnames)
 --   read_lines   v_suggestion_line_context (scalarfs page_uri + lateral window)
 --   splink_udfs  unaccent (norm) + double_metaphone (watchlist phonetic hits)
+--   cache_httpfs v_http_cache_* status + remote https/s3 reads land on disk cache
+-- Earned (runtime):
+--   curl_httpfs  quackapi outbound HTTPUtil — LOAD before serve
 
 INSTALL quackapi FROM community; LOAD quackapi;
 
--- Core httpfs: ambient (INSTALL FROM community / remote readers). Not a product surface.
+-- Outbound stack: transport first, then read cache wrapping http/s3/hf.
 INSTALL httpfs; LOAD httpfs;
+INSTALL curl_httpfs FROM community; LOAD curl_httpfs;
+INSTALL cache_httpfs FROM community; LOAD cache_httpfs;
+INSTALL shellfs FROM community; LOAD shellfs;
+
+-- Project-local on-disk cache (not /tmp). shellfs mkdir; then pin directory.
+SELECT content AS cache_httpfs_mkdir
+FROM read_text('mkdir -p .tmp/cache_httpfs |');
+SET cache_httpfs_cache_directory = '.tmp/cache_httpfs';
+-- on_disk default; profile temp for hit/miss observability
+SET cache_httpfs_profile_type = 'temp';
 
 INSTALL pdf FROM community; LOAD pdf;
 INSTALL tera FROM community; LOAD tera;
-INSTALL shellfs FROM community; LOAD shellfs;
+-- shellfs already LOADed above for cache dir mkdir
 INSTALL hostfs FROM community; LOAD hostfs;
 INSTALL scalarfs FROM community; LOAD scalarfs;
 INSTALL zipfs FROM community; LOAD zipfs;

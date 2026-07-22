@@ -5,6 +5,7 @@
 .read server/store.sql
 .read server/hostfs.sql
 .read server/shellfs.sql
+.read server/http_cache.sql
 .read server/core.sql
 .read server/views.sql
 

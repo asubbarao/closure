@@ -16,19 +16,19 @@ test.describe("smoke navigation (no mutations)", () => {
     await expect(
       page.locator(`a[href="/cases/${caseId}/audit"]`)
     ).toBeVisible();
-    await expect(page.locator("#export-btn")).toBeVisible();
-    await expect(page.locator("#btn-accept-high-case")).toBeVisible();
+    await expect(page.locator("[data-action='export']")).toBeVisible();
+    await expect(page.locator("[data-action='accept-high']")).toBeVisible();
   });
 
   test("entity stream lists decide-once controls", async ({ page }) => {
     const caseId = await openLibrary(page);
     await page.goto(`/cases/${caseId}/stream`);
     await expect(page.getByText("Entity stream")).toBeVisible();
-    // At least one entity card with accept/reject (corpus has entities)
-    const accept = page.locator("[data-entity-decision='accepted']").first();
-    await expect(accept).toBeVisible();
     await expect(
-      page.locator("[data-entity-decision='rejected']").first()
+      page.locator("[data-action='entity'][data-status='accepted']").first()
+    ).toBeVisible();
+    await expect(
+      page.locator("[data-action='entity'][data-status='rejected']").first()
     ).toBeVisible();
   });
 
@@ -41,8 +41,10 @@ test.describe("smoke navigation (no mutations)", () => {
     await expect(page.locator("body[data-doc-id]")).toBeVisible();
     await expect(page.locator(".pdf-page img")).toBeVisible();
     // Corpus has AI suggestions — rail or marks present
-    const pending = page.locator(".sugg[data-status='pending'], .mark[data-status='pending']");
-    await expect(pending.first()).toBeVisible();
+    await expect(
+      page.locator(".sugg[data-status='pending'], .mark[data-status='pending']").first()
+    ).toBeVisible();
+    await expect(page.locator("[data-action='band'][data-band='high']")).toBeVisible();
   });
 
   test("nav API is documents + shell paths for the case", async ({

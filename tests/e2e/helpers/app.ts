@@ -1,6 +1,16 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
-/** Thin-stack helpers: SSR pages + POST mutations. No SPA locators. */
+/** Paths match server/routes.sql product + catalog surface. */
+
+export type Suggestion = {
+  id: string;
+  status: string;
+  band: string;
+  document_id: string;
+  page_no?: number;
+  text: string;
+  entity_id: string | null;
+};
 
 export async function openLibrary(page: Page) {
   await page.goto("/");
@@ -10,33 +20,25 @@ export async function openLibrary(page: Page) {
   return caseId as string;
 }
 
-export async function openStream(page: Page, caseId: string) {
-  await page.goto(`/cases/${caseId}/stream`);
-  await expect(page.locator("body[data-case-id]")).toHaveAttribute(
-    "data-case-id",
-    caseId
-  );
+export async function docHrefs(page: Page) {
+  const links = page.locator('table a.btn[href^="/documents/"]');
+  await expect(links.first()).toBeVisible();
+  const n = await links.count();
+  const hrefs: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const h = await links.nth(i).getAttribute("href");
+    if (h) hrefs.push(h);
+  }
+  return hrefs;
 }
 
-export async function openAudit(page: Page, caseId: string) {
-  await page.goto(`/cases/${caseId}/audit`);
-  await expect(page.locator("strong").filter({ hasText: /Audit/ })).toBeVisible();
-}
-
-/** First document id from library table Open link. */
 export async function firstDocHref(page: Page) {
-  const open = page.locator('table a.btn[href^="/documents/"]').first();
-  await expect(open).toBeVisible();
-  const href = await open.getAttribute("href");
-  expect(href).toMatch(/^\/documents\//);
-  return href as string;
+  const hrefs = await docHrefs(page);
+  expect(hrefs.length).toBeGreaterThan(0);
+  return hrefs[0];
 }
 
-/** POST decision APIs the way app.js does (query params + empty JSON body). */
-export async function postDecision(
-  request: APIRequestContext,
-  path: string
-) {
+export async function postDecision(request: APIRequestContext, path: string) {
   const res = await request.post(path, {
     headers: {
       Accept: "application/json",
@@ -54,18 +56,58 @@ export async function getNav(request: APIRequestContext, caseId: string) {
   return res.json();
 }
 
-/** Pull suggestion rows via allowlisted relation open (DB-as-server). */
+/** Catalog rows — allowlisted relation open. */
+export async function catalogRows(request: APIRequestContext, relation: string) {
+  const res = await request.get(
+    `/api/catalog/${encodeURIComponent(relation)}/rows`
+  );
+  expect(res.ok(), `catalog rows ${relation} → ${res.status()}`).toBeTruthy();
+  return res.json();
+}
+
 export async function suggestionsViaApi(request: APIRequestContext) {
-  const res = await request.get("/api/rel/v_suggestions");
-  expect(res.ok(), `api/rel/v_suggestions → ${res.status()}`).toBeTruthy();
-  return res.json() as Promise<
-    Array<{
-      id: string;
-      status: string;
-      band: string;
-      document_id: string;
-      text: string;
-      entity_id: string | null;
-    }>
+  return catalogRows(request, "v_suggestions") as Promise<Suggestion[]>;
+}
+
+export async function documentsViaApi(request: APIRequestContext) {
+  return catalogRows(request, "documents") as Promise<
+    Array<{ id: string; case_id: string; filename: string }>
   >;
 }
+
+export function caseDocIds(
+  docs: Array<{ id: string; case_id: string }>,
+  caseId: string
+) {
+  return new Set(docs.filter((d) => d.case_id === caseId).map((d) => d.id));
+}
+
+export function pending(
+  rows: Suggestion[],
+  pred: (r: Suggestion) => boolean = () => true
+) {
+  return rows.filter((r) => r.status === "pending" && pred(r));
+}
+
+export function nPending(
+  rows: Suggestion[],
+  pred: (r: Suggestion) => boolean = () => true
+) {
+  return pending(rows, pred).length;
+}
+
+/** Product write URLs (mirror app.js). */
+export const api = {
+  decide: (id: string, status: string, actor = "e2e") =>
+    `/api/suggestions/${encodeURIComponent(id)}/decision?status=${status}&actor=${actor}`,
+  entity: (id: string, status: string, actor = "e2e") =>
+    `/api/entities/${encodeURIComponent(id)}/decision?status=${status}&actor=${actor}`,
+  band: (docId: string, band: string, status: string, actor = "e2e") =>
+    `/api/documents/${encodeURIComponent(docId)}/bands/${encodeURIComponent(band)}/decision?status=${status}&actor=${actor}`,
+  acceptHigh: (caseId: string, actor = "e2e") =>
+    `/api/cases/${encodeURIComponent(caseId)}/accept-high?threshold=90&actor=${actor}`,
+  undo: (caseId: string, actor = "e2e") =>
+    `/api/cases/${encodeURIComponent(caseId)}/undo?actor=${actor}`,
+  export: (caseId: string) =>
+    `/api/cases/${encodeURIComponent(caseId)}/export`,
+};

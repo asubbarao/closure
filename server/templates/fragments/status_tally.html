@@ -1,0 +1,2 @@
+{# expects by_status in parent context #}
+<span class="mono">{% for r in by_status %}{{ r.status }} {{ r.n }}{% if not loop.last %} · {% endif %}{% endfor %}</span>

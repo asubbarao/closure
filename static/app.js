@@ -1,297 +1,239 @@
 /**
- * Closure thin client — progressive enhancement only.
- * Product state is SSR (tera) + SQL. After any mutation: reload.
- * Browser-only: keyboard focus, mark click, drag-add, POST helpers.
+ * Progressive enhancement only. State lives in SQL + SSR.
+ * Clicks: [data-action]. Review keys: j/k a/r A/R H e n u [ ]
  */
 (function () {
   "use strict";
+  var body = document.body;
+  var actor = (body && body.dataset.actor) || "reviewer";
 
-  var actor =
-    (document.body && document.body.dataset.actor) ||
-    "reviewer";
-
-  function qs(sel, root) {
-    return (root || document).querySelector(sel);
+  function q(s, r) { return (r || document).querySelector(s); }
+  function qa(s, r) {
+    return Array.prototype.slice.call((r || document).querySelectorAll(s));
   }
-  function qsa(sel, root) {
-    return Array.prototype.slice.call((root || document).querySelectorAll(sel));
+  function typing(el) {
+    return el && el.tagName && /INPUT|TEXTAREA|SELECT/i.test(el.tagName);
   }
-
   function post(url) {
     return fetch(url, {
       method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: "{}",
     }).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status + " " + url);
       return r;
     });
   }
-
-  function mutate(url) {
-    return post(url)
-      .then(function () {
-        location.reload();
-      })
-      .catch(function (e) {
-        console.error(e);
-        alert(e.message || String(e));
-      });
-  }
-
-  function decisionUrl(id, status, reason) {
-    var q = new URLSearchParams();
-    q.set("status", status);
-    q.set("actor", actor);
-    if (reason) q.set("reason", reason);
-    return "/api/suggestions/" + encodeURIComponent(id) + "/decision?" + q.toString();
-  }
-
-  function entityUrl(id, status) {
-    var q = new URLSearchParams();
-    q.set("status", status);
-    q.set("actor", actor);
-    return "/api/entities/" + encodeURIComponent(id) + "/decision?" + q.toString();
-  }
-
-  /* ── case library ─────────────────────────────────────────────── */
-  function bootCase() {
-    var caseId = document.body && document.body.dataset.caseId;
-    if (!caseId) return;
-
-    qsa("[data-entity-decision]").forEach(function (el) {
-      el.addEventListener("click", function (ev) {
-        ev.preventDefault();
-        var id = el.getAttribute("data-entity-id");
-        var status = el.getAttribute("data-entity-decision");
-        if (id && status) mutate(entityUrl(id, status));
-      });
+  function go(url) {
+    return post(url).then(function () { location.reload(); }).catch(function (e) {
+      console.error(e);
+      alert(e.message || String(e));
     });
+  }
+  function qs(o) {
+    var p = new URLSearchParams();
+    Object.keys(o).forEach(function (k) {
+      if (o[k] != null && o[k] !== "") p.set(k, String(o[k]));
+    });
+    return p.toString();
+  }
 
-    var acceptHigh = qs("#btn-accept-high-case");
-    if (acceptHigh) {
-      acceptHigh.addEventListener("click", function () {
-        mutate(
-          "/api/cases/" +
-            encodeURIComponent(caseId) +
-            "/accept-high?threshold=90&actor=" +
-            encodeURIComponent(actor)
-        );
-      });
-    }
+  /* Product API — keep in sync with server/routes.sql */
+  var api = {
+    decide: function (id, status) {
+      return "/api/suggestions/" + encodeURIComponent(id) + "/decision?" +
+        qs({ status: status, actor: actor });
+    },
+    entity: function (id, status) {
+      return "/api/entities/" + encodeURIComponent(id) + "/decision?" +
+        qs({ status: status, actor: actor });
+    },
+    band: function (docId, band, status) {
+      return "/api/documents/" + encodeURIComponent(docId) + "/bands/" +
+        encodeURIComponent(band) + "/decision?" + qs({ status: status, actor: actor });
+    },
+    acceptHigh: function (caseId) {
+      return "/api/cases/" + encodeURIComponent(caseId) +
+        "/accept-high?" + qs({ threshold: 90, actor: actor });
+    },
+    undo: function (caseId) {
+      return "/api/cases/" + encodeURIComponent(caseId) + "/undo?" +
+        qs({ actor: actor });
+    },
+    export: function (caseId) {
+      return "/api/cases/" + encodeURIComponent(caseId) + "/export";
+    },
+    mark: function (docId, q) {
+      return "/api/documents/" + encodeURIComponent(docId) + "/marks?" + qs(q);
+    },
+  };
 
-    var exportBtn = qs("#export-btn");
-    if (exportBtn) {
-      exportBtn.addEventListener("click", function () {
-        mutate(
-          "/api/cases/" + encodeURIComponent(caseId) + "/export"
-        );
-      });
-    }
-
-    var undoBtn = qs("#btn-undo");
-    if (undoBtn) {
-      undoBtn.addEventListener("click", function () {
-        mutate(
-          "/api/undo?case_id=" +
-            encodeURIComponent(caseId) +
-            "&actor=" +
-            encodeURIComponent(actor)
-        );
-      });
+  function runAction(el) {
+    var a = el.getAttribute("data-action");
+    if (!a) return;
+    var caseId = el.getAttribute("data-case-id") || body.dataset.caseId || "";
+    var docId = el.getAttribute("data-doc-id") || body.dataset.docId || "";
+    if (a === "decide") {
+      go(api.decide(el.getAttribute("data-id"), el.getAttribute("data-status")));
+    } else if (a === "entity") {
+      go(api.entity(el.getAttribute("data-entity-id"), el.getAttribute("data-status")));
+    } else if (a === "band") {
+      var band = el.getAttribute("data-band");
+      if (band && band !== "flagged")
+        go(api.band(docId, band, el.getAttribute("data-status") || "accepted"));
+    } else if (a === "accept-high") {
+      go(api.acceptHigh(caseId));
+    } else if (a === "undo") {
+      go(api.undo(caseId));
+    } else if (a === "export") {
+      if (el.disabled) return;
+      go(api.export(caseId));
     }
   }
 
-  /* ── review workspace ─────────────────────────────────────────── */
+  document.addEventListener("click", function (ev) {
+    var el = ev.target.closest("[data-action]");
+    if (!el) return;
+    ev.preventDefault();
+    runAction(el);
+  });
+
+  /* ── review keyboard ─────────────────────────────────────────── */
   var focusIdx = 0;
-
   function pendingMarks() {
-    return qsa(".mark[data-status='pending'], .mark.pending");
+    return qa(".mark[data-status='pending']").filter(function (m) {
+      return m.getAttribute("data-band") !== "flagged";
+    });
   }
-
+  function setCurrent(m) {
+    qa(".mark, .sugg").forEach(function (el) { el.classList.remove("current"); });
+    if (!m) return;
+    m.classList.add("current");
+    if (m.scrollIntoView) m.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    var id = m.getAttribute("data-id");
+    var s = id && q(".sugg[data-id='" + id + "']");
+    if (s) s.classList.add("current");
+  }
   function focusMark(i) {
     var marks = pendingMarks();
     if (!marks.length) return;
     focusIdx = ((i % marks.length) + marks.length) % marks.length;
-    marks.forEach(function (m, j) {
-      m.classList.toggle("current", j === focusIdx);
-    });
-    var m = marks[focusIdx];
-    if (m && m.scrollIntoView) m.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    setCurrent(marks[focusIdx]);
+  }
+  function curMark() {
+    return q(".mark.current") || pendingMarks()[0] || null;
   }
 
-  function currentId() {
-    var marks = pendingMarks();
-    var m = marks[focusIdx] || marks[0];
-    return m && (m.dataset.id || m.getAttribute("data-id"));
-  }
-
-  function decide(status) {
-    var id = currentId();
-    if (!id) return;
-    mutate(decisionUrl(id, status));
-  }
-
-  function bootReview() {
-    var docId = document.body && document.body.dataset.docId;
-    if (!docId) return;
-
-    qsa(".mark").forEach(function (m) {
+  if (body && body.dataset.surface === "review") {
+    qa(".mark").forEach(function (m) {
       m.addEventListener("click", function () {
-        var id = m.dataset.id || m.getAttribute("data-id");
-        if (!id) return;
-        qsa(".mark").forEach(function (x) {
-          x.classList.remove("current");
-        });
-        m.classList.add("current");
         var marks = pendingMarks();
-        focusIdx = Math.max(0, marks.indexOf(m));
+        var i = marks.indexOf(m);
+        focusIdx = i >= 0 ? i : 0;
+        setCurrent(m);
       });
     });
-
-    qsa("[data-decide]").forEach(function (btn) {
-      btn.addEventListener("click", function (ev) {
-        ev.preventDefault();
-        var id = btn.getAttribute("data-id") || currentId();
-        var status = btn.getAttribute("data-decide");
-        if (id && status) mutate(decisionUrl(id, status));
-      });
-    });
-
-    qsa("[data-band-decide]").forEach(function (btn) {
-      btn.addEventListener("click", function (ev) {
-        ev.preventDefault();
-        var band = btn.getAttribute("data-band-decide");
-        var status = btn.getAttribute("data-status") || "accepted";
-        if (!band) return;
-        mutate(
-          "/api/documents/" +
-            encodeURIComponent(docId) +
-            "/band/" +
-            encodeURIComponent(band) +
-            "/decision?status=" +
-            encodeURIComponent(status) +
-            "&actor=" +
-            encodeURIComponent(actor)
-        );
-      });
-    });
-
     document.addEventListener("keydown", function (e) {
-      if (e.target && /input|textarea|select/i.test(e.target.tagName)) return;
+      if (typing(e.target)) return;
       var k = e.key;
-      if (k === "j" || k === "ArrowDown") {
+      var caseId = body.dataset.caseId || "";
+      var docId = body.dataset.docId || "";
+      var pageNo = +body.dataset.pageNo || 1;
+      var pageCount = +body.dataset.pageCount || 1;
+      var m = curMark();
+      if (k === "j" || k === "ArrowDown") { e.preventDefault(); focusMark(focusIdx + 1); }
+      else if (k === "k" || k === "ArrowUp") { e.preventDefault(); focusMark(focusIdx - 1); }
+      else if (k === "a" && !e.shiftKey && m) {
         e.preventDefault();
-        focusMark(focusIdx + 1);
-      } else if (k === "k" || k === "ArrowUp") {
+        go(api.decide(m.getAttribute("data-id"), "accepted"));
+      } else if (k === "r" && !e.shiftKey && m) {
         e.preventDefault();
-        focusMark(focusIdx - 1);
-      } else if (k === "a") {
+        go(api.decide(m.getAttribute("data-id"), "rejected"));
+      } else if (k === "A" || (k === "a" && e.shiftKey)) {
         e.preventDefault();
-        decide("accepted");
-      } else if (k === "r") {
+        go(api.band(docId, "high", "accepted"));
+      } else if (k === "R" || (k === "r" && e.shiftKey)) {
         e.preventDefault();
-        decide("rejected");
-      } else if (k === "u") {
+        go(api.band(docId, "review", "rejected"));
+      } else if (k === "H" || (k === "h" && e.shiftKey)) {
         e.preventDefault();
-        var caseId = document.body.dataset.caseId || "";
-        mutate(
-          "/api/undo?case_id=" +
-            encodeURIComponent(caseId) +
-            "&actor=" +
-            encodeURIComponent(actor)
-        );
+        go(api.acceptHigh(caseId));
+      } else if ((k === "e" || k === "E") && m && m.getAttribute("data-entity-id")) {
+        e.preventDefault();
+        go(api.entity(m.getAttribute("data-entity-id"), "accepted"));
+      } else if (k === "u" && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        go(api.undo(caseId));
+      } else if (k === "n" || k === "N") {
+        e.preventDefault();
+        body.classList.toggle("add-mode");
+      } else if (k === "[" && pageNo > 1) {
+        e.preventDefault();
+        location.href = "/documents/" + encodeURIComponent(docId) + "/pages/" + (pageNo - 1);
+      } else if (k === "]" && pageNo < pageCount) {
+        e.preventDefault();
+        location.href = "/documents/" + encodeURIComponent(docId) + "/pages/" + (pageNo + 1);
       }
     });
-
     focusMark(0);
-    bootAddMissed(docId);
+    bootAdd(body.dataset.docId || "");
   }
 
-  /* ── add-missed drag (only irreducible canvas work) ───────────── */
-  function bootAddMissed(docId) {
-    var page = qs(".pdf-page") || qs("#pdf-page");
-    if (!page) return;
-    var scale = parseFloat(document.body.dataset.scale || "1") || 1;
-    var pageNo = parseInt(document.body.dataset.pageNo || "1", 10) || 1;
-    var start = null;
-    var box = null;
+  if (body && (body.dataset.surface === "case" || body.dataset.surface === "stream")) {
+    document.addEventListener("keydown", function (e) {
+      if (typing(e.target)) return;
+      var caseId = body.dataset.caseId || "";
+      if (e.key === "H" || (e.key === "h" && e.shiftKey)) {
+        e.preventDefault();
+        go(api.acceptHigh(caseId));
+      } else if (e.key === "u" && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        go(api.undo(caseId));
+      }
+    });
+  }
 
+  function bootAdd(docId) {
+    var page = q(".pdf-page");
+    if (!page || !docId) return;
+    var scale = +body.dataset.scale || 1;
+    var pageNo = +body.dataset.pageNo || 1;
+    var start = null, box = null;
     function pt(ev) {
       var r = page.getBoundingClientRect();
-      return {
-        x: (ev.clientX - r.left) / scale,
-        y: (ev.clientY - r.top) / scale,
-      };
+      return { x: (ev.clientX - r.left) / scale, y: (ev.clientY - r.top) / scale };
     }
-
     page.addEventListener("mousedown", function (ev) {
-      if (ev.button !== 0 || !ev.altKey && !ev.shiftKey && !document.body.classList.contains("add-mode"))
-        return;
+      if (ev.button !== 0 || (!ev.shiftKey && !body.classList.contains("add-mode"))) return;
       ev.preventDefault();
       start = pt(ev);
       if (!box) {
         box = document.createElement("div");
         box.className = "add-box";
-        box.style.position = "absolute";
-        box.style.border = "2px dashed #1d4ed8";
-        box.style.background = "rgba(29,78,216,.12)";
-        page.style.position = page.style.position || "relative";
+        box.style.cssText = "position:absolute;border:2px dashed #1d4ed8;background:rgba(29,78,216,.12)";
         page.appendChild(box);
       }
     });
-
     window.addEventListener("mousemove", function (ev) {
       if (!start || !box) return;
       var p = pt(ev);
-      var x0 = Math.min(start.x, p.x);
-      var y0 = Math.min(start.y, p.y);
-      var x1 = Math.max(start.x, p.x);
-      var y1 = Math.max(start.y, p.y);
+      var x0 = Math.min(start.x, p.x), y0 = Math.min(start.y, p.y);
+      var x1 = Math.max(start.x, p.x), y1 = Math.max(start.y, p.y);
       box.style.left = x0 * scale + "px";
       box.style.top = y0 * scale + "px";
       box.style.width = (x1 - x0) * scale + "px";
       box.style.height = (y1 - y0) * scale + "px";
-      box.dataset.x0 = x0;
-      box.dataset.y0 = y0;
-      box.dataset.x1 = x1;
-      box.dataset.y1 = y1;
+      box.dataset.x0 = x0; box.dataset.y0 = y0; box.dataset.x1 = x1; box.dataset.y1 = y1;
     });
-
     window.addEventListener("mouseup", function () {
       if (!start || !box) return;
       start = null;
-      var x0 = parseFloat(box.dataset.x0 || "0");
-      var y0 = parseFloat(box.dataset.y0 || "0");
-      var x1 = parseFloat(box.dataset.x1 || "0");
-      var y1 = parseFloat(box.dataset.y1 || "0");
+      var x0 = +box.dataset.x0, y0 = +box.dataset.y0, x1 = +box.dataset.x1, y1 = +box.dataset.y1;
       if (Math.abs(x1 - x0) < 2 || Math.abs(y1 - y0) < 2) return;
       var text = window.prompt("Text for missed redaction", "") || "MANUAL";
-      var q = new URLSearchParams();
-      q.set("page", String(pageNo));
-      q.set("x0", String(x0));
-      q.set("y0", String(y0));
-      q.set("x1", String(x1));
-      q.set("y1", String(y1));
-      q.set("text", text);
-      q.set("actor", actor);
-      mutate(
-        "/api/documents/" + encodeURIComponent(docId) + "/add?" + q.toString()
-      );
-    });
-
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "n" && !/input|textarea/i.test((e.target || {}).tagName || "")) {
-        document.body.classList.toggle("add-mode");
-      }
+      go(api.mark(docId, {
+        page: pageNo, x0: x0, y0: y0, x1: x1, y1: y1, text: text, actor: actor
+      }));
     });
   }
-
-  document.addEventListener("DOMContentLoaded", function () {
-    bootCase();
-    bootReview();
-  });
 })();

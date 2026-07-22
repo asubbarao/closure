@@ -10,7 +10,7 @@
 --
 -- Catalog:  SELECT * FROM v_cols
 -- Metrics:  semantic_view('closure', …)  — edit server/config/closure_semantic.yaml
--- Open:     GET /api/rel/:relation (allowlisted via v_cols)
+-- Open:     GET /api/catalog/:relation/rows (allowlisted via v_cols)
 
 DROP SEMANTIC VIEW IF EXISTS suggestion_metrics;
 DROP SEMANTIC VIEW IF EXISTS closure;
@@ -27,7 +27,10 @@ WHERE table_schema = 'main'
       'v_suggestions', 'v_decide_targets', 'v_entity_stream', 'v_nav',
       'v_export_blocked', 'v_export_plans', 'v_audit', 'v_decision_batches',
       'v_history_events', 'v_hostfs', 'v_zips', 'v_shell_patterns',
-      'v_url_hosts', 'v_suggestion_line_context', 'v_cols', 'v_page_marks'
+      'v_url_hosts', 'v_suggestion_line_context', 'v_cols', 'v_page_marks',
+      'v_http_cache', 'v_http_cache_config', 'v_http_cache_status',
+      'v_http_cache_access', 'v_http_cache_filesystems',
+      'v_route_get', 'v_case_html', 'v_stream_page', 'v_audit_page', 'v_review_page'
   )
 GROUP BY table_name;
 
@@ -125,92 +128,145 @@ FROM v_export_blocked b
 JOIN documents d ON d.case_id = b.case_id
 LEFT JOIN boxes x ON x.document_id = d.id;
 
--- ── page HTML (list-pack only here) ────────────────────────────────────────
+-- ── page HTML ──────────────────────────────────────────────────────────────
+-- Separation: SQL builds ctx (bags) · tera pages/fragments render · static CSS/JS.
+-- VARCHAR html only — never parse_html on pages (voids <script src> → app.js dead).
+-- template_path glob loads fragments/ for {% include %}.
 
-CREATE OR REPLACE VIEW v_case_html AS
-SELECT c.id AS case_id,
-       parse_html(tera_render(
-           'case.html',
-           {
-               'case': struct_pack(id := c.id, case_no := c.case_no, title := c.title),
-               'documents': coalesce((SELECT list(u ORDER BY u.filename)
-                                      FROM v_doc_ui u WHERE u.case_id = c.id), []),
-               'by_status': coalesce((SELECT list(m ORDER BY status)
-                    FROM semantic_view('closure', dimensions := ['case_id', 'status'],
-                         metrics := ['n', 'avg_confidence']) m WHERE m.case_id = c.id), []),
-               'by_band': coalesce((SELECT list(m ORDER BY band)
-                    FROM semantic_view('closure', dimensions := ['case_id', 'band'],
-                         metrics := ['n', 'avg_confidence']) m WHERE m.case_id = c.id), []),
-               'entities': coalesce((SELECT list(struct_pack(
-                    id := entity_id, canonical_text := canonical_text, kind := kind,
-                    kind_label := kind_label, n := hit_count, mono := mono
-                ) ORDER BY hit_count DESC NULLS LAST, kind, canonical_text)
-                FROM v_entity_stream e WHERE e.case_id = c.id), []),
-               'audit': coalesce((SELECT list(struct_pack(
-                    ts_short := strftime(a.ts, '%H:%M'), action := a.action, actor := a.actor,
-                    target := coalesce(a.target, ''), reason := coalesce(a.reason, '')
-                ) ORDER BY a.ts DESC) FROM v_audit a WHERE a.case_id = c.id), []),
-               'export_blocked': coalesce(
-                   (SELECT export_blocked FROM v_export_blocked b WHERE b.case_id = c.id), false)
-           }::JSON,
-           template_path := 'server/templates/**/*.html'
-       )) AS html
-FROM cases c;
+CREATE OR REPLACE VIEW v_tpl_entities AS
+SELECT case_id,
+       list(struct_pack(
+           id := entity_id, canonical_text := canonical_text, kind := kind,
+           kind_label := kind_label, n := hit_count, mono := mono
+       ) ORDER BY hit_count DESC NULLS LAST, kind, canonical_text) AS entities
+FROM v_entity_stream
+GROUP BY case_id;
 
-CREATE OR REPLACE VIEW v_stream_page AS
+CREATE OR REPLACE VIEW v_tpl_case AS
 SELECT c.id AS case_id,
-       parse_html(tera_render(
-           'stream.html',
-           {
-               'case': struct_pack(id := c.id, case_no := c.case_no, title := c.title),
-               'entities': coalesce((SELECT list(e ORDER BY hit_count DESC NULLS LAST, canonical_text)
-                                     FROM v_entity_stream e WHERE e.case_id = c.id), []),
-               'export_blocked': coalesce(
-                   (SELECT export_blocked FROM v_export_blocked b WHERE b.case_id = c.id), false)
-           }::JSON,
-           template_path := 'server/templates/**/*.html'
-       )) AS html
-FROM cases c;
+       struct_pack(id := c.id, case_no := c.case_no, title := c.title) AS case_row,
+       coalesce(e.entities, []) AS entities,
+       coalesce(b.export_blocked, false) AS export_blocked
+FROM cases c
+LEFT JOIN v_tpl_entities e ON e.case_id = c.id
+LEFT JOIN v_export_blocked b ON b.case_id = c.id;
 
-CREATE OR REPLACE VIEW v_audit_page AS
+-- Context views (JSON) then thin tera_render.
+
+CREATE OR REPLACE VIEW v_case_ctx AS
+SELECT t.case_id,
+       json_object(
+           'case', t.case_row,
+           'documents', coalesce((
+               SELECT list(u ORDER BY u.filename) FROM v_doc_ui u WHERE u.case_id = t.case_id
+           ), []),
+           'by_status', coalesce((
+               SELECT list(m ORDER BY status)
+               FROM semantic_view('closure', dimensions := ['case_id', 'status'],
+                    metrics := ['n', 'avg_confidence']) m
+               WHERE m.case_id = t.case_id
+           ), []),
+           'by_band', coalesce((
+               SELECT list(m ORDER BY band)
+               FROM semantic_view('closure', dimensions := ['case_id', 'band'],
+                    metrics := ['n', 'avg_confidence']) m
+               WHERE m.case_id = t.case_id
+           ), []),
+           'entities', t.entities,
+           'audit', coalesce((
+               SELECT list(struct_pack(
+                   ts_short := strftime(a.ts, '%H:%M'), action := a.action, actor := a.actor,
+                   target := coalesce(a.target, ''), reason := coalesce(a.reason, '')
+               ) ORDER BY a.ts DESC)
+               FROM v_audit a WHERE a.case_id = t.case_id
+           ), []),
+           'export_blocked', t.export_blocked
+       ) AS ctx
+FROM v_tpl_case t;
+
+CREATE OR REPLACE VIEW v_stream_ctx AS
+SELECT case_id,
+       json_object(
+           'case', case_row,
+           'entities', entities,
+           'export_blocked', export_blocked
+       ) AS ctx
+FROM v_tpl_case;
+
+CREATE OR REPLACE VIEW v_audit_ctx AS
 SELECT c.id AS case_id,
-       parse_html(tera_render(
-           'audit.html',
-           {
-               'case': struct_pack(id := c.id, case_no := c.case_no, title := c.title),
-               'events': coalesce((SELECT list(struct_pack(
+       json_object(
+           'case', struct_pack(id := c.id, case_no := c.case_no, title := c.title),
+           'events', coalesce((
+               SELECT list(struct_pack(
                    ts_short := strftime(a.ts, '%Y-%m-%d %H:%M:%S'),
                    action := a.action, actor := a.actor,
                    target := coalesce(a.target, ''), reason := coalesce(a.reason, '')
-               ) ORDER BY a.ts DESC) FROM v_audit a WHERE a.case_id = c.id), [])
-           }::JSON,
-           template_path := 'server/templates/**/*.html'
-       )) AS html
+               ) ORDER BY a.ts DESC)
+               FROM v_audit a WHERE a.case_id = c.id
+           ), [])
+       ) AS ctx
 FROM cases c;
 
-CREATE OR REPLACE VIEW v_review_page AS
+CREATE OR REPLACE VIEW v_review_ctx AS
 SELECT d.id AS document_id, p.page_no,
-    parse_html(tera_render('review.html', {
-        'case': struct_pack(id := d.case_id, case_no := c.case_no, title := c.title),
-        'doc':  struct_pack(id := d.id, filename := d.filename, page_count := d.page_count),
-        'page': struct_pack(
-            page_no := p.page_no,
-            prev := greatest(p.page_no - 1, 1),
-            next := least(p.page_no + 1, d.page_count),
-            width_pt := p.width_pt, height_pt := p.height_pt,
-            scale := round(p.scale, 4),
-            display_w := p.display_w, display_h := p.display_h,
-            png_href := '/pages/' || d.filename || '/p' || p.page_no || '.png'),
-        'marks': coalesce((SELECT list(m) FROM v_page_marks m
-                  WHERE m.document_id = d.id AND m.page_no = p.page_no), []),
-        'by_status': coalesce((SELECT list(m ORDER BY status)
-                      FROM semantic_view('closure', dimensions := ['document_id', 'status'],
-                           metrics := ['n']) m WHERE m.document_id = d.id), []),
-        'suggestions': coalesce((SELECT list(s ORDER BY (page_no = p.page_no) DESC,
-                                    (status = 'pending') DESC, page_no, id)
-            FROM v_suggestions s WHERE s.document_id = d.id
-              AND (s.page_no = p.page_no OR s.status = 'pending')), [])
-    }::JSON, template_path := 'server/templates/**/*.html')) AS html
+       json_object(
+           'case', struct_pack(id := c.id, case_no := c.case_no, title := c.title),
+           'doc',  struct_pack(id := d.id, filename := d.filename, page_count := d.page_count),
+           'page', struct_pack(
+               page_no := p.page_no,
+               prev := greatest(p.page_no - 1, 1),
+               next := least(p.page_no + 1, d.page_count),
+               width_pt := p.width_pt, height_pt := p.height_pt,
+               scale := round(p.scale, 4),
+               display_w := p.display_w, display_h := p.display_h,
+               png_href := '/pages/' || d.filename || '/p' || p.page_no || '.png'
+           ),
+           'marks', coalesce((
+               SELECT list(m) FROM v_page_marks m
+               WHERE m.document_id = d.id AND m.page_no = p.page_no
+           ), []),
+           'by_status', coalesce((
+               SELECT list(m ORDER BY status)
+               FROM semantic_view('closure', dimensions := ['document_id', 'status'],
+                    metrics := ['n']) m
+               WHERE m.document_id = d.id
+           ), []),
+           'suggestions', coalesce((
+               SELECT list(s ORDER BY (page_no = p.page_no) DESC,
+                                   (status = 'pending') DESC, page_no, id)
+               FROM v_suggestions s
+               WHERE s.document_id = d.id
+                 AND (s.page_no = p.page_no OR s.status = 'pending')
+           ), [])
+       ) AS ctx
 FROM documents d
 JOIN cases c ON c.id = d.case_id
 JOIN pages p ON p.document_id = d.id;
+
+-- Page views: html + path (path is product URL; GET routes bind it via v_route_get).
+CREATE OR REPLACE VIEW v_case_html AS
+SELECT case_id,
+       '/cases/' || case_id AS path,
+       tera_render('case.html', ctx, template_path := 'server/templates/**/*.html') AS html
+FROM v_case_ctx;
+
+CREATE OR REPLACE VIEW v_stream_page AS
+SELECT case_id,
+       '/cases/' || case_id || '/stream' AS path,
+       tera_render('stream.html', ctx, template_path := 'server/templates/**/*.html') AS html
+FROM v_stream_ctx;
+
+CREATE OR REPLACE VIEW v_audit_page AS
+SELECT case_id,
+       '/cases/' || case_id || '/audit' AS path,
+       tera_render('audit.html', ctx, template_path := 'server/templates/**/*.html') AS html
+FROM v_audit_ctx;
+
+CREATE OR REPLACE VIEW v_review_page AS
+SELECT document_id, page_no,
+       CASE WHEN page_no = 1 THEN '/documents/' || document_id
+            ELSE '/documents/' || document_id || '/pages/' || page_no::VARCHAR
+       END AS path,
+       tera_render('review.html', ctx, template_path := 'server/templates/**/*.html') AS html
+FROM v_review_ctx;
