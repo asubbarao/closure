@@ -1,8 +1,13 @@
--- extensions.sql — earned community pack (DuckDB ≥ 1.5.4).
--- Format rule: yaml for yaml files · json for json files · HTML via webbed · paths via scalarfs.
--- Not product: events (process hooks, not relations).
+-- extensions.sql — earned pack. DuckDB is the app runtime (better FastAPI).
+-- Format: yaml→yaml · json→json · HTML→webbed · paths→scalarfs/hostfs · zip→zipfs
+-- Outbound HTTP: curl_httpfs (pool + HTTP/2 + async). Inbound: quackapi httplib.
 
 INSTALL quackapi FROM community; LOAD quackapi;
+
+-- Outbound client (quackapi_serve batteries also prefer this)
+INSTALL httpfs FROM community; LOAD httpfs;
+INSTALL curl_httpfs FROM community; LOAD curl_httpfs;
+
 INSTALL pdf FROM community; LOAD pdf;
 INSTALL tera FROM community; LOAD tera;
 INSTALL shellfs FROM community; LOAD shellfs;
@@ -21,3 +26,6 @@ INSTALL bitfilters FROM community; LOAD bitfilters;
 INSTALL urlpattern FROM community; LOAD urlpattern;
 INSTALL dns FROM community; LOAD dns;
 INSTALL semantic_views FROM community; LOAD semantic_views;
+
+-- Optional: pure-SQL quality tests (skip if community pin missing for this build)
+-- INSTALL dqtest FROM community; LOAD dqtest;

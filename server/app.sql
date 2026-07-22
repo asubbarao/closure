@@ -1,11 +1,11 @@
--- app.sql — whole backend (DuckDB + quackapi).
+-- app.sql — DuckDB as the app runtime (better FastAPI for data products).
 --
--- Path layers:
---   hostfs   unmat views (server/hostfs.sql) — discover with typed path scalars
---   scalarfs pin from those views → pathvariable: / variable: / to_scalarfs_uri
---   zipfs    when LE drops .zip: archive_contents + zip://…/member (v_zips may be empty)
---
--- Case pack (optional): SET sample_zip_path then .read server/zip_pin.sql
+-- HTTP:     quackapi (routes, auth, live OpenAPI /docs /openapi.json)
+-- Outbound: curl_httpfs (pool, HTTP/2, async)
+-- Paths:    hostfs → scalarfs pins → pathvariable: / zip://
+-- Effects:  shellfs (read_csv/json stream · read_text batch)
+-- Checks:   server/smoke.sql (schema invariants — not a second type system)
+-- Optional: CLOSURE_API_KEY · CLOSURE_POSTGRES · CLOSURE_SAMPLE_ZIP + zip_pin.sql
 
 .read server/config.sql
 
@@ -13,6 +13,7 @@ SET memory_limit = '4GB';
 SET max_temp_directory_size = '8GB';
 
 .read server/extensions.sql
+.read server/auth.sql
 
 SET VARIABLE port        = (SELECT value FROM app_config WHERE key = 'port');
 SET VARIABLE static_dir  = (SELECT value FROM app_config WHERE key = 'static_dir');
@@ -23,10 +24,8 @@ SET VARIABLE templates_dir = 'server/templates';
 SET VARIABLE detector_rules_path = 'server/config/detector_rules.json';
 SET VARIABLE semantic_yaml_path  = 'server/config/closure_semantic.yaml';
 
--- Unmat hostfs surface (needs dir variables above)
 .read server/hostfs.sql
 
--- Pin from v_hostfs → pathvariable: readers in core
 COPY (
     SELECT abs_path FROM v_hostfs
     WHERE root = 'samples' AND is_file IS TRUE AND ext = '.pdf'
@@ -55,14 +54,30 @@ SET VARIABLE sample_zip_path = (
     WHERE is_file(path) IS TRUE AND file_extension(path) = '.zip'
 );
 
+-- Optional Postgres as peer store (same SQL app)
+.read server/postgres.sql
+
 .read server/model.sql
 .read server/routes.sql
+.read server/smoke.sql
 
-SELECT format('Closure http://127.0.0.1:{}/', getvariable('port')) AS status;
+SELECT format(
+    'Closure http://127.0.0.1:{}/  openapi=/docs  auth={}',
+    getvariable('port'),
+    CASE WHEN nullif(getenv('CLOSURE_API_KEY'), '') IS NOT NULL
+         THEN 'api_key' ELSE 'open' END
+) AS status;
 
+-- Serve: prefer curl_httpfs outbound (auto). memory_limit param + post-serve raise.
 FROM quackapi_serve(
     getvariable('port')::INTEGER,
     static_dir := getvariable('static_dir'),
-    memory_limit := '4GB'
+    memory_limit := '4GB',
+    http_client := 'auto'
 );
+
+-- quackapi may re-apply a low guard; raise again for handlers
+SET memory_limit = '4GB';
+SET max_temp_directory_size = '8GB';
+
 SELECT sleep_ms(86400000);

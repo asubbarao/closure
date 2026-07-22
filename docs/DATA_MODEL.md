@@ -4,29 +4,46 @@
 
 | What | How |
 |------|-----|
-| **Files** | Stay files. Unmaterialized views open them (`pdf_info` / `read_json_auto` via scalarfs `pathvariable:`). Not a “layer” — just IO. Never rewrite fixtures in SQL; use shellfs if you must `mv`. |
-| **Tables** | Real app relations (like any server). Durable: `decisions`, `llm_models`, `pipeline_runs`, `llm_calls`, `run_artifacts`. Boot-derived: `cases`, `documents`, `pages`, `words`, `document_lines`, `watchlist`, `entities`, `suggestions`. |
-| **Views** | Unmaterialized projections only (`CREATE VIEW`). **No `MATERIALIZED VIEW`.** |
-| **Routes** | Thin HTTP over views/tables. No second model. |
+| **Files** | Unmat readers (`pathvariable:` / hostfs). Not a second architecture layer. |
+| **Tables** | Facts + **display pins** (stable after boot). Durable: `decisions`, `pipeline_runs`, … Boot corpus: `cases`, `documents`, `pages` (with `scale`/`display_*`), `words`, `entities` (with `kind_label`/`mono`), `suggestions`, … |
+| **Live views** | Decision fold, mark px, export gate — change every POST. |
+| **Page views** | `parse_html(tera…)` only. |
+| **Routes** | `SELECT html` / `INSERT` — no second model. |
 
-## Durable (store.sql)
+## Durable (`store.sql`)
 
-- **`decisions`** — append-only human events; status never UPDATEd in place  
-- **`llm_models`** — detector/LLM registry (`raw` JSON; seeded every boot)  
-- **`pipeline_runs`** — one row per detect/judge/export/…  
-- **`llm_calls`** — raw-first request+response JSON (future LLM; empty until wired)  
-- **`run_artifacts`** — export paths per run  
+- **`decisions`** — append-only; never UPDATE status in place  
+- **`pipeline_runs`**, **`llm_calls`**, **`run_artifacts`** — optional LLM/export bookkeeping  
 
-## Derived at boot (core.sql)
+## Boot corpus (`core.sql`)
 
-Corpus tables from sample PDFs + manifest + watchlist. Detect stamps  
-`suggestions.source_run_id` + `detector_key` and finishes a `pipeline_runs` row.
+From samples + detect. Pins that used to be re-derived in every view:
 
-## Projections (views.sql)
+| Table | Display pins |
+|-------|----------------|
+| `documents` | `display_name`, `size_label` |
+| `pages` | `scale`, `display_w`, `display_h` (680px review) |
+| `entities` | `kind_label`, `mono` |
 
-`v_suggestions` folds latest decision → status/band. UI/API views are unmat.  
-`v_suggestion_lineage` joins suggestions → runs → models.
+## Live projections (`views.sql`)
+
+| View | Role |
+|------|------|
+| `v_suggestions` | AI + manual + latest decision fold → `status` / `band` |
+| `v_page_marks` | suggestions ⨝ pages.scale → canvas px |
+| `v_export_blocked` | flagged pending gate |
+| `v_entity_stream` | entities + hit `n` |
+| `v_nav` | documents + shell path unnest |
+| `v_*_html` / `v_stream_page` / `v_review_page` | SSR only |
+
+## Metrics
+
+`CREATE SEMANTIC VIEW closure FROM YAML FILE 'server/config/closure_semantic.yaml'`.  
+Query: `semantic_view('closure', dimensions := […], metrics := […])`.  
+Do not invent `pending_count` columns — filter the `status` dimension.
 
 ## Load order
 
-`config → extensions → path variables → store → core → views → routes → quackapi_serve`
+```
+config → extensions → auth → hostfs pins → [postgres] → model → routes → smoke → serve
+```

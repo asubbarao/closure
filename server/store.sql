@@ -1,7 +1,7 @@
--- Durable state. Better than a normal server: shell/fs live in-process
--- (shellfs, hostfs, scalarfs, quackapi). Tables hold SoR; files stay files.
--- http_client deferred until LLM judge / self-dispatch route lands.
--- No MATERIALIZED VIEW. Raw-first for AI/run telemetry (pgedge idea).
+-- Durable state. DuckDB is the app (quackapi HTTP); files stay files.
+-- shellfs / hostfs / scalarfs / zipfs / curl_httpfs live in-process.
+-- Optional peer: ATTACH Postgres (server/postgres.sql). No MATERIALIZED VIEW.
+-- AI telemetry raw-first (pipeline_runs / llm_calls).
 
 CREATE OR REPLACE TYPE bbox AS STRUCT(x0 DOUBLE, y0 DOUBLE, x1 DOUBLE, y1 DOUBLE);
 

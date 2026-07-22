@@ -1,4 +1,6 @@
--- routes.sql — product loop only. Page HTML lives in v_* views; routes SELECT.
+-- routes.sql — product loop. Page HTML in v_* views; routes SELECT/INSERT.
+-- OpenAPI: GET /docs · /openapi.json · /redoc (quackapi built-in).
+-- Auth: CREATE AUTH closure_api in auth.sql; add REQUIRE closure_api to lock a route.
 -- Open APIs: allowlisted relations only (not raw query on any name).
 
 -- ── HTML ───────────────────────────────────────────────────────────────────
