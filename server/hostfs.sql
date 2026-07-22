@@ -18,13 +18,16 @@ SELECT root, path,
        hsize(file_size(path)) AS size,
        file_last_modified(path) AS modified
 FROM (
+    -- AS root on every arm: UNION ALL BY NAME matches column *names*, so a bare
+    -- SELECT 'exports', path would not align with the first arm's `root` and
+    -- templates/pages would vanish under root IS NULL (boot: empty pathvariable).
     SELECT 'samples' AS root, path FROM ls(getvariable('samples_dir'))
     UNION ALL BY NAME
-    SELECT 'exports', path FROM ls(getvariable('exports_dir'))
+    SELECT 'exports' AS root, path FROM ls(getvariable('exports_dir'))
     UNION ALL BY NAME
-    SELECT 'pages', path FROM lsr(getvariable('pages_dir'), 2)
+    SELECT 'pages' AS root, path FROM lsr(getvariable('pages_dir'), 2)
     UNION ALL BY NAME
-    SELECT 'templates', path FROM ls(getvariable('templates_dir'))
+    SELECT 'templates' AS root, path FROM ls(getvariable('templates_dir'))
 );
 
 -- LE packs on host; zipfs opens members. Empty is fine.

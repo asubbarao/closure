@@ -1,12 +1,16 @@
--- extensions.sql — earned pack. DuckDB is the app runtime (better FastAPI).
+-- extensions.sql — earned pack only (every LOAD has a product SELECT).
 -- Format: yaml→yaml · json→json · HTML→webbed · paths→scalarfs/hostfs · zip→zipfs
--- Outbound HTTP: curl_httpfs (pool + HTTP/2 + async). Inbound: quackapi httplib.
+-- Inbound HTTP: quackapi. No outbound product fetch → no curl_httpfs.
+--
+-- Earned:
+--   dns          v_url_hosts (dns_lookup on extracted hostnames)
+--   read_lines   v_suggestion_line_context (scalarfs page_uri + lateral window)
+--   splink_udfs  unaccent (norm) + double_metaphone (watchlist phonetic hits)
 
 INSTALL quackapi FROM community; LOAD quackapi;
 
--- Outbound: core httpfs (not community — origin clash if FORCE INSTALL). curl_httpfs optional.
+-- Core httpfs: ambient (INSTALL FROM community / remote readers). Not a product surface.
 INSTALL httpfs; LOAD httpfs;
-INSTALL curl_httpfs FROM community; LOAD curl_httpfs;
 
 INSTALL pdf FROM community; LOAD pdf;
 INSTALL tera FROM community; LOAD tera;
@@ -26,6 +30,3 @@ INSTALL bitfilters FROM community; LOAD bitfilters;
 INSTALL urlpattern FROM community; LOAD urlpattern;
 INSTALL dns FROM community; LOAD dns;
 INSTALL semantic_views FROM community; LOAD semantic_views;
-
--- Optional: pure-SQL quality tests (skip if community pin missing for this build)
--- INSTALL dqtest FROM community; LOAD dqtest;

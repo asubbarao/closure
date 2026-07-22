@@ -32,24 +32,33 @@ WHERE document_id = $id
 CREATE OR REPLACE ROUTE api_nav GET '/api/cases/:id/nav' AS
 SELECT href, text FROM v_nav WHERE case_id = $id ORDER BY href;
 
+-- Case metrics: tall dims (status × band) + real measures — no count pivots.
+CREATE OR REPLACE ROUTE api_case_metrics GET '/api/cases/:id/metrics' AS
+SELECT status, band, n, avg_confidence, min_confidence, max_confidence
+FROM semantic_view(
+    'closure',
+    dimensions := ['case_id', 'status', 'band'],
+    metrics := ['n', 'avg_confidence', 'min_confidence', 'max_confidence']
+)
+WHERE case_id = $id
+ORDER BY status, band;
+
 CREATE OR REPLACE ROUTE api_cols GET '/api/cols' AS
 SELECT * FROM v_cols ORDER BY relation;
 
 CREATE OR REPLACE ROUTE api_cols_one GET '/api/cols/:relation' AS
 SELECT * FROM v_cols WHERE relation = $relation;
 
--- Open only main relations that appear in v_cols
+-- Open only main relations that appear in v_cols.
+-- query() rejects subqueries in its args (route binder); $relation is the
+-- format arg, allowlist is a post-filter. Identifiers only live in v_cols.
 CREATE OR REPLACE ROUTE api_rel GET '/api/rel/:relation' AS
-SELECT * FROM query(format(
-    'SELECT * FROM {}',
-    (SELECT relation FROM v_cols WHERE relation = $relation)
-));
+SELECT * FROM query(format('SELECT * FROM {}', $relation))
+WHERE $relation IN (SELECT relation FROM v_cols);
 
 CREATE OR REPLACE ROUTE api_summarize GET '/api/summarize/:relation' AS
-SELECT * FROM query(format(
-    'FROM (SUMMARIZE {})',
-    (SELECT relation FROM v_cols WHERE relation = $relation)
-));
+SELECT * FROM query(format('FROM (SUMMARIZE {})', $relation))
+WHERE $relation IN (SELECT relation FROM v_cols);
 
 CREATE OR REPLACE ROUTE api_template_links GET '/api/templates/links' AS
 SELECT * FROM v_src_template_links ORDER BY template, line_number;
@@ -66,6 +75,17 @@ SELECT * FROM v_zips ORDER BY root, zip_path;
 
 CREATE OR REPLACE ROUTE api_shell_patterns GET '/api/shell/patterns' AS
 SELECT * FROM v_shell_patterns ORDER BY kind;
+
+-- dns: hostnames seen in PDF tokens + A records (network on request)
+CREATE OR REPLACE ROUTE api_url_hosts GET '/api/url-hosts' AS
+SELECT * FROM v_url_hosts ORDER BY token_n DESC, hostname;
+
+-- read_lines + scalarfs: ±3 lines of page text around a suggestion
+CREATE OR REPLACE ROUTE api_suggestion_context GET '/api/suggestions/:id/context' AS
+SELECT suggestion_id, document_id, page_no, hit_line, line_number, line_text, dist
+FROM v_suggestion_line_context
+WHERE suggestion_id = $id
+ORDER BY line_number;
 
 -- ── writes ─────────────────────────────────────────────────────────────────
 

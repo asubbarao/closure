@@ -190,7 +190,9 @@ SELECT term, kind, case_no,
        lower(unaccent(trim(term))) AS term_norm,
        string_split(lower(unaccent(trim(term))), ' ') AS term_tokens,
        replace(replace(replace(replace(trim(term), '-', ''), '(', ''), ')', ''), '.', '') AS term_compact,
-       (position('NOT PII' IN kind) > 0) AS is_not_pii
+       (position('NOT PII' IN kind) > 0) AS is_not_pii,
+       -- splink: primary double_metaphone key for phonetic name hits
+       double_metaphone(lower(unaccent(trim(term))))[1] AS term_dm
 FROM v_src_watchlist
 WHERE nullif(trim(term), '') IS NOT NULL;
 
@@ -272,8 +274,28 @@ name_hits AS (
         JOIN watchlist wl ON wl.case_no = l.case_id
     ) scored
     WHERE sc >= 90 AND len(mw) > 0
+),
+-- splink double_metaphone: phonetic watchlist hits (human-in-loop; collisions ok)
+metaphone_hits AS (
+    SELECT w.document_id, w.page_no, w.case_id,
+           wl.term AS text, w.token AS context, w.bbox,
+           wl.kind,
+           80 AS confidence,
+           'metaphone: ' || w.token || ' ~ ' || wl.term AS reason,
+           CASE WHEN wl.is_not_pii THEN 'false_positive' END AS flag_tag,
+           'detector:metaphone-watchlist' AS detector_key
+    FROM words w
+    JOIN watchlist wl
+      ON wl.case_no = w.case_id
+     AND wl.term_dm IS NOT NULL
+     AND length(wl.term_dm) > 0
+     AND length(w.token_norm) >= 4
+     AND double_metaphone(w.token_norm)[1] = wl.term_dm
+     AND w.token_norm <> wl.term_norm
 )
-SELECT * FROM type_hits UNION ALL BY NAME SELECT * FROM name_hits;
+SELECT * FROM type_hits
+UNION ALL BY NAME SELECT * FROM name_hits
+UNION ALL BY NAME SELECT * FROM metaphone_hits;
 
 CREATE OR REPLACE TABLE entities AS
 SELECT format('{:x}', rapidhash(case_id || chr(31) || kind || chr(31) || canonical_text)) AS id,
@@ -303,10 +325,9 @@ LEFT JOIN document_lines dl ON dl.document_id = h.document_id AND dl.page_no = h
 
 DROP TABLE IF EXISTS _detect_hits;
 
--- Session profile pins (scalarfs native lists — not JSON laundry).
--- Re-read: SELECT * FROM unnest(getvariable('profile_words')) AS u(r); etc.
+-- Session profile pin for base extract (before derived suggestion view).
+-- Re-read: SELECT * FROM unnest(getvariable('profile_words')) AS u(r);
 COPY (FROM (SUMMARIZE words)) TO 'variable:profile_words' (FORMAT variable, LIST rows);
-COPY (FROM (SUMMARIZE v_suggestions)) TO 'variable:profile_suggestions' (FORMAT variable, LIST rows);
 
 INSERT INTO pipeline_runs BY NAME
 SELECT getvariable('detect_run_id') AS run_id,
@@ -357,6 +378,9 @@ FROM base b
 LEFT JOIN entities e ON e.id = b.entity_id
 LEFT JOIN v_latest_decision ld ON ld.suggestion_id = b.id;
 
+-- After v_suggestions exists (SUMMARIZE cannot precede CREATE VIEW).
+COPY (FROM (SUMMARIZE v_suggestions)) TO 'variable:profile_suggestions' (FORMAT variable, LIST rows);
+
 CREATE OR REPLACE VIEW v_lines AS
 SELECT document_id, page_no, case_id,
        line_no AS line_number, line_no,
@@ -364,17 +388,37 @@ SELECT document_id, page_no, case_id,
        line_norm, token_norms, y_key, bbox
 FROM document_lines;
 
--- Page text + scalarfs URI (read_lines without temp files).
--- Window: SET VARIABLE page_uri = (SELECT page_uri FROM v_page_text WHERE …);
---         SELECT * FROM read_lines(getvariable('page_uri'), lines := '42 +/-3');
--- Or pin text:  COPY (SELECT page_text …) TO 'variable:page_text' (FORMAT variable);
---               SELECT * FROM read_lines('variable:page_text');
+-- Page text + scalarfs URI for read_lines (no temp files).
 CREATE OR REPLACE VIEW v_page_text AS
 SELECT document_id, page_no, case_id,
        string_agg(line_text, chr(10) ORDER BY line_no) AS page_text,
        to_scalarfs_uri(string_agg(line_text, chr(10) ORDER BY line_no)) AS page_uri
 FROM document_lines
 GROUP BY document_id, page_no, case_id;
+
+-- read_lines earned: ±3 lines around each suggestion via scalarfs page_uri.
+CREATE OR REPLACE VIEW v_suggestion_line_context AS
+SELECT s.id AS suggestion_id, s.document_id, s.page_no, s.line_no AS hit_line,
+       u.line_number, u.content AS line_text,
+       abs(u.line_number - s.line_no)::INTEGER AS dist
+FROM v_suggestions s
+JOIN v_page_text p
+  ON p.document_id = s.document_id AND p.page_no = s.page_no
+CROSS JOIN LATERAL (
+    SELECT line_number, content FROM read_lines_lateral(p.page_uri)
+) u
+WHERE s.line_no IS NOT NULL
+  AND abs(u.line_number - s.line_no) <= 3;
+
+-- dns earned: resolve hostnames extracted from document tokens (lazy — network on read).
+CREATE OR REPLACE VIEW v_url_hosts AS
+SELECT hostname,
+       count(*)::BIGINT AS token_n,
+       dns_lookup(hostname) AS a_record,
+       dns_lookup_all(hostname) AS a_records
+FROM token_types
+WHERE hostname IS NOT NULL AND nullif(hostname, '') IS NOT NULL
+GROUP BY hostname;
 
 CREATE OR REPLACE VIEW v_decide_targets AS
 SELECT s.id AS suggestion_id, s.document_id, d.case_id, s.text, s.entity_id, s.entity_text,

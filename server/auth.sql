@@ -8,13 +8,21 @@
 
 CREATE OR REPLACE AUTH closure_api AS API_KEY;
 
-SELECT * FROM quackapi_add_api_key(
-    'closure_api',
-    k,
-    coalesce(nullif(getenv('USER'), ''), 'reviewer')
-)
-FROM (SELECT nullif(getenv('CLOSURE_API_KEY'), '') AS k)
-WHERE k IS NOT NULL;
+-- Register key only when CLOSURE_API_KEY is set (routes stay open unless REQUIRE).
+-- quackapi_add_api_key is a TVF that rejects empty keys and only accepts
+-- constant args (no lateral columns) — gate via query() + CASE.
+SELECT *
+FROM query(
+    CASE
+        WHEN nullif(getenv('CLOSURE_API_KEY'), '') IS NULL THEN
+            'SELECT NULL::VARCHAR AS subject WHERE false'
+        ELSE format(
+            'SELECT * FROM quackapi_add_api_key(''closure_api'', ''{}'', ''{}'')',
+            replace(getenv('CLOSURE_API_KEY'), '''', ''''''),
+            replace(coalesce(nullif(getenv('USER'), ''), 'reviewer'), '''', '''''')
+        )
+    END
+);
 
 SELECT CASE
     WHEN nullif(getenv('CLOSURE_API_KEY'), '') IS NOT NULL

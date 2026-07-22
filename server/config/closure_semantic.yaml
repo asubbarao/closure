@@ -109,8 +109,15 @@ dimensions:
   - name: entity_text
     expr: e.canonical_text
     source_table: e
+  - name: entity_mono
+    expr: e.mono
+    source_table: e
+  - name: group_key
+    expr: s.group_key
+    source_table: s
 
 # Real measures only. "How many pending?" → dimensions status + metric n.
+# Never invent pending_count / flagged_count columns — slice on status/band.
 metrics:
   - name: n
     expr: COUNT(*)
@@ -120,4 +127,7 @@ metrics:
     source_table: s
   - name: max_confidence
     expr: MAX(s.confidence)
+    source_table: s
+  - name: min_confidence
+    expr: MIN(s.confidence)
     source_table: s

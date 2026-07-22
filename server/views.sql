@@ -16,11 +16,19 @@ DROP SEMANTIC VIEW IF EXISTS suggestion_metrics;
 DROP SEMANTIC VIEW IF EXISTS closure;
 CREATE SEMANTIC VIEW closure FROM YAML FILE 'server/config/closure_semantic.yaml';
 
+-- Allowlist for GET /api/rel + /api/summarize (not every internal extract table).
 CREATE OR REPLACE VIEW v_cols AS
 SELECT table_name AS relation,
        array_agg([column_name, data_type] ORDER BY ordinal_position) AS cols
 FROM information_schema.columns
 WHERE table_schema = 'main'
+  AND table_name IN (
+      'cases', 'documents', 'pages', 'words', 'entities', 'suggestions', 'decisions',
+      'v_suggestions', 'v_decide_targets', 'v_entity_stream', 'v_nav',
+      'v_export_blocked', 'v_export_plans', 'v_audit', 'v_decision_batches',
+      'v_history_events', 'v_hostfs', 'v_zips', 'v_shell_patterns',
+      'v_url_hosts', 'v_suggestion_line_context', 'v_cols', 'v_page_marks'
+  )
 GROUP BY table_name;
 
 -- ── live grains (thin; join tables, do not re-pin display) ─────────────────
@@ -71,13 +79,17 @@ LEFT JOIN semantic_view('closure', dimensions := ['entity_id'], metrics := ['n']
   ON m.entity_id = e.id;
 
 CREATE OR REPLACE VIEW v_nav AS
-SELECT case_id, '/documents/' || id AS href, filename AS text FROM documents
+-- AS case_id/href/text on every arm — UNION ALL BY NAME matches names.
+SELECT case_id,
+       '/documents/' || id AS href,
+       filename AS text
+FROM documents
 UNION ALL BY NAME
-SELECT id, '/cases/' || id, 'Library' FROM cases
+SELECT id AS case_id, '/cases/' || id AS href, 'Library' AS text FROM cases
 UNION ALL BY NAME
-SELECT id, '/cases/' || id || '/stream', 'Entity stream' FROM cases
+SELECT id AS case_id, '/cases/' || id || '/stream' AS href, 'Entity stream' AS text FROM cases
 UNION ALL BY NAME
-SELECT id, '/cases/' || id || '/audit', 'Audit' FROM cases;
+SELECT id AS case_id, '/cases/' || id || '/audit' AS href, 'Audit' AS text FROM cases;
 
 CREATE OR REPLACE VIEW v_history_events AS
 SELECT kind, suggestion_id, status, actor, reason, ts AS event_ts,

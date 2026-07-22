@@ -1,9 +1,8 @@
 -- app.sql — DuckDB as the app runtime (better FastAPI for data products).
 --
 -- HTTP:     quackapi (routes, auth, live OpenAPI /docs /openapi.json)
--- Outbound: curl_httpfs (pool, HTTP/2, async)
 -- Paths:    hostfs → scalarfs pins → pathvariable: / zip://
--- Effects:  shellfs (read_csv/json stream · read_text batch)
+-- Effects:  shellfs (setup host effects; patterns in shellfs.sql)
 -- Checks:   server/smoke.sql (schema invariants — not a second type system)
 -- Optional: CLOSURE_API_KEY · CLOSURE_POSTGRES · CLOSURE_SAMPLE_ZIP + zip_pin.sql
 
@@ -68,12 +67,11 @@ SELECT format(
          THEN 'api_key' ELSE 'open' END
 ) AS status;
 
--- Serve: prefer curl_httpfs outbound (auto). memory_limit param + post-serve raise.
+-- Serve (no product outbound HTTP — curl_httpfs not loaded).
 FROM quackapi_serve(
     getvariable('port')::INTEGER,
     static_dir := getvariable('static_dir'),
-    memory_limit := '4GB',
-    http_client := 'auto'
+    memory_limit := '4GB'
 );
 
 -- quackapi may re-apply a low guard; raise again for handlers
