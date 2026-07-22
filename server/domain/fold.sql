@@ -1,15 +1,15 @@
 -- server/domain/fold.sql — decision log + AI → v_suggestions / v_lines.
--- Use typed siblings from v_src_decisions (ts_ts, page_no_i, confidence_i).
+-- The log is append-only, so "current" means the latest row per suggestion:
+-- max_by(d, d.ts) takes that whole row at once, no column-by-column arg_max.
 
 CREATE OR REPLACE VIEW v_latest_decision AS
-SELECT suggestion_id,
-       arg_max(status, coalesce(ts_ts, TIMESTAMP '1970-01-01')) AS status,
-       arg_max(actor,  coalesce(ts_ts, TIMESTAMP '1970-01-01')) AS actor,
-       arg_max(reason, coalesce(ts_ts, TIMESTAMP '1970-01-01')) AS reason,
-       max(ts_ts) AS ts
-FROM v_src_decisions
-WHERE kind = 'decision' AND suggestion_id IS NOT NULL
-GROUP BY suggestion_id;
+SELECT suggestion_id, r.status, r.actor, r.reason, r.ts
+FROM (
+    SELECT suggestion_id, max_by(d, d.ts) AS r
+    FROM v_src_decisions d
+    WHERE kind = 'decision' AND suggestion_id IS NOT NULL
+    GROUP BY suggestion_id
+);
 
 CREATE OR REPLACE VIEW v_manual_suggestions AS
 SELECT m.suggestion_id AS id,
@@ -18,19 +18,10 @@ SELECT m.suggestion_id AS id,
        coalesce(m.r.confidence, 99) AS confidence,
        m.r.flag_tag, m.r.reason, m.r.entity_id,
        NULL::VARCHAR AS kind, 'manual' AS source,
-       coalesce(m.ts_ts, now()) AS created_at, dl.line_no
+       m.r.ts AS created_at, dl.line_no
 FROM (
-    SELECT suggestion_id,
-           arg_max(struct_pack(
-               document_id := document_id,
-               page_no := page_no_i,
-               bbox := bbox,
-               text := text, context := context,
-               confidence := confidence_i,
-               flag_tag := flag_tag, reason := reason, entity_id := entity_id
-           ), coalesce(ts_ts, TIMESTAMP '1970-01-01')) AS r,
-           max(ts_ts) AS ts_ts
-    FROM v_src_decisions
+    SELECT suggestion_id, max_by(d, d.ts) AS r
+    FROM v_src_decisions d
     WHERE kind = 'added' AND suggestion_id IS NOT NULL
     GROUP BY suggestion_id
 ) m

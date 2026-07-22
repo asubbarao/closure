@@ -91,7 +91,7 @@ FROM v_suggestions s
 JOIN v_page_geom g ON g.document_id = s.document_id AND g.page_no = s.page_no;
 
 CREATE OR REPLACE VIEW v_audit AS
-SELECT coalesce(l.ts_ts, now()) AS ts,
+SELECT l.ts,
        coalesce(l.actor, 'reviewer') AS actor,
        coalesce(l.kind, 'decision') AS action,
        l.suggestion_id, coalesce(l.case_id, d.case_id) AS case_id,

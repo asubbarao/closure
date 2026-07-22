@@ -46,15 +46,18 @@ SELECT term, kind, case_no
 FROM v_raw_watchlist
 WHERE nullif(trim(term), '') IS NOT NULL;
 
--- Decisions: raw row + typed siblings. Wire cols untouched.
+-- Decisions: read_json_auto guesses per-file, so pin the columns the domain
+-- sorts and joins on — same names, replaced in place, plus the epoch default
+-- for a missing ts. Downstream then just says ts / page_no / bbox.
 -- (Cannot CTAS — log is append-only and must re-read the glob each query.)
 CREATE OR REPLACE VIEW v_src_decisions AS
 SELECT
-    r.*,
-    try_cast(r.ts AS TIMESTAMP) AS ts_ts,
-    try_cast(r.page_no AS INTEGER) AS page_no_i,
-    try_cast(r.confidence AS INTEGER) AS confidence_i
-FROM v_raw_decisions r
-WHERE r.kind IN ('decision', 'added');
+    * EXCLUDE (ts, page_no, confidence, bbox),
+    coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01') AS ts,
+    try_cast(page_no AS INTEGER) AS page_no,
+    try_cast(confidence AS INTEGER) AS confidence,
+    try_cast(bbox AS bbox) AS bbox
+FROM v_raw_decisions
+WHERE kind IN ('decision', 'added');
 
 CREATE OR REPLACE VIEW v_manifest AS SELECT * FROM v_src_manifest;
