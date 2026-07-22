@@ -36,6 +36,7 @@ SET variable exports_dir = (SELECT value FROM app_config WHERE key = 'exports_di
 SET variable static_dir = '.';
 SET variable port = '8117';
 .read server/extensions.sql
+.read server/store.sql
 .read server/raw/sources.sql
 .read server/typed/sources.sql
 .read server/domain/facts.sql

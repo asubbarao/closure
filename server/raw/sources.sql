@@ -1,6 +1,5 @@
 -- server/raw/sources.sql — unmaterialized reads only. No casts. No filters.
--- Pin: exports/decisions/_schema.json (from server/decision.schema.json) keeps the
--- decisions glob non-empty on a fresh clone.
+-- (Decisions aren't a source: they're a table this app writes — see store.sql.)
 
 CREATE OR REPLACE VIEW v_raw_pdf_info AS
 SELECT * FROM pdf_info(getvariable('samples_dir') || '/*.pdf');
@@ -16,10 +15,3 @@ SELECT * FROM read_json_auto(getvariable('samples_dir') || '/manifest.json');
 
 CREATE OR REPLACE VIEW v_raw_watchlist AS
 SELECT * FROM read_json_auto(getvariable('samples_dir') || '/watchlist.json');
-
-CREATE OR REPLACE VIEW v_raw_decisions AS
-SELECT *
-FROM read_json_auto(
-    coalesce(nullif(getenv('CLOSURE_EXPORTS_DIR'), ''), 'exports') || '/decisions/*.json',
-    union_by_name := true, filename := true
-);

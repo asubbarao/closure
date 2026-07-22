@@ -1,12 +1,8 @@
--- server/typed/sources.sql — one layer on top of raw: extra typed columns only.
--- Live logs stay VIEWs (new JSON files must show up without reboot).
--- Static corpus is CTAS'd in domain/facts.sql from these views.
+-- server/typed/sources.sql — domain-typed sources on top of raw.
+-- Only the PDF/JSON readers need this layer; the decisions table is typed by
+-- its DDL (server/store.sql), so it has nothing to fix up.
 
--- Page geometry, PDF points, origin top-left. Declared once so every layer says
--- ::bbox instead of respelling the four fields.
-CREATE OR REPLACE TYPE bbox AS STRUCT(x0 DOUBLE, y0 DOUBLE, x1 DOUBLE, y1 DOUBLE);
-
--- PDF: reader already typed; only normalize names + cast bbox once.
+-- PDF: reader already typed; normalize names + pack bbox once.
 CREATE OR REPLACE VIEW v_src_pdf_info AS
 SELECT
     file AS source_path,
@@ -46,18 +42,7 @@ SELECT term, kind, case_no
 FROM v_raw_watchlist
 WHERE nullif(trim(term), '') IS NOT NULL;
 
--- Decisions: read_json_auto guesses per-file, so pin the columns the domain
--- sorts and joins on — same names, replaced in place, plus the epoch default
--- for a missing ts. Downstream then just says ts / page_no / bbox.
--- (Cannot CTAS — log is append-only and must re-read the glob each query.)
 CREATE OR REPLACE VIEW v_src_decisions AS
-SELECT
-    * EXCLUDE (ts, page_no, confidence, bbox),
-    coalesce(try_cast(ts AS TIMESTAMP), TIMESTAMP '1970-01-01') AS ts,
-    try_cast(page_no AS INTEGER) AS page_no,
-    try_cast(confidence AS INTEGER) AS confidence,
-    try_cast(bbox AS bbox) AS bbox
-FROM v_raw_decisions
-WHERE kind IN ('decision', 'added');
+SELECT * FROM decisions;
 
 CREATE OR REPLACE VIEW v_manifest AS SELECT * FROM v_src_manifest;

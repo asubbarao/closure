@@ -106,7 +106,10 @@ CREATE OR REPLACE ROUTE api_case_addresses GET '/api/cases/:id/addresses' AS
 SELECT * FROM entity_address_canon WHERE case_id = $id;
 
 CREATE OR REPLACE ROUTE api_case_export_plan GET '/api/cases/:id/export_plan' AS
-SELECT blocked, export_sql FROM v_export_plans WHERE case_id = $id;
+SELECT bool_or(blocked) AS blocked,
+       count(*) FILTER (WHERE len(boxes) > 0)::INTEGER AS documents,
+       coalesce(sum(len(boxes)), 0)::INTEGER AS boxes
+FROM v_export_plans WHERE case_id = $id;
 
 CREATE OR REPLACE ROUTE api_stats GET '/api/stats' AS
 SELECT table_name, estimated_size AS n
@@ -185,19 +188,18 @@ ORDER BY group_band DESC, n DESC, group_label;
 
 CREATE OR REPLACE ROUTE api_suggestion_decision POST '/api/suggestions/:id/decision'
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
-AS COPY (
+AS INSERT INTO decisions BY NAME
     SELECT 'decision' AS kind, s.id AS suggestion_id, $status AS status,
            $actor AS actor, $reason AS reason, now() AS ts,
            s.document_id, d.case_id, s.text, uuid()::VARCHAR AS batch_id,
            $status || ' — ' || coalesce(s.text, '') AS batch_label,
            NULL::VARCHAR AS undoes_batch_id
     FROM v_suggestions s JOIN documents d ON d.id = s.document_id WHERE s.id = $id
-) TO 'exports/decisions'
-(FORMAT JSON, FILE_SIZE_BYTES '100KB', FILENAME_PATTERN 'dec_{uuid}', OVERWRITE_OR_IGNORE true);
+RETURNING suggestion_id, status;
 
 CREATE OR REPLACE ROUTE api_entity_decision POST '/api/entities/:id/decision'
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
-AS COPY (
+AS INSERT INTO decisions BY NAME
     SELECT 'decision' AS kind, s.id AS suggestion_id, $status AS status,
            $actor AS actor, $reason AS reason, now() AS ts,
            s.document_id, d.case_id, s.text, uuid()::VARCHAR AS batch_id,
@@ -205,25 +207,23 @@ AS COPY (
            NULL::VARCHAR AS undoes_batch_id
     FROM v_suggestions s JOIN documents d ON d.id = s.document_id
     WHERE s.entity_id = $id AND s.status = 'pending' AND s.band <> 'flagged'
-) TO 'exports/decisions'
-(FORMAT JSON, FILE_SIZE_BYTES '100KB', FILENAME_PATTERN 'dec_{uuid}', OVERWRITE_OR_IGNORE true);
+RETURNING suggestion_id, status;
 
 CREATE OR REPLACE ROUTE api_doc_band_decision POST '/api/documents/:id/band/:band/decision'
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
-AS COPY (
+AS INSERT INTO decisions BY NAME
     SELECT 'decision' AS kind, s.id AS suggestion_id, $status AS status,
            $actor AS actor, coalesce(nullif($reason, ''), 'bulk band ' || $band) AS reason,
            now() AS ts, s.document_id, d.case_id, s.text, uuid()::VARCHAR AS batch_id,
            $status || ' band ' || $band AS batch_label, NULL::VARCHAR AS undoes_batch_id
     FROM v_suggestions s JOIN documents d ON d.id = s.document_id
     WHERE s.document_id = $id AND s.status = 'pending' AND s.band = $band AND $band <> 'flagged'
-) TO 'exports/decisions'
-(FORMAT JSON, FILE_SIZE_BYTES '100KB', FILENAME_PATTERN 'dec_{uuid}', OVERWRITE_OR_IGNORE true);
+RETURNING suggestion_id, status;
 
 CREATE OR REPLACE ROUTE api_suggestions_batch_decision POST '/api/suggestions/batch/decision'
   PARAM status VARCHAR PARAM ids VARCHAR
   PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
-AS COPY (
+AS INSERT INTO decisions BY NAME
     SELECT 'decision' AS kind, s.id AS suggestion_id, $status AS status,
            $actor AS actor, $reason AS reason, now() AS ts,
            s.document_id, d.case_id, s.text, uuid()::VARCHAR AS batch_id,
@@ -231,14 +231,13 @@ AS COPY (
            NULL::VARCHAR AS undoes_batch_id
     FROM v_suggestions s JOIN documents d ON d.id = s.document_id
     WHERE s.id IN (SELECT trim(u) FROM unnest(string_split($ids, ',')) t(u) WHERE trim(u) <> '')
-) TO 'exports/decisions'
-(FORMAT JSON, FILE_SIZE_BYTES '100KB', FILENAME_PATTERN 'dec_{uuid}', OVERWRITE_OR_IGNORE true);
+RETURNING suggestion_id, status;
 
 CREATE OR REPLACE ROUTE api_case_triage_accept_high POST '/api/cases/:id/triage/accept-high'
   PARAM threshold INTEGER DEFAULT 90 GE 0 LE 100
   PARAM actor VARCHAR DEFAULT 'reviewer'
   PARAM reason VARCHAR DEFAULT 'triage high-confidence auto-pass'
-AS COPY (
+AS INSERT INTO decisions BY NAME
     SELECT 'decision' AS kind, s.id AS suggestion_id, 'accepted' AS status,
            $actor AS actor, $reason AS reason, now() AS ts,
            s.document_id, d.case_id, s.text, uuid()::VARCHAR AS batch_id,
@@ -247,15 +246,14 @@ AS COPY (
     FROM v_suggestions s JOIN documents d ON d.id = s.document_id
     WHERE d.case_id = $id AND s.status = 'pending' AND s.confidence >= $threshold
       AND s.band <> 'flagged' AND coalesce(s.flag_tag, '') <> 'false_positive'
-) TO 'exports/decisions'
-(FORMAT JSON, FILE_SIZE_BYTES '100KB', FILENAME_PATTERN 'dec_{uuid}', OVERWRITE_OR_IGNORE true);
+RETURNING suggestion_id, status;
 
 CREATE OR REPLACE ROUTE api_case_triage_group_decision POST '/api/cases/:id/triage/group/decision'
   PARAM group_key VARCHAR PARAM status VARCHAR
   PARAM exclude_ids VARCHAR DEFAULT ''
   PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
   PARAM threshold INTEGER DEFAULT 90 GE 0 LE 100
-AS COPY (
+AS INSERT INTO decisions BY NAME
     SELECT 'decision' AS kind, s.id AS suggestion_id, lower(trim($status)) AS status,
            $actor AS actor, $reason AS reason, now() AS ts,
            s.document_id, d.case_id, s.text, uuid()::VARCHAR AS batch_id,
@@ -268,15 +266,14 @@ AS COPY (
                AND coalesce(s.flag_tag, '') <> 'false_positive')
       AND ($exclude_ids = '' OR s.id NOT IN (
             SELECT trim(x) FROM unnest(string_split($exclude_ids, ',')) u(x) WHERE trim(x) <> ''))
-) TO 'exports/decisions'
-(FORMAT JSON, FILE_SIZE_BYTES '100KB', FILENAME_PATTERN 'dec_{uuid}', OVERWRITE_OR_IGNORE true);
+RETURNING suggestion_id, status;
 
 -- Only remaining edge pack: form params → bbox on the audit event.
 CREATE OR REPLACE ROUTE api_document_add POST '/api/documents/:id/add'
   PARAM page INTEGER PARAM x0 DOUBLE PARAM y0 DOUBLE PARAM x1 DOUBLE PARAM y1 DOUBLE
   PARAM text VARCHAR PARAM kind VARCHAR DEFAULT 'MANUAL' PARAM scope VARCHAR DEFAULT 'one'
   PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT 'missed by AI'
-AS COPY (
+AS INSERT INTO decisions BY NAME
     SELECT 'added' AS kind, uuid()::VARCHAR AS suggestion_id, $id AS document_id,
            $page::INTEGER AS page_no,
            ($x0, $y0, $x1, $y1)::bbox AS bbox,
@@ -288,12 +285,11 @@ AS COPY (
            $scope AS scope, uuid()::VARCHAR AS batch_id,
            'Added missed — ' || coalesce($text, '') AS batch_label,
            NULL::VARCHAR AS undoes_batch_id
-) TO 'exports/decisions'
-(FORMAT JSON, FILE_SIZE_BYTES '100KB', FILENAME_PATTERN 'add_{uuid}', OVERWRITE_OR_IGNORE true);
+RETURNING suggestion_id, status;
 
 CREATE OR REPLACE ROUTE api_undo POST '/api/undo'
   PARAM actor VARCHAR DEFAULT 'reviewer' PARAM case_id VARCHAR DEFAULT ''
-AS COPY (
+AS INSERT INTO decisions BY NAME
     WITH target AS (
         SELECT arg_max(batch_id, ts) AS batch_id, arg_max(label, ts) AS label
         FROM v_decision_batches
@@ -309,8 +305,7 @@ AS COPY (
     FROM v_history_events h
     JOIN target t ON h.batch_id = t.batch_id
     WHERE h.kind = 'decision'
-) TO 'exports/decisions'
-(FORMAT JSON, FILE_SIZE_BYTES '100KB', FILENAME_PATTERN 'dec_{uuid}', OVERWRITE_OR_IGNORE true);
+RETURNING suggestion_id, status;
 
 CREATE OR REPLACE ROUTE api_undo_status GET '/api/undo/status'
   PARAM case_id VARCHAR DEFAULT ''
@@ -328,7 +323,7 @@ WHERE undoes_batch_id IS NULL
 
 CREATE OR REPLACE ROUTE api_case_restore POST '/api/cases/:id/restore'
   PARAM batch_id VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer'
-AS COPY (
+AS INSERT INTO decisions BY NAME
     SELECT 'decision' AS kind, suggestion_id, 'pending' AS status,
            $actor AS actor, 'restore' AS reason, now() AS ts,
            document_id, case_id, text, uuid()::VARCHAR AS batch_id,
@@ -338,13 +333,14 @@ AS COPY (
     WHERE case_id = $id AND event_ts > (
         SELECT ts FROM v_decision_batches WHERE batch_id = $batch_id
     ) AND kind = 'decision'
-) TO 'exports/decisions'
-(FORMAT JSON, FILE_SIZE_BYTES '100KB', FILENAME_PATTERN 'dec_{uuid}', OVERWRITE_OR_IGNORE true);
+RETURNING suggestion_id, status;
 
+-- The plan is the server's own (v_export_plans); no SQL crosses the wire.
+-- No SQL crosses the wire and none is generated: pdf_redact is applied
+-- LATERALly to the plan relation, one call per document row.
 CREATE OR REPLACE ROUTE api_case_export POST '/api/cases/:id/export'
-  PARAM sql VARCHAR DEFAULT ''
 AS
-SELECT document_id, pages
-FROM query(CASE WHEN starts_with($sql, 'SELECT ') AND position(';' IN $sql) = 0
-                THEN $sql
-                ELSE error('export requires SELECT from /export_plan') END);
+SELECT p.document_id, count(*)::INTEGER AS pages
+FROM v_export_plans p, LATERAL pdf_redact(p.source_path, p.out_path, p.boxes) r
+WHERE p.case_id = $id AND NOT p.blocked
+GROUP BY p.document_id;

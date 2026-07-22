@@ -10,7 +10,6 @@ FROM (VALUES
     ('static_dir', '.'),
     ('samples_dir', 'samples'),
     ('exports_dir', 'exports'),
-    ('decisions_glob', 'exports/decisions/*.json'),
     ('quackapi_ext', '../quackapi/build/release/extension/quackapi/quackapi.duckdb_extension'),
     ('actor', coalesce(nullif(getenv('USER'), ''), 'reviewer'))
 ) AS t(key, dflt);

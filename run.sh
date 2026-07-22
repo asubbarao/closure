@@ -29,12 +29,8 @@ if [[ ! -d "$DATA_DIR" ]]; then
 fi
 
 # app.sql expects static_dir/exports_dir to exist; ensure both up front.
-# (The decision log under exports/decisions/ is the durable state and is
-# deliberately NOT touched here — the DB below is derived and disposable.)
-mkdir -p exports/decisions static
-# Schema file (committed, all-null row) keeps the decisions glob non-empty so
-# v_src_decisions binds on a fresh clone; readers filter it out by kind.
-cp -f server/decision.schema.json exports/decisions/_schema.json
+# (The decision log lives in closure.db and is never wiped — see below.)
+mkdir -p exports static
 
 # Exactly one server per port: kill any previous instance still bound to
 # $PORT before wiping the DB. Without this the old process keeps serving the
@@ -50,8 +46,9 @@ if [[ -n "$OLD_PIDS" ]]; then
   done
 fi
 
-# Fresh DB each boot — ingest is the source of truth.
-rm -f "$DB" "${DB}.wal"
+# The DB is NOT wiped here. Decisions live in it and are the evidentiary
+# record; corpus tables are rebuilt in place by the model (see server/store.sql).
+# To start over: make clean.
 
 echo "==> duckdb $($DUCKDB_BIN --version 2>/dev/null | head -1)"
 echo "==> quackapi_ext=$QUACKAPI_EXT"

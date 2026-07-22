@@ -1,4 +1,5 @@
-# DuckDB working files
+# DuckDB working files. closure.db holds the decision log (real reviewer state)
+# alongside the corpus tables rebuilt from samples/ — never committed.
 closure.db
 closure.db.wal
 *.db
@@ -32,6 +33,7 @@ node_modules/
 *.log
 nohup.out
 tests/e2e/test-results/
+test-results/
 tests/e2e/playwright-report/
 
 # Agent/session scratch dropped into the tree by tooling - not project content

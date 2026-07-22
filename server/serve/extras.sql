@@ -35,13 +35,11 @@ SELECT md5(l.document_id || chr(31) || l.page_no::VARCHAR || chr(31) || wl.term)
        NULL::VARCHAR AS entity_id
 FROM document_lines l
 JOIN watchlist wl ON wl.case_no = l.case_id
-WHERE position('NOT PII' IN wl.kind) = 0
-  AND rapidfuzz_partial_ratio(l.line_norm, lower(trim(unaccent(wl.term)))) >= 92
-  AND NOT EXISTS (
-      SELECT 1 FROM covered c
-      WHERE c.document_id = l.document_id AND c.page_no = l.page_no
-        AND c.bbox.y0 <= l.bbox.y1 AND c.bbox.y1 >= l.bbox.y0
-  );
+ AND position('NOT PII' IN wl.kind) = 0
+ AND rapidfuzz_partial_ratio(l.line_norm, lower(trim(unaccent(wl.term)))) >= 92
+ANTI JOIN covered c
+ ON c.document_id = l.document_id AND c.page_no = l.page_no
+ AND c.bbox.y0 <= l.bbox.y1 AND c.bbox.y1 >= l.bbox.y0;
 
 CREATE OR REPLACE VIEW entity_groups AS
 SELECT id AS group_id, case_id, kind AS group_kind, id AS root_entity_id,
@@ -103,6 +101,8 @@ SELECT batch_id, min(event_ts) AS ts, max(event_ts) AS ts_end,
 FROM v_history_events
 GROUP BY batch_id;
 
+-- The export plan is a RELATION, not a generated SQL string: one row per
+-- document with the redaction boxes and destination it would be given.
 -- Only place that remaps bbox → pdf_redact bottom-left boxes.
 CREATE OR REPLACE VIEW v_export_plans AS
 WITH boxes AS (
@@ -124,14 +124,9 @@ gates AS (
     FROM documents d LEFT JOIN v_suggestions s ON s.document_id = d.id
     GROUP BY d.case_id
 )
-SELECT g.case_id, g.blocked,
-       CASE WHEN g.blocked THEN NULL
-            ELSE string_agg(format(
-                'SELECT ''{}'' AS document_id, count(*)::INTEGER AS pages FROM pdf_redact(''{}'', ''exports/{}_redacted.pdf'', {}::STRUCT(page INTEGER, x DOUBLE, y DOUBLE, w DOUBLE, h DOUBLE)[])',
-                d.id, d.source_path, d.filename, cast(coalesce(b.boxes, []) AS VARCHAR)
-            ), ' UNION ALL ')
-       END AS export_sql
+SELECT g.case_id, g.blocked, d.id AS document_id, d.filename, d.source_path,
+       'exports/' || d.filename || '_redacted.pdf' AS out_path,
+       coalesce(b.boxes, []) AS boxes
 FROM gates g
 JOIN documents d ON d.case_id = g.case_id
-LEFT JOIN boxes b ON b.document_id = d.id
-GROUP BY g.case_id, g.blocked;
+LEFT JOIN boxes b ON b.document_id = d.id;

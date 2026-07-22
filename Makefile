@@ -20,18 +20,25 @@ run:
 
 # ALWAYS boot fresh, then run the Playwright e2e suite. Reusing a server that
 # happens to be up means testing whatever stale code it booted with — never
-# what's in the tree. run.sh wipes the derived DB but keeps the decision log;
-# e2e needs a clean log too (stale accepts/rejects → skips on pending-queue tests).
+# what's in the tree. run.sh no longer wipes the DB (it holds real decisions), so
+# e2e deletes it here — stale accepts/rejects skip the pending-queue specs.
 # Fresh clone: npm install + chromium once under tests/e2e (node_modules gitignored).
 # Boot poll 360s — heavy remainder scan on the 110-page consolidated is ~3 min.
 test:
 	@echo "==> e2e deps (npm + chromium if needed)"
 	@cd tests/e2e && npm install --no-fund --no-audit && npx playwright install chromium
-	@echo "==> wipe decision log for deterministic e2e"
-	@mkdir -p exports/decisions
-	@rm -f exports/decisions/*.json
+	@echo "==> fresh DB for deterministic e2e (stale decisions → skipped specs)"
+	@rm -f closure.db closure.db.wal
 	@echo "==> fresh boot for test run"
 	@mkdir -p .tmp
+	@# Free the port FIRST and wait for it to go quiet. Otherwise the poll below
+	@# is satisfied by the previous server in the moment before run.sh kills it,
+	@# and Playwright starts against the gap (ECONNREFUSED on the first spec).
+	@lsof -t -i tcp:$(PORT) -s tcp:LISTEN 2>/dev/null | xargs -r kill 2>/dev/null || true
+	@for i in $$(seq 1 30); do \
+		lsof -t -i tcp:$(PORT) -s tcp:LISTEN >/dev/null 2>&1 || break; \
+		sleep 1; \
+	done
 	@PORT=$(PORT) nohup ./run.sh > .tmp/run.log 2>&1 & \
 	for i in $$(seq 1 360); do \
 		curl -s -o /dev/null -w '%{http_code}' $(BASE)/api/stats 2>/dev/null | grep -q 200 && break; \
@@ -41,8 +48,7 @@ test:
 		|| { echo "boot failed — tail .tmp/run.log:"; tail -40 .tmp/run.log; exit 1; }
 	cd tests/e2e && CLOSURE_BASE_URL=$(BASE) npx playwright test --reporter=line
 
-# Remove generated runtime state: the DB, its WAL, and decision-log JSON
-# files. Does not touch exports/.gitkeep, .deps/, or committed content.
+# Start over: drop the database (corpus tables AND the decision log).
+# Does not touch exports/.gitkeep, .deps/, or committed content.
 clean:
 	rm -f closure.db closure.db.wal
-	rm -f exports/decisions/*.json
