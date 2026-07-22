@@ -10,8 +10,9 @@ FROM (VALUES
     ('static_dir', '.'),
     ('samples_dir', 'samples'),
     ('exports_dir', 'exports'),
-    ('quackapi_ext', '../quackapi/build/release/extension/quackapi/quackapi.duckdb_extension'),
     ('actor', coalesce(nullif(getenv('USER'), ''), 'reviewer'))
+    -- tera template_path is a binder constant in routes/views
+    -- (not app_config): 'server/templates/**/*.html'
 ) AS t(key, dflt);
 
 SELECT CASE

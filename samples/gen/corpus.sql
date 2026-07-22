@@ -147,21 +147,47 @@ FROM base b
 CROSS JOIN generate_series(1, (SELECT docs_per_case FROM _cfg)) g(slot)
 JOIN stems st ON st.i = ((b.cid - 1) * (SELECT docs_per_case FROM _cfg) + (g.slot - 1)) % 8
 UNION ALL BY NAME
-SELECT b.cid, b.case_no, 0, 'consolidated_case_file', 'Consolidated Case File',
+-- BY NAME matches on column name: every column here must carry the alias it
+-- has above, or it lands as NULL (that was the null-filename manifest row).
+SELECT b.cid, b.case_no, 0 AS slot,
+    'consolidated_case_file' AS stem, 'Consolidated Case File' AS title,
     format('consolidated_case_file_20{}-{}.pdf',
-        split_part(b.case_no, '-', 1), split_part(b.case_no, '-', 2)),
+        split_part(b.case_no, '-', 1), split_part(b.case_no, '-', 2)) AS filename,
     format(E'Consolidated Case File\nCase {}\nReporting: {}\n'
         || E'Subject {} SSN {} Phone {}\nWitnesses {} / {}\nStreet {} Cite {}\n{}',
         b.case_no, b.reporting, b.subject_name, b.subject_ssn, b.subject_phone,
         b.w0n, b.w1n, b.fp_street, b.fp_citation,
+        -- 68 of these sentences fill one page at write_pdf's default layout,
+        -- so the knob means what it says: consolidated_pages = actual pages.
         repeat(format(E'{} logged contact with {} ({}). ', b.reporting, b.subject_name, b.subject_ssn),
-            greatest(20, (SELECT consolidated_pages FROM _cfg) * 8))
-    )
+            greatest(20, (SELECT consolidated_pages FROM _cfg) * 68))
+    ) AS body
 FROM base b
 WHERE b.cid = (SELECT min(cid) FROM _cases) AND (SELECT consolidated_pages FROM _cfg) > 0;
 
 SELECT write_pdf(body, getvariable('samples_dir') || '/' || filename) AS path, filename
 FROM _docs;
+
+-- ── real court documents ──────────────────────────────────────────────────
+-- Public-domain federal filings fetched by scripts/fetch-public.sh into the
+-- same directory as the generated ones. The case grouping is DECLARED by
+-- that script (samples/court_manifest.json) — we picked these five files and
+-- already know which matter each belongs to, so nothing here re-derives it
+-- from document text (same principle as _cases above: case_no is assigned
+-- once and carried as a column, never rediscovered from the document body).
+-- If the fetch was skipped, the manifest is empty and the corpus is the
+-- generated one alone.
+--
+-- They carry NO watchlist entries, deliberately. A published opinion has no
+-- known-PII list, which is the real cold-start a reviewer faces: shape
+-- detectors and finetype fire, name matching has nothing seeded, and the
+-- missed-redaction queue is what covers the gap.
+
+CREATE OR REPLACE TEMP TABLE _court AS
+SELECT filename, case_no
+FROM read_json_auto(getvariable('samples_dir') || '/court_manifest.json',
+                     format := 'array', columns := {filename: 'VARCHAR', case_no: 'VARCHAR'},
+                     ignore_errors := true);
 
 -- ── artifacts (still not audit) ───────────────────────────────────────────
 
@@ -191,8 +217,9 @@ COPY (
 
 COPY (
     SELECT to_json({'files': list({'filename': filename, 'case_no': case_no}
-        ORDER BY case_no, filename)}) FROM _docs
+        ORDER BY case_no, filename)})
+    FROM (SELECT filename, case_no FROM _docs UNION ALL SELECT filename, case_no FROM _court)
 ) TO (getvariable('samples_dir') || '/manifest.json') (FORMAT csv, HEADER false, QUOTE '');
 
 SELECT 'corpus done' AS status, (SELECT count(*) FROM _cases) AS cases,
-       (SELECT count(*) FROM _docs) AS docs;
+       (SELECT count(*) FROM _docs) + (SELECT count(*) FROM _court) AS docs;

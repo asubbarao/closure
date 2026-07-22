@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Closure{% endblock %}</title>
+<style>
+:root{--ws:#E9ECF0;--panel:#fff;--line:#D6DCE3;--ink:#1A2230;--ink2:#5A6577;--acc:#1D4ED8;--pend:#B45309;--rej:#B42318;--ok:#087443;--mono:ui-monospace,monospace;--sans:system-ui,sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:13px/1.45 var(--sans);background:var(--ws);color:var(--ink)}
+a{color:inherit} .mono{font-family:var(--mono)}
+.appbar{display:flex;align-items:center;gap:12px;height:48px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+.appbar .sp{flex:1}
+.btn{font:inherit;font-weight:600;padding:6px 12px;border-radius:6px;border:1px solid var(--line);background:var(--panel);cursor:pointer;text-decoration:none;display:inline-block}
+.btn.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btn.danger{color:var(--rej);border-color:var(--rej)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.wrap{max-width:1100px;margin:0 auto;padding:20px 16px 48px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line)}
+th{font-size:11px;color:var(--ink2);background:#F7F9FB}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:16px}
+.mark{position:absolute;border-radius:2px;cursor:pointer}
+.mark.pending{background:rgba(253,243,227,.85);outline:1.5px solid var(--pend)}
+.mark.flagged{background:rgba(253,236,234,.7);outline:1.5px dashed var(--rej)}
+.mark.accepted{background:#0B0E14}
+.mark.rejected{outline:1.5px dashed #8A94A6;background:transparent}
+.mark.current{outline:2.5px solid var(--acc);outline-offset:2px;z-index:5}
+.pdf-page{position:relative;width:680px;margin:0 auto;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.pdf-page img{width:100%;display:block}
+.queue .sugg{display:flex;gap:8px;padding:8px;border-bottom:1px solid var(--line);cursor:pointer}
+.queue .sugg.current{background:var(--acc);color:#fff}
+{% block page_css %}{% endblock %}
+</style>
+</head>
+<body{% block body_attrs %}{% endblock %}>
+{% block body %}{% endblock %}
+<script src="/static/app.js"></script>
+</body>
+</html>

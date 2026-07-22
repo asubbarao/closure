@@ -4,21 +4,30 @@ A working prototype of an AI-powered **PDF redaction review** tool for law
 enforcement public-records release. One DuckDB process is the database, the
 HTTP server, the PDF engine, and the HTML renderer.
 
-> **Backend thesis:** DuckDB + the real **quackapi** extension *is* the backend;
-> Tera renders the frontend. Load the built `.duckdb_extension`, `CREATE ROUTE`,
-> `quackapi_serve`.
+> **Backend thesis:** DuckDB + **quackapi** *is* the backend — one process, community
+> `INSTALL`/`LOAD`, FastAPI-shaped HTTP over SQL. Tera file-mode for HTML. LOC is the
+> collapse scoreboard (not golf).
+
+**Know FastAPI already?** Open [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md) (2 min),
+then read `server/app.sql` → `store.sql` → `domain/fold.sql` → top of `routes.sql`.
+The “wtf” should be *SQL is the handler* — not a tangle of frameworks.
 
 ## Stack
 
 | Concern | Implementation |
 |---------|----------------|
-| Database | DuckDB (serverless file DB) |
-| PDF text + coordinates | `pdf` community extension (`read_pdf_words`, `pdf_info`, `pdf_redact`) |
-| HTML | `tera` extension (`tera_render`) |
-| HTTP | **quackapi** (`CREATE ROUTE` + `quackapi_serve`) |
-| Mutations | append-only JSON under `exports/decisions/*.json` (event log → `v_suggestions`) |
+| Process | **One** DuckDB process: `INSTALL … FROM community` / `LOAD …` (quackapi, pdf, tera, …) |
+| HTTP | **quackapi** — `CREATE ROUTE` + `quackapi_serve` (FastAPI-shaped params → 422) |
+| PDF text + boxes + export | `pdf` — `read_pdf_words`, `pdf_info`, `pdf_redact` |
+| HTML | **tera file-mode** — `tera_render('page.html', ctx, template_path := …)` → column `html` |
+| N-way / dynamic SQL | **Self-dispatch** in-query (ATTACH self / loopback) when it deletes a for-loop — same idea as airport self-`take_flight` |
+| Host / API-class work | **shellfs** / `http_client` as CTE rows — no FastAPI client SDK stack |
+| Page previews | Static `pages/<stem>/pN.png` from setup (`pdf_page_images` + `COPY … (FORMAT BLOB)`; no host poppler) |
+| Mutations | append-only `decisions` (`INSERT` → fold → `v_suggestions`) |
+| Scoreboard | **LOC / files** vs FastAPI·Fastify·Rails multi-file apps for the same surface |
+| Map | [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md) |
 
-No React. No shellfs. No `mutate.sh`. Confidence bands and entity bulk are real.
+No React. Confidence bands and entity bulk are real.
 
 ## For reviewers — where each assignment challenge lives
 
@@ -38,12 +47,25 @@ High-fidelity design (Part 1): [`design/`](design/).
 
 | Need | Why | How |
 |------|-----|-----|
-| **macOS or Linux** | Prebuilt runtime / source build | Windows not supported yet |
-| **Network (first run)** | Download runtime + community extensions (`pdf`, `tera`, `fakeit`, `rapidfuzz`, `finetype`, `us_address_standardizer`) | Ordinary HTTPS |
-| **poppler** (recommended) | Fast page-PNG previews | `brew install poppler` / `apt install poppler-utils` |
-| **Node 18+** | Playwright e2e only | `make test` installs deps under `tests/e2e` |
+| **DuckDB ≥ 1.5.4** on `PATH` | Host binary | [Install DuckDB](https://duckdb.org/docs/installation/) |
+| **Network (first run)** | `INSTALL … FROM community` (`quackapi`, `pdf`, `tera`, …) | Ordinary HTTPS |
+| **Node 18+** | Playwright e2e only | `make test` |
 
-You do **not** need to clone or understand [quackapi](https://github.com/asubbarao/quackapi). Closure installs a pinned DuckDB + quackapi **binary pair** into local `.deps/runtime/` (gitignored). quackapi source is **never** vendored into this repo.
+Page PNG previews are produced by the community **`pdf`** extension
+(`pdf_page_images` + `COPY … (FORMAT BLOB)`), not host `pdftoppm`/poppler.
+Prefer a **pdf** build that bundles base-14 fonts (duckdb-read_pdf ≥ **0.7.3**);
+older community packages can emit blank pages. To force a local extension:
+
+```sh
+PDF_EXTENSION=/path/to/pdf.duckdb_extension ./scripts/setup.sh
+```
+
+**quackapi** is a normal community extension:
+
+```sql
+INSTALL quackapi FROM community;
+LOAD quackapi;
+```
 
 ## Quick start (graders)
 
@@ -51,49 +73,37 @@ You do **not** need to clone or understand [quackapi](https://github.com/asubbar
 git clone https://github.com/asubbarao/closure.git
 cd closure
 
-make install          # download (or build) DuckDB + quackapi → .deps/runtime/
+# DuckDB 1.5.4+ on PATH, then:
+make install          # INSTALL quackapi FROM community (probe)
 make setup            # sample PDFs + page PNGs
 make run              # → http://127.0.0.1:8117/
 ```
 
-`make install` is `./scripts/install-runtime.sh`:
-
-1. Reuse `.deps/runtime` if already installed  
-2. Else copy a sibling `../quackapi/build/release` (local dev only)  
-3. Else download a prebuilt tarball from this repo’s [Releases](https://github.com/asubbarao/closure/releases)  
-4. Else clone + build quackapi into `.deps/src/` (needs `cmake` + `ninja`; 10–30+ min)
-
-`make setup` generates the sample corpus and will call `install-runtime` if `.deps/runtime` is missing.  
-`make run` boots fresh (`run.sh` → `server/app.sql`).  
-`make test` boots and runs Playwright.  
-`make clean` drops `closure.db` and decision JSON (not `.deps/`).
+`make run` → `run.sh` → `duckdb closure.db -c ".read server/app.sql"`.  
+`make test` wipes `closure.db` then boots + Playwright.  
+`make clean` drops `closure.db`.
 
 ### No-make path
 
 ```sh
-./scripts/install-runtime.sh
+duckdb -c "INSTALL quackapi FROM community; LOAD quackapi;"
 ./scripts/setup.sh
 ./run.sh
-# → http://127.0.0.1:8117/
 ```
 
 ### Configuration — one relation
 
-All knobs live in `app_config(key, value, source)` (`server/config.sql`,
-loaded first). Every row obeys one rule: `CLOSURE_<KEY>` env wins when set and
-non-empty, else the committed default. The boot log prints the resolved table.
+All knobs live in `app_config(key, value, source)` (`server/config.sql`).
+`CLOSURE_<KEY>` env wins when set and non-empty, else the default.
 
 | Env | app_config key | Default | Purpose |
 |-----|----------------|---------|---------|
 | `CLOSURE_PORT` | `port` | `8117` | HTTP listen port |
 | `CLOSURE_STATIC_DIR` | `static_dir` | `.` | `quackapi_serve` static root |
-| `CLOSURE_SAMPLES_DIR` | `samples_dir` | `samples` | ingest PDF/manifest/identities dir |
-| `CLOSURE_EXPORTS_DIR` | `exports_dir` | `exports` | redacted-PDF target prefix |
-| `CLOSURE_DECISIONS_GLOB` | `decisions_glob` | `exports/decisions/*.json` | decision-log **read** glob (writes are `COPY TO` literals under `exports/decisions/`) |
-| `CLOSURE_QUACKAPI_EXT` | `quackapi_ext` | `.deps/runtime/…` after install | path to `quackapi.duckdb_extension` |
-| `CLOSURE_ACTOR` | `actor` | `A. Subbarao` | "Reviewing as" identity stamped into templates |
-| `DUCKDB_BIN` | — | `.deps/runtime/duckdb` after install | DuckDB binary for `run.sh` / setup |
-| `CLOSURE_RUNTIME_TAG` | — | `runtime-v1.5.4-1` | GitHub Release tag for the prebuilt runtime |
+| `CLOSURE_SAMPLES_DIR` | `samples_dir` | `samples` | ingest PDF/manifest dir |
+| `CLOSURE_EXPORTS_DIR` | `exports_dir` | `exports` | redacted-PDF prefix |
+| `CLOSURE_ACTOR` | `actor` | `$USER` | reviewer identity in templates |
+| `DUCKDB_BIN` | — | `duckdb` on `PATH` | override binary |
 
 `GET /api/routes` returns the full route map as JSON — generated from the live
 `quackapi_routes()` registry joined to the parsed `CREATE ROUTE` declarations
@@ -109,24 +119,20 @@ of `manifest.json` × `identities.json` × `samples/*.pdf`), with orphan diagnos
 
 ```
 server/
-  app.sql             boot: config → extensions → ingest → seed → integrity → routes → serve
-  config.sql          app_config(key, value, source) — env-overridable knobs + cfg_* macros
-  ingest.sql          PDF + identities/manifest CTAS load
-  seed.sql            roster-matched suggestions + v_suggestions projection
-  pdf_io.sql          sole live export SQL builders (boxes + pdf_redact)
-  load_templates.sql  server/templates/*.html → app_templates
-  routes/             CREATE ROUTE by resource (pages, documents, decisions, export, …)
+  app.sql             main: config → extensions → model → routes → serve
+  store.sql           durable decisions table + bbox type
+  model.sql           load order (raw → typed → domain → serve)
+  raw/  typed/        file readers → join-ready views
+  domain/             facts CTAS, detect, fold → v_suggestions
+  serve/              UI marts + optional extras
+  routes.sql          CREATE ROUTE (HTTP only)
   templates/          Tera HTML
-samples/              PDFs + identities.json + manifest.json
-pages/                pre-rendered page PNGs (served as static)
-exports/              redacted PDFs + decisions/*.json event log
-static/               client JS (review, dashboard, add-missed, …)
-docs/                 design notes + extension surveys
-design/               UX flows and wireframes
-spikes/               isolated feasibility experiments behind design decisions
-                      (marisa vs hash join, pdf_revisions custody, OCR, …);
-                      each owns only its own dir — nothing here is loaded by the app
-tests/                Playwright e2e (tests/e2e) + stress harness (tests/stress)
+samples/              PDFs + manifest + watchlist
+pages/                page PNG previews (static)
+exports/              redacted PDF output
+static/               client JS
+docs/HOW_IT_WORKS.md  read this first if you know FastAPI
+tests/e2e             Playwright
 ```
 
 ## Routes (primary)
@@ -153,13 +159,12 @@ POST bodies: send `Content-Type: application/json` with `{}` when the client has
 
 ## Data model (decisions)
 
-1. **Append-only event log** — each decision/add is a JSON file under
-   `exports/decisions/`. Suggestion status is a **projection** (`v_suggestions`
-   = seed rows ∪ latest decision ∪ manual adds).
-2. **Geometry** — PDF points, top-left origin from `read_pdf_words`. Export flips
-   Y once in `pdf_io.sql` for `pdf_redact` (bottom-left).
-3. **Entities** — PII catalog from `identities.json` (answer key).
-4. **Suggestions** — seeded at boot from roster × word n-grams (not empty).
+1. **Append-only table** — `decisions` (`INSERT` only). Status is a **projection**
+   in `v_suggestions` (latest event per `suggestion_id` + AI / manual proposals).
+2. **Geometry** — type `bbox`; pack once from `read_pdf_words`. Export flips Y
+   once for `pdf_redact` (bottom-left).
+3. **Entities / suggestions** — built at boot from samples + detect (watchlist,
+   finetype, rapidfuzz). Detectors never write status.
 
 ## Export contract
 
@@ -213,11 +218,11 @@ are data-state guards on an almost-fully-decided corpus, not broken features).
 # optional: ./scripts/setup.sh --reuse-identities   # keep identities.json cast
 ```
 
-`scripts/setup.sh` runs pure DuckDB (`samples/gen/01_identities.sql` +
-`02_corpus.sql` via fakeit + `write_pdf`) then renders `pages/<stem>/pN.png`
-with `pdftoppm`. Scripts resolve DuckDB via `.deps/runtime` (after
-`make install`), then `$DUCKDB_BIN`, then PATH. Commit no sample PDFs —
-clone → install → setup → boot.
+`scripts/setup.sh` runs pure DuckDB (`samples/gen/corpus.sql` via fakeit +
+`write_pdf`) then rasters `pages/<stem>/pN.png` with community **`pdf`**
+(`pdf_page_images` → `COPY … (FORMAT BLOB)`; see `scripts/setup_pages.sql`).
+No host poppler. DuckDB is whatever is on `PATH` (or `$DUCKDB_BIN`, ≥ 1.5.4).
+Commit no sample PDFs — clone → install → setup → boot.
 
 ## Design rationale
 

@@ -1,0 +1,14 @@
+[
+  {"rule": "finetype_prefix", "type_prefix": "identity.commerce.isbn", "kind": "SSN", "confidence": 90, "priority": 10},
+  {"rule": "finetype_prefix", "type_prefix": "datetime.date", "kind": "DATE OF BIRTH", "confidence": 85, "priority": 20},
+  {"rule": "finetype_prefix", "type_prefix": "identity.person.email", "kind": "EMAIL", "confidence": 90, "priority": 15},
+  {"rule": "finetype_prefix", "type_prefix": "identity.phone", "kind": "PHONE · SUBJECT", "confidence": 85, "priority": 25},
+  {"rule": "finetype_prefix", "type_prefix": "technology.internet.ip", "kind": "IP_ADDRESS", "confidence": 90, "priority": 18},
+  {"rule": "finetype_prefix", "type_prefix": "geography.coordinate", "kind": "GEO_COORD", "confidence": 60, "priority": 50},
+  {"rule": "shape", "compact_len": 9, "kind": "SSN", "confidence": 70, "priority": 40},
+  {"rule": "shape", "compact_len": 10, "kind": "PHONE · SUBJECT", "confidence": 70, "priority": 45},
+  {"rule": "url_valid", "kind": "URL", "confidence": 90, "priority": 12},
+  {"rule": "urlpattern", "url_pattern": "https://*", "kind": "URL", "confidence": 88, "priority": 14},
+  {"rule": "urlpattern", "url_pattern": "http://*", "kind": "URL", "confidence": 88, "priority": 14},
+  {"rule": "urlpattern", "url_pattern": "http{s}?://*", "kind": "URL", "confidence": 88, "priority": 14}
+]

@@ -1,37 +1,32 @@
-# Data model (working doctrine)
+# Data model
 
-This is **not** Claude’s “orthogonal layers of views = the model” story.
+## Doctrine
 
-## System of record
+| What | How |
+|------|-----|
+| **Files** | Stay files. Unmaterialized views open them (`pdf_info` / `read_json_auto` via scalarfs `pathvariable:`). Not a “layer” — just IO. Never rewrite fixtures in SQL; use shellfs if you must `mv`. |
+| **Tables** | Real app relations (like any server). Durable: `decisions`, `llm_models`, `pipeline_runs`, `llm_calls`, `run_artifacts`. Boot-derived: `cases`, `documents`, `pages`, `words`, `document_lines`, `watchlist`, `entities`, `suggestions`. |
+| **Views** | Unmaterialized projections only (`CREATE VIEW`). **No `MATERIALIZED VIEW`.** |
+| **Routes** | Thin HTTP over views/tables. No second model. |
 
-| Surface | Role |
-|---------|------|
-| `exports/decisions/*.json` | Append-only **changelog** for status transitions + manual suggestion birth |
-| Sample PDFs + `watchlist.json` + manifest | Batch **inputs** to detect at boot |
-| `cases` / `documents` / `pages` / `words` / `entities` / `suggestions` | **Derived tables** rebuilt at boot — must use **durable keys** |
-| `v_suggestion_cube` + status/band PIVOTs | **Tall count grain** → wide marts (no `COUNT FILTER` laundry) |
-| `v_*` UI / triage / history | **Thin marts** over cube/PIVOT — projections, not the model |
+## Durable (store.sql)
 
-See the full Kimball / Inmon / Kleppmann assault: [`data-model-assault.md`](./data-model-assault.md).
+- **`decisions`** — append-only human events; status never UPDATEd in place  
+- **`llm_models`** — detector/LLM registry (`raw` JSON; seeded every boot)  
+- **`pipeline_runs`** — one row per detect/judge/export/…  
+- **`llm_calls`** — raw-first request+response JSON (future LLM; empty until wired)  
+- **`run_artifacts`** — export paths per run  
 
-## Durable keys (required)
+## Derived at boot (core.sql)
 
-Boot **must not** call `uuid()` for subjects that appear in the decision log.
+Corpus tables from sample PDFs + manifest + watchlist. Detect stamps  
+`suggestions.source_run_id` + `detector_key` and finishes a `pipeline_runs` row.
 
-| Subject | Payload for md5→UUID |
-|---------|----------------------|
-| document | `case_no \|\| chr(31) \|\| filename` |
-| entity | `case_id \|\| chr(31) \|\| kind \|\| chr(31) \|\| canonical_text` |
-| suggestion (AI) | `document_id \|\| page \|\| rounded bbox \|\| text \|\| kind \|\| 'ai'` |
+## Projections (views.sql)
 
-Contract: `server/ids.sql`. Implementations: `ingest.sql`, `detect.sql`, `remainder_scan.sql`.
+`v_suggestions` folds latest decision → status/band. UI/API views are unmat.  
+`v_suggestion_lineage` joins suggestions → runs → models.
 
-**Event** keys (decision shard filenames, `batch_id`) may still use random `uuid()` — those name events, not subjects.
+## Load order
 
-## Geometry
-
-Suggestions carry `bbox STRUCT(page, x0, y0, x1, y1, origin)` **and** flat `x0..y1` for the frozen route/JS edge. Prefer `bbox` internally; unpack at the edge until the contract moves.
-
-## Decision log reader
-
-`v_src_decisions` is the **only** glob reader. Typed casts; `ignore_errors` is off (corrupt shard fails loud).
+`config → extensions → path variables → store → core → views → routes → quackapi_serve`

@@ -1,0 +1,123 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Closure semantic model  (name: closure)
+#
+# WHAT THIS IS
+#   Relations for metrics: fact s (v_suggestions) ⋈ documents ⋈ cases ⋈ entities.
+#   Dimensions = axes to group/filter. Metrics = real measures (COUNT/AVG/…).
+#   status / band / kind are dimensions — never invent pending_count columns.
+#
+# HOW TO USE (after boot)
+#   FROM semantic_view('closure',
+#        dimensions := ['case_id', 'status'],
+#        metrics    := ['n', 'avg_confidence']);
+#   WHERE case_id = '…';
+#
+#   Catalog:  SELECT * FROM v_cols;
+#             SELECT * FROM show_semantic_dimensions('closure');
+#   Open:     SELECT * FROM query(format('SELECT * FROM {}', 'v_suggestions'));
+#   Profile:  SELECT * FROM query(format('FROM (SUMMARIZE {})', 'v_suggestions'));
+#   HTTP:     GET /api/cols  /api/rel/:relation  /api/summarize/:relation
+#
+# HOW TO EXTEND
+#   1. tables + joins + dimensions + metrics (real measures only)
+#   2. Re-boot (DROP + CREATE SEMANTIC VIEW in views.sql)
+#   No grain views, no UNION routes, no coalesce count pivots.
+#
+# DO NOT
+#   - Pivot status/band into pending_count columns
+#   - Wrapper views that are SELECT * FROM t
+#   - Hand-roll GROUP BY the semantic layer already owns
+# ═══════════════════════════════════════════════════════════════════════════
+
+comment: Review graph — suggestions ⋈ documents ⋈ cases ⋈ entities
+
+tables:
+  - alias: s
+    table: v_suggestions
+    pk_columns: [id]
+    comment: Suggestion fact (AI + manual)
+  - alias: d
+    table: documents
+    pk_columns: [id]
+  - alias: c
+    table: cases
+    pk_columns: [id]
+  - alias: e
+    table: entities
+    pk_columns: [id]
+
+joins:
+  - name: sug_doc
+    table: d
+    from_alias: s
+    fk_columns: [document_id]
+    cardinality: ManyToOne
+  - name: doc_case
+    table: c
+    from_alias: d
+    fk_columns: [case_id]
+    cardinality: ManyToOne
+  - name: sug_entity
+    table: e
+    from_alias: s
+    fk_columns: [entity_id]
+    cardinality: ManyToOne
+
+dimensions:
+  - name: suggestion_id
+    expr: s.id
+    source_table: s
+  - name: document_id
+    expr: s.document_id
+    source_table: s
+  - name: page_no
+    expr: s.page_no
+    source_table: s
+  - name: status
+    expr: s.status
+    source_table: s
+  - name: band
+    expr: s.band
+    source_table: s
+  - name: kind
+    expr: s.kind
+    source_table: s
+  - name: source
+    expr: s.source
+    source_table: s
+  - name: detector_key
+    expr: s.detector_key
+    source_table: s
+  - name: flag_tag
+    expr: s.flag_tag
+    source_table: s
+  - name: filename
+    expr: d.filename
+    source_table: d
+  - name: case_id
+    expr: c.id
+    source_table: c
+  - name: case_no
+    expr: c.case_no
+    source_table: c
+  - name: entity_id
+    expr: e.id
+    source_table: e
+  - name: entity_kind
+    expr: e.kind
+    source_table: e
+  - name: entity_text
+    expr: e.canonical_text
+    source_table: e
+
+# Real measures only. "How many pending?" → dimensions status + metric n.
+metrics:
+  - name: n
+    expr: COUNT(*)
+    source_table: s
+  - name: avg_confidence
+    expr: AVG(s.confidence)
+    source_table: s
+  - name: max_confidence
+    expr: MAX(s.confidence)
+    source_table: s
