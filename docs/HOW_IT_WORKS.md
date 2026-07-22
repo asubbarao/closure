@@ -1,42 +1,57 @@
 # How Closure works
 
-One DuckDB process is DB + HTTP + PDF + HTML. Handlers are SQL. UI is tera SSR. Browser mutates then reloads.
+One DuckDB process is the application: DB + HTTP + PDF + HTML + FS + shell. Handlers are SQL. UI is tera SSR. Browser mutates then reloads.
+
+This is intentional as a **better FastAPI for data products** — not a downgrade. Platform notes: [`PLATFORM.md`](PLATFORM.md).
 
 ## FastAPI map
 
 | You know | Here |
 |----------|------|
 | `uvicorn` + routers | `app.sql` + `CREATE ROUTE` |
+| OpenAPI / Swagger | **`/docs`**, **`/openapi.json`**, **`/redoc`** (quackapi, live) |
+| Depends / API key / JWT | `CREATE AUTH` + `REQUIRE` (`server/auth.sql`; `CLOSURE_API_KEY`) |
+| httpx / async client | **curl_httpfs** (pool, HTTP/2, async outbound) |
 | models / services | `store` → `core` (tables) → `views` (live + pages) |
-| Jinja | `tera_render(…, template_path := 'server/templates/**/*.html')` → `parse_html` |
+| Jinja | `tera_render(…, template_path := …)` → `parse_html` |
+| subprocess / pathlib | **shellfs** / **hostfs** / **scalarfs** / **zipfs** |
+| Postgres | Optional `ATTACH` (`CLOSURE_POSTGRES`, `server/postgres.sql`) |
+| pytest types | **`server/smoke.sql`** / optional dqtest — schema is the contract |
 | SPA re-paint | POST + `location.reload()` (`static/app.js`) |
 
 ## Boot
 
 ```
-config → extensions → auth (optional key)
+config → extensions (curl_httpfs + …) → auth
   → hostfs views → scalarfs path pins
   → optional postgres attach
-  → model (tables + live views) → routes → smoke → quackapi_serve
+  → model → routes → smoke → quackapi_serve → re-raise memory_limit
 ```
 
-## Model layers (extend like tables)
+Entry: `make run` → `run.sh` → `.read server/app.sql`.
+
+## Model layers
 
 | Layer | Owns | Extend by |
 |-------|------|-----------|
-| **Tables** (`core.sql`) | Facts + display pins (`display_name`, page `scale`, entity `kind_label`, …) | New stable column at CTAS |
+| **Tables** (`core.sql`) | Facts + display pins | New stable column at CTAS |
 | **Live views** | Decision fold, mark px, export gate | Thin join over live state |
 | **Page views** | `parse_html(tera…)` only | Pack JSON once at page edge |
 | **Routes** | `SELECT html` / `INSERT … RETURNING` | Never re-derive labels |
 
-## Formats
+## Formats & planes
 
-| Kind | Reader |
-|------|--------|
-| paths | hostfs → scalarfs `pathvariable:` / `variable:` |
+| Kind | How |
+|------|-----|
+| Host tree | Unmat **`v_hostfs`** (hostfs scalars — not string path hacks) |
+| Path pins | scalarfs `COPY … (FORMAT variable)` → `pathvariable:` |
+| LE zip packs | **zipfs** `archive_contents` / `zip://…/member` (`v_zips`) |
+| Shell | **stream:** `read_csv` / `read_json(_auto)` on `cmd \|` · **batch:** `read_text` |
 | JSON | `read_json_auto` (manifest, watchlist, detector_rules) |
 | YAML | `read_yaml` + semantic `FROM YAML FILE` |
-| HTML | tera → webbed `parse_html`; templates `read_html_objects` |
+| HTML | tera → webbed `parse_html` |
+| Metrics | `semantic_view('closure', …)` — dimensions not count pivots |
+| Charts (optional) | **ggsql** Grammar of Graphics — see PLATFORM.md |
 
 ## Product routes
 
@@ -46,8 +61,10 @@ config → extensions → auth (optional key)
 | GET | `/cases/:id/stream` | Entity stream |
 | GET | `/documents/:id`, `/pages/:n` | Review peek |
 | GET | `/cases/:id/audit` | Audit |
+| GET | `/docs`, `/openapi.json`, `/redoc` | OpenAPI |
 | GET | `/api/cases/:id/nav` | Doc + shell hrefs |
 | GET | `/api/cols`, `/api/rel/:relation` | Catalog (allowlisted) |
+| GET | `/api/hostfs`, `/api/zips`, `/api/shell/patterns` | Host / pack / shell recipes |
 | POST | `/api/suggestions/:id/decision` | Decide one |
 | POST | `/api/entities/:id/decision` | Entity bulk (no flagged) |
 | POST | `/api/documents/:id/band/:band/decision` | Band bulk |
@@ -56,18 +73,27 @@ config → extensions → auth (optional key)
 | POST | `/api/undo` | Inverse latest batch |
 | POST | `/api/cases/:id/export` | `pdf_redact` when not blocked |
 
+Lock a route: `REQUIRE closure_api` after `CLOSURE_API_KEY` is registered.
+
 ## Data model (short)
 
 - **decisions** append-only; status = fold (`max_by` latest event) on `v_suggestions`
 - Detect: finetype + rapidfuzz (+ bloom) → `suggestions` + `entities`
 - Export hard-block while any flagged pending (`v_export_blocked`)
 
-## duck-orch and friends
+## Checks
 
-[duck-orch](https://github.com/nkwork9999/duck-orch) is a DuckDB **asset/DAG orchestrator** (partitions, sensors, OpenLineage). Useful for warehouse-style pipelines. **Not** Closure product: FOIA review is interactive routes + decision log, not scheduled asset materialization. Do not `INSTALL` for this app.
+```sh
+make smoke    # after a boot that left closure.db
+# or: duckdb closure.db -c ".read server/smoke.sql"
+```
 
-Same bar for `events` (hooks to external programs): harness/ops, not the FOIA loop.
+## Not product
+
+- Warehouse DAG tools (e.g. duck-orch) — wrong shape for interactive FOIA
+- Raw HTTP shell execution of arbitrary `cmd` — recipes only (`v_shell_patterns`)
+- SPA / second app tier for the graded loop
 
 ## Size
 
-SQL + 5 templates + one JS file. If a line doesn’t delete a host/SPA layer or earn a real relation, it doesn’t belong.
+SQL + few templates + one JS file. If a line doesn’t delete a host/SPA layer or earn a real relation, it doesn’t belong.

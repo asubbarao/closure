@@ -40,7 +40,7 @@ browser → DuckDB [ quackapi(CREATE ROUTE) · pdf · tera · finetype · addrus
 
 DB + HTTP + PDF + HTML share **one address space**. Handlers are SQL; `pdf_redact` / `read_pdf_words` / `tera_render` are function calls, not RPC. Buys: no ORM skew, **set-based generic detection** — `finetype` types tokens (SSN/phone/date), `us_address_standardizer` parses addresses, `rapidfuzz` matches a name watchlist over document words (no fixture answer-key, no hand-rolled n-grams) — page-scoped review, one binary to demo.
 
-**Honest limits:** single-writer file lock across processes; human-rate appends are fine (**~3k decision QPS**, p50 **~5 ms** in-process — not the bottleneck); quackapi **256 MB serve stomp** must re-raise post-serve; unsigned extension pending community submit. **In production multi-writer concurrency I would reach for Postgres + a conventional app tier + object storage**, keeping DuckDB as the geometry/analytics side-engine — not the horizontally scaled HTTP tier.
+**Honest limits / ops:** single-writer file lock across *processes*; human-rate appends are fine (**~3k decision QPS**, p50 **~5 ms** in-process — not the bottleneck); re-raise `memory_limit` post-serve; use a quackapi-capable binary when community pins lag. **Production scaling** is topology (supervisor, durable files + decisions, optional `ATTACH` Postgres as peer, more DuckDB workers) — not a requirement to reintroduce a FastAPI middle tier. Platform detail: [`PLATFORM.md`](PLATFORM.md).
 
 ## 5. Scale (measured)
 
