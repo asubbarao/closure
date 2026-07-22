@@ -4,8 +4,8 @@
 
 INSTALL quackapi FROM community; LOAD quackapi;
 
--- Outbound client (quackapi_serve batteries also prefer this)
-INSTALL httpfs FROM community; LOAD httpfs;
+-- Outbound: core httpfs (not community — origin clash if FORCE INSTALL). curl_httpfs optional.
+INSTALL httpfs; LOAD httpfs;
 INSTALL curl_httpfs FROM community; LOAD curl_httpfs;
 
 INSTALL pdf FROM community; LOAD pdf;
