@@ -49,9 +49,15 @@ body{font-family:var(--sans);font-size:13px;line-height:1.45;background:var(--ws
 .body-wrap{display:flex;flex:1;min-height:0}
 
 /* Rail */
-.rail{width:220px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column}
-.rail-head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px 8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
-.docs-list{overflow-y:auto;flex:1}
+.rail{width:240px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column}
+.rail-head{display:flex;justify-content:space-between;align-items:center;padding:10px 10px 6px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.rail-tabs{display:flex;gap:4px;padding:0 10px 8px}
+.rail-tab{flex:1;font-family:var(--sans);font-size:11px;font-weight:600;padding:5px 6px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);color:var(--ink2);cursor:pointer}
+.rail-tab.on{border-color:var(--ink);background:var(--ink);color:#fff}
+.docs-list,.lines-list{overflow-y:auto;flex:1}
+.lines-list{display:none;padding:4px 0 10px}
+.lines-list.on{display:block}
+.docs-list.hidden{display:none}
 a.doc-item{display:flex;align-items:center;gap:9px;padding:9px 12px;cursor:pointer;border-left:3px solid transparent;color:inherit;text-decoration:none}
 .doc-item:hover{background:#F7F9FB}
 .doc-item.active{border-left-color:var(--acc);background:var(--accbg)}
@@ -64,10 +70,24 @@ a.doc-item{display:flex;align-items:center;gap:9px;padding:9px 12px;cursor:point
 .dbadge{font-family:var(--mono);font-size:11px;font-weight:700;flex-shrink:0;min-width:26px;text-align:center;padding:2px 6px;border-radius:10px;background:var(--pendbg);color:var(--pend);border:1px solid var(--pendline)}
 .dbadge.done{background:var(--okbg);color:var(--ok);border-color:#BFE3CF}
 .dbadge.flag{background:var(--rejbg);color:var(--rej);border-color:#F3C6C0}
+.line-row{display:flex;gap:6px;padding:4px 10px;cursor:pointer;border-left:3px solid transparent;font-family:var(--mono);font-size:10.5px;line-height:1.35;color:var(--ink2)}
+.line-row:hover{background:#F7F9FB;color:var(--ink)}
+.line-row.on{border-left-color:var(--acc);background:var(--accbg);color:var(--ink)}
+.line-row.has-hit{border-left-color:var(--pend)}
+.line-row.has-hit.on{border-left-color:var(--acc)}
+.line-no{flex-shrink:0;width:22px;text-align:right;color:var(--ink3);user-select:none}
+.line-row.on .line-no{color:var(--acc);font-weight:700}
+.line-txt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.line-tick{flex-shrink:0;font-size:9px;font-weight:700;color:var(--pend);min-width:14px;text-align:right}
 .rail-foot{margin-top:auto;padding:12px 14px;border-top:1px solid var(--line);font-size:11.5px;color:var(--ink2);line-height:1.55}
 .rail-foot b{font-family:var(--mono);font-size:11px;color:var(--ink)}
 .rail-link{display:block;margin-top:8px;font-size:11.5px;font-weight:600;color:var(--acc);text-decoration:none}
 .rail-link:hover{text-decoration:underline}
+.line-hl{position:absolute;left:0;right:0;background:rgba(29,78,216,.12);outline:1.5px solid rgba(29,78,216,.55);border-radius:2px;z-index:8;pointer-events:none;transition:top .12s ease,height .12s ease,opacity .12s ease}
+.line-hl.flash{animation:line-flash .7s ease}
+@keyframes line-flash{0%,100%{background:rgba(29,78,216,.12)}40%{background:rgba(29,78,216,.28)}}
+.pgr a.line-addr{color:var(--acc);text-decoration:none}
+.pgr a.line-addr:hover{text-decoration:underline}
 
 /* Stage + minimap */
 .stage-wrap{flex:1;min-width:0;display:flex;min-height:0}
@@ -287,7 +307,11 @@ a.pgbtn[aria-disabled="true"]{pointer-events:none;opacity:.4}
 
 <div class="body-wrap">
   <nav class="rail">
-    <div class="rail-head"><span>Documents</span><span>{{ docs | length }} in case</span></div>
+    <div class="rail-head"><span id="rail-title">Documents</span><span id="rail-meta">{{ docs | length }} in case</span></div>
+    <div class="rail-tabs" role="tablist">
+      <button type="button" class="rail-tab on" id="rail-tab-files" role="tab" aria-selected="true" data-rail="files">Files</button>
+      <button type="button" class="rail-tab" id="rail-tab-lines" role="tab" aria-selected="false" data-rail="lines">Lines</button>
+    </div>
     <div class="docs-list" id="docs-list">
       {% for d in docs %}
       <a class="doc-item {% if d.id == doc.id %}active{% endif %}" href="/documents/{{ d.id }}" data-doc-id="{{ d.id }}">
@@ -302,8 +326,9 @@ a.pgbtn[aria-disabled="true"]{pointer-events:none;opacity:.4}
       </a>
       {% endfor %}
     </div>
+    <div class="lines-list" id="lines-list" role="list" aria-label="Page lines"></div>
     <div class="rail-foot">
-      Case: <b id="case-sugg-count">{{ stats.suggestion_count }}</b> suggestions · page-scoped render (never loads whole doc).
+      Case: <b id="case-sugg-count">{{ stats.suggestion_count }}</b> suggestions · click a line to snap on the PDF.
       <a class="rail-link" href="/cases/{{ case.id }}">← Document library</a>
     </div>
   </nav>

@@ -248,7 +248,7 @@
       });
     });
 
-    // Words from word layer (full page, better than LIMIT 50 API)
+    // Words from word layer (full page — never a capped API sample).
     meta.words = [];
     doc.querySelectorAll('.pdf-page .word, .word-layer .word').forEach(function (w) {
       var style = w.getAttribute('style') || '';
@@ -459,7 +459,7 @@
     } else if (!pageSuggs.length) {
       el.suggList.innerHTML = '<div class="empty-q">No AI suggestions on this page.</div>';
     } else {
-      el.suggList.innerHTML = pageSuggs.slice(0, 40).map(function (s) {
+      el.suggList.innerHTML = pageSuggs.map(function (s) {
         var st = s.status || 'pending';
         return '<div class="sugg">' +
           '<span class="sw ' + escapeHtml(st) + '"></span>' +

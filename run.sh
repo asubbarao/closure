@@ -12,9 +12,15 @@ PORT="${PORT:-8117}"
 DATA_DIR="${DATA_DIR:-samples}"
 DB="${DB:-closure.db}"
 
-# Resolve DUCKDB_BIN + QUACKAPI_EXT (.deps/runtime, env, or sibling).
-# shellcheck source=scripts/resolve-runtime.sh
-source ./scripts/resolve-runtime.sh
+# Resolve DUCKDB_BIN + QUACKAPI_EXT: env → .deps/runtime → sibling checkout.
+RT="$PWD/.deps/runtime"; SIB="$(dirname "$PWD")/quackapi/build/release"
+DUCKDB_BIN="${DUCKDB_BIN:-$RT/duckdb}"
+[[ -x "$DUCKDB_BIN" ]] || DUCKDB_BIN="$SIB/duckdb"
+QUACKAPI_EXT="${QUACKAPI_EXT:-${CLOSURE_QUACKAPI_EXT:-$RT/quackapi.duckdb_extension}}"
+[[ -f "$QUACKAPI_EXT" ]] || QUACKAPI_EXT="$SIB/extension/quackapi/quackapi.duckdb_extension"
+[[ -x "$DUCKDB_BIN" && -f "$QUACKAPI_EXT" ]] || {
+  echo "error: runtime missing — run ./scripts/install-runtime.sh" >&2; exit 1
+}
 
 if [[ ! -d "$DATA_DIR" ]]; then
   echo "error: data dir missing: $DATA_DIR" >&2
@@ -26,6 +32,9 @@ fi
 # (The decision log under exports/decisions/ is the durable state and is
 # deliberately NOT touched here — the DB below is derived and disposable.)
 mkdir -p exports/decisions static
+# Schema file (committed, all-null row) keeps the decisions glob non-empty so
+# v_src_decisions binds on a fresh clone; readers filter it out by kind.
+cp -f server/decision.schema.json exports/decisions/_schema.json
 
 # Exactly one server per port: kill any previous instance still bound to
 # $PORT before wiping the DB. Without this the old process keeps serving the

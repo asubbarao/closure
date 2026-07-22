@@ -90,6 +90,10 @@
   let lastToastTimer = null;
   let bulkBusy = false;
   let thrDebounce = null;
+  /** @type {Array} current page visual lines (document_lines) */
+  let pageLines = [];
+  let currentLineNo = null;
+  let railMode = "files"; // files | lines
 
   // ── helpers ───────────────────────────────────────────────────────────
   const bandOf = C.bandOf;
@@ -189,6 +193,7 @@
       context: r.context || "",
       confidence: conf,
       page_no: Number(r.page_no != null ? r.page_no : r.page),
+      line_no: r.line_no != null ? Number(r.line_no) : null,
       status,
       band,
       entity_id: r.entity_id != null ? r.entity_id : null,
@@ -248,6 +253,7 @@
         document_id: i.document_id,
         filename: i.filename || "",
         page_no: Number(i.page_no),
+        line_no: i.line_no != null ? Number(i.line_no) : null,
         text: i.text || "",
         context: i.context || "",
         confidence: Number(i.confidence),
@@ -267,6 +273,7 @@
         context: n.dataset.context || "",
         confidence: Number(n.dataset.conf),
         page_no: Number(n.dataset.page),
+        line_no: n.dataset.line != null ? Number(n.dataset.line) : null,
         status: n.dataset.status || "pending",
         band: bandOf(n.dataset.conf, n.dataset.band),
         entity_id: n.dataset.entityId || null,
@@ -307,6 +314,37 @@
     }
   }
 
+  /** Fold tall triage rows {funnel,status,band,n} into one funnel object. */
+  function foldTriageTall(rows) {
+    const f = {
+      case_id: caseId,
+      threshold: threshold,
+      total: 0,
+      resolved: 0,
+      pending: 0,
+      auto_passable: 0,
+      residual: 0,
+      high_pending: 0,
+      review_pending: 0,
+      flagged_pending: 0,
+      progress_pct: 0,
+    };
+    (rows || []).forEach(function (r) {
+      const n = Number(r.n || 0);
+      f.total += n;
+      if (r.status === "accepted" || r.status === "rejected") f.resolved += n;
+      if (r.status === "pending") f.pending += n;
+      if (r.funnel === "auto") f.auto_passable += n;
+      if (r.funnel === "residual") f.residual += n;
+      if (r.status === "pending" && r.band === "high") f.high_pending += n;
+      if (r.status === "pending" && r.band === "review") f.review_pending += n;
+      if (r.status === "pending" && r.band === "flagged") f.flagged_pending += n;
+    });
+    f.progress_pct =
+      f.total === 0 ? 0 : Math.round((100.0 * f.resolved) / f.total);
+    return f;
+  }
+
   async function fetchFunnel() {
     try {
       const res = await fetch(
@@ -315,7 +353,13 @@
       );
       if (!res.ok) return false;
       const data = await res.json();
-      funnel = extractOne(data);
+      // Prefer tall fold; tolerate legacy one-row wide shape.
+      const rows = extractRows(data);
+      if (rows.length && rows[0].funnel != null && rows[0].n != null) {
+        funnel = foldTriageTall(rows);
+      } else {
+        funnel = extractOne(data);
+      }
       return !!funnel;
     } catch (_) {
       return false;
@@ -653,6 +697,17 @@
             inst.confidence +
             '</div><div class="pgr">p.' +
             inst.page_no +
+            (inst.line_no
+              ? ' · <a class="line-addr" href="#L' +
+                inst.line_no +
+                '" data-line="' +
+                inst.line_no +
+                '" data-page="' +
+                inst.page_no +
+                '">L' +
+                inst.line_no +
+                "</a>"
+              : "") +
             "</div></div></div>"
         );
       });
@@ -738,6 +793,7 @@
         const mark = setMarkCurrent(s);
         if (opts.scrollPage && mark) scrollMarkIntoView(mark);
       }
+      if (inst.line_no) highlightLine(inst.line_no, { scroll: !!opts.scrollPage });
     } else if (opts.navigate && inst.document_id === docId && inst.page_no !== pageNo) {
       window.location.href =
         "/documents/" + docId + "/pages/" + inst.page_no + "#s" + inst.id;
@@ -750,6 +806,208 @@
       if (row) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
       const rg = els.qList.querySelector('.rg[data-gi="' + groupCursor + '"]');
       if (rg) rg.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }
+
+  // ── document_lines rail (text stream ↔ PDF snap) ──────────────────────
+  function setRailMode(mode) {
+    railMode = mode === "lines" ? "lines" : "files";
+    const docs = document.getElementById("docs-list");
+    const lines = document.getElementById("lines-list");
+    const tabF = document.getElementById("rail-tab-files");
+    const tabL = document.getElementById("rail-tab-lines");
+    const title = document.getElementById("rail-title");
+    const meta = document.getElementById("rail-meta");
+    if (docs) docs.classList.toggle("hidden", railMode === "lines");
+    if (lines) lines.classList.toggle("on", railMode === "lines");
+    if (tabF) {
+      tabF.classList.toggle("on", railMode === "files");
+      tabF.setAttribute("aria-selected", railMode === "files" ? "true" : "false");
+    }
+    if (tabL) {
+      tabL.classList.toggle("on", railMode === "lines");
+      tabL.setAttribute("aria-selected", railMode === "lines" ? "true" : "false");
+    }
+    if (title) title.textContent = railMode === "lines" ? "Lines" : "Documents";
+    if (meta) {
+      meta.textContent =
+        railMode === "lines"
+          ? "p." + pageNo + " · " + pageLines.length
+          : document.querySelectorAll("#docs-list .doc-item").length + " in case";
+    }
+  }
+
+  async function loadPageLines() {
+    try {
+      const res = await fetch(
+        "/api/documents/" + docId + "/lines?page=" + pageNo,
+        { headers: { Accept: "application/json" } }
+      );
+      if (!res.ok) {
+        pageLines = [];
+        return;
+      }
+      pageLines = extractRows(await res.json()).map((r) => ({
+        line_no: Number(r.line_no),
+        page_no: Number(r.page_no != null ? r.page_no : pageNo),
+        text: r.text || r.line_text || "",
+        x0: Number(r.x0),
+        y0: Number(r.y0),
+        x1: Number(r.x1),
+        y1: Number(r.y1),
+        hit_count: Number(r.hit_count || 0),
+        pending_count: Number(r.pending_count || 0),
+      }));
+    } catch (_) {
+      pageLines = [];
+    }
+    renderLines();
+  }
+
+  function renderLines() {
+    const root = document.getElementById("lines-list");
+    if (!root) return;
+    if (!pageLines.length) {
+      root.innerHTML =
+        '<div class="empty-q" style="padding:16px 12px;font-size:12px">No lines on this page.</div>';
+      return;
+    }
+    root.innerHTML = pageLines
+      .map(function (ln) {
+        const has = ln.hit_count > 0;
+        const on = currentLineNo === ln.line_no ? " on" : "";
+        const hit = has ? " has-hit" : "";
+        const tick =
+          ln.pending_count > 0
+            ? '<span class="line-tick">' + ln.pending_count + "</span>"
+            : has
+              ? '<span class="line-tick" style="color:var(--ink3)">·</span>'
+              : '<span class="line-tick"></span>';
+        return (
+          '<div class="line-row' +
+          hit +
+          on +
+          '" role="listitem" data-line="' +
+          ln.line_no +
+          '" title="L' +
+          ln.line_no +
+          '">' +
+          '<span class="line-no">' +
+          ln.line_no +
+          "</span>" +
+          '<span class="line-txt">' +
+          escapeHtml(ln.text) +
+          "</span>" +
+          tick +
+          "</div>"
+        );
+      })
+      .join("");
+    root.querySelectorAll(".line-row").forEach(function (el) {
+      el.addEventListener("click", function () {
+        const n = Number(el.dataset.line);
+        highlightLine(n, { scroll: true, flash: true, openRail: true });
+        // Prefer focusing a pending suggestion on this line when present
+        const hit = suggestions.find(
+          (s) => s.page_no === pageNo && s.line_no === n && s.status === "pending"
+        ) || suggestions.find((s) => s.page_no === pageNo && s.line_no === n);
+        if (hit) {
+          for (let gi = 0; gi < residualGroups.length; gi++) {
+            const ii = residualGroups[gi].instances.findIndex((i) => i.id === hit.id);
+            if (ii >= 0) {
+              groupCursor = gi;
+              instCursor = ii;
+              renderQueue();
+              focusCurrentInstance({ scrollPage: true });
+              return;
+            }
+          }
+          setMarkCurrent(hit);
+        }
+      });
+    });
+    if (railMode === "lines") setRailMode("lines");
+  }
+
+  function findLine(n) {
+    return pageLines.find((l) => l.line_no === Number(n)) || null;
+  }
+
+  function highlightLine(lineNo, opts) {
+    opts = opts || {};
+    const ln = findLine(lineNo);
+    if (!ln || !els.page) return;
+    currentLineNo = ln.line_no;
+    let hl = document.getElementById("line-hl");
+    if (!hl) {
+      hl = document.createElement("div");
+      hl.id = "line-hl";
+      hl.className = "line-hl";
+      hl.setAttribute("aria-hidden", "true");
+      els.page.appendChild(hl);
+    }
+    const top = ln.y0 * scale;
+    const height = Math.max(10, (ln.y1 - ln.y0) * scale + 4);
+    hl.style.top = Math.max(0, top - 2) + "px";
+    hl.style.height = height + "px";
+    hl.style.opacity = "1";
+    hl.classList.remove("flash");
+    if (opts.flash) {
+      void hl.offsetWidth;
+      hl.classList.add("flash");
+    }
+    if (opts.scroll && els.stage) {
+      const stageRect = els.stage.getBoundingClientRect();
+      const pageRect = els.page.getBoundingClientRect();
+      const mid =
+        els.stage.scrollTop +
+        (pageRect.top - stageRect.top) +
+        top -
+        stageRect.height / 2 +
+        height / 2;
+      els.stage.scrollTo({ top: Math.max(0, mid), behavior: "smooth" });
+    }
+    const root = document.getElementById("lines-list");
+    if (root) {
+      root.querySelectorAll(".line-row").forEach(function (el) {
+        el.classList.toggle("on", Number(el.dataset.line) === ln.line_no);
+      });
+      const row = root.querySelector('.line-row[data-line="' + ln.line_no + '"]');
+      if (row && (opts.openRail || railMode === "lines")) {
+        if (opts.openRail) setRailMode("lines");
+        row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    }
+    if (opts.history !== false && window.history && window.history.replaceState) {
+      const base = window.location.pathname + window.location.search;
+      window.history.replaceState(null, "", base + "#L" + ln.line_no);
+    }
+  }
+
+  function wireRailTabs() {
+    const tabF = document.getElementById("rail-tab-files");
+    const tabL = document.getElementById("rail-tab-lines");
+    if (tabF) tabF.addEventListener("click", function () { setRailMode("files"); });
+    if (tabL) {
+      tabL.addEventListener("click", function () {
+        setRailMode("lines");
+        if (!pageLines.length) void loadPageLines();
+      });
+    }
+    if (els.qList) {
+      els.qList.addEventListener("click", function (e) {
+        const a = e.target.closest("a.line-addr");
+        if (!a) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const n = Number(a.dataset.line);
+        const p = Number(a.dataset.page || pageNo);
+        if (p !== pageNo) {
+          window.location.href = "/documents/" + docId + "/pages/" + p + "#L" + n;
+          return;
+        }
+        highlightLine(n, { scroll: true, flash: true, openRail: true });
+      });
     }
   }
 
@@ -1495,8 +1753,16 @@
   }
 
   function focusFromHash() {
+    const hash = window.location.hash || "";
+    // Line snap: #L17
+    const lm = /^#L(\d+)/i.exec(hash);
+    if (lm) {
+      const n = Number(lm[1]);
+      highlightLine(n, { scroll: true, flash: true, openRail: true, history: false });
+      return;
+    }
     // Opaque string suggestion ids (uuid), not legacy integer ids.
-    const m = /^#s(.+)/.exec(window.location.hash || "");
+    const m = /^#s(.+)/.exec(hash);
     if (!m) return;
     const id = m[1];
     for (let gi = 0; gi < residualGroups.length; gi++) {
@@ -1521,6 +1787,7 @@
     wireMarks();
     wirePageJump();
     wireSelectTools();
+    wireRailTabs();
     document.addEventListener("keydown", onKey);
 
     // hydrate from APIs
@@ -1528,7 +1795,7 @@
     linkMarksToSuggestions();
     suggestions.forEach(updateMarkFor);
 
-    await refreshTriage();
+    await Promise.all([refreshTriage(), loadPageLines()]);
     focusFromHash();
     renderQueue();
     focusCurrentInstance({ scrollPage: true });
@@ -1542,6 +1809,8 @@
       decideGroup,
       selected: () => Array.from(selected),
       suggestions: () => suggestions,
+      pageLines: () => pageLines,
+      highlightLine: (n) => highlightLine(n, { scroll: true, flash: true, openRail: true }),
       refresh: () => refreshTriage(),
     };
   }

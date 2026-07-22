@@ -15,9 +15,13 @@ import {
  */
 
 const REPO = path.resolve(__dirname, "../../..");
+// Same resolution order as run.sh: env → .deps/runtime → sibling checkout.
 const DUCKDB =
   process.env.DUCKDB_BIN ||
-  path.resolve(REPO, "../quackapi/build/release/duckdb");
+  [
+    path.resolve(REPO, ".deps/runtime/duckdb"),
+    path.resolve(REPO, "../quackapi/build/release/duckdb"),
+  ].find((p) => fs.existsSync(p))!;
 
 function offlineBootIds(dbPath: string, outCsv: string) {
   // Chain via shell so .read works (duckdb -c rejects .read meta-commands)
@@ -31,10 +35,10 @@ SET variable samples_dir = (SELECT value FROM app_config WHERE key = 'samples_di
 SET variable exports_dir = (SELECT value FROM app_config WHERE key = 'exports_dir');
 SET variable static_dir = '.';
 SET variable port = '8117';
-INSTALL pdf FROM community; LOAD pdf;
-.read server/ids.sql
-.read server/sources.sql
-.read server/ingest.sql
+.read server/extensions.sql
+.read server/raw/sources.sql
+.read server/typed/sources.sql
+.read server/domain/facts.sql
 COPY (SELECT cast(id AS VARCHAR) AS id, filename FROM documents ORDER BY filename)
   TO '${outCsv.replace(/'/g, "")}' (HEADER, OVERWRITE true);
 SQL
@@ -76,10 +80,8 @@ test.describe("12. Durable ids + decision API", () => {
       "accepted"
     );
     expect(live?.status).toBe("accepted");
-    // id shape: UUID string (durable md5→UUID still looks like uuid)
-    expect(String(target.id)).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    );
+    // id shape: durable md5 hex of the natural key (opaque 32-char string)
+    expect(String(target.id)).toMatch(/^[0-9a-f]{32}$/i);
   });
 
   test("document ids identical across two offline boots", async () => {

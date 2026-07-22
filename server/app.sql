@@ -1,110 +1,36 @@
--- app.sql — composition root (extensions, config, module load, serve).
--- From repo root: duckdb -unsigned closure.db -c ".read server/app.sql"
--- Knobs: app_config / CLOSURE_* env (see server/config.sql).
+-- app.sql — thin boot.
+--   config → extensions → vars → model stack → routes → serve
+-- From repo root: duckdb -unsigned closure.db  (see run.sh)
 
 .read server/config.sql
 
+SET memory_limit = '4GB';
 SET max_temp_directory_size = '8GB';
 
-INSTALL pdf FROM community; LOAD pdf;
-INSTALL tera FROM community; LOAD tera;
-INSTALL rapidfuzz FROM community; LOAD rapidfuzz;
-INSTALL crypto FROM community; LOAD crypto;
-INSTALL finetype FROM community; LOAD finetype;
-INSTALL us_address_standardizer FROM community; LOAD us_address_standardizer;
-INSTALL splink_udfs FROM community; LOAD splink_udfs;
-
--- quackapi-built duckdb carries the extension; fails if routes missing.
-SELECT format('quackapi present — {} routes pre-registered', count(*)) AS quackapi_gate
-FROM quackapi_routes();
-
--- quackapi_serve re-sets memory to 256MB; re-raise after serve below.
-SET memory_limit = '4GB';
-SET max_memory = '4GB';
-SET threads = 4;
+.read server/extensions.sql
 
 SET VARIABLE port        = (SELECT value FROM app_config WHERE key = 'port');
 SET VARIABLE static_dir  = (SELECT value FROM app_config WHERE key = 'static_dir');
 SET VARIABLE samples_dir = (SELECT value FROM app_config WHERE key = 'samples_dir');
 SET VARIABLE exports_dir = (SELECT value FROM app_config WHERE key = 'exports_dir');
 
--- Domain modules (order matters).
-.read server/ids.sql
-.read server/sources.sql
-.read server/ingest.sql
-.read server/pdf_io.sql
-.read server/detect.sql
-.read server/judge.sql
-.read server/remainder_scan.sql
-
-SELECT 'boot orphan diagnostics' AS phase, *
-FROM v_ingest_orphans
-ORDER BY kind, name;
+.read server/model.sql
+.read server/routes.sql
 
 SELECT CASE
-    WHEN (SELECT count(*) FROM documents) = 0
-      OR (SELECT count(*) FROM suggestions) = 0
-    THEN error(
-        'boot integrity failed: documents=' ||
-        (SELECT count(*) FROM documents) ||
-        ' suggestions=' ||
-        (SELECT count(*) FROM suggestions) ||
-        ' cases=' ||
-        (SELECT count(*) FROM cases) ||
-        ' — sample triad desync (manifest.json × identities.json case_no × samples/*.pdf). ' ||
-        'orphans: ' ||
-        coalesce(
-            (SELECT string_agg(kind || ':' || name, ', ' ORDER BY kind, name)
-             FROM v_ingest_orphans),
-            '(none listed)'
-        )
-    )
-    ELSE 'boot integrity ok'
-END AS boot_integrity;
+    WHEN bool_or(estimated_size = 0)
+    THEN error('boot integrity failed: empty ' ||
+               string_agg(table_name, ',' ORDER BY table_name))
+    ELSE 'boot ok'
+END
+FROM duckdb_tables()
+WHERE table_name IN ('cases', 'documents', 'suggestions');
 
--- Templates + declarative panel mounts (ui_panel_mounts) — see load_templates.sql.
-.read server/load_templates.sql
-.read server/provenance.sql
+SELECT format('Closure http://127.0.0.1:{}/', getvariable('port')) AS status;
 
-.read server/pdf_store.sql
-.read server/routes/pages.sql
-.read server/routes/documents.sql
-.read server/routes/suggestions.sql
-.read server/routes/decisions.sql
-.read server/routes/triage.sql
-.read server/routes/history.sql
-.read server/routes/search.sql
-.read server/routes/remainder.sql
-.read server/routes/judge.sql
-.read server/routes/provenance.sql
-.read server/routes/geo.sql
-.read server/routes/store.sql
-.read server/routes/export.sql
-.read server/routes/meta.sql
-
-SELECT 'boot summary' AS phase,
-       (SELECT count(*) FROM cases) AS cases,
-       (SELECT count(*) FROM documents) AS documents,
-       (SELECT count(*) FROM words) AS words,
-       (SELECT count(*) FROM entities) AS entities,
-       (SELECT count(*) FROM suggestions) AS suggestions,
-       (SELECT count(*) FROM v_routes) AS routes;
-
-SELECT d.filename, count(s.id) AS suggestions
-FROM documents d
-LEFT JOIN suggestions s ON s.document_id = d.id
-GROUP BY d.filename
-ORDER BY d.filename;
-
-FROM quackapi_serve(getvariable('port')::INTEGER, static_dir := getvariable('static_dir'));
-
-SET memory_limit = '4GB';
-SET max_memory = '4GB';
-
-SELECT format(
-           'Closure ready at http://127.0.0.1:{}/ — Ctrl-C to stop',
-           (SELECT value FROM app_config WHERE key = 'port')
-       ) AS status,
-       current_setting('memory_limit') AS memory_limit,
-       current_setting('max_memory') AS max_memory;
+FROM quackapi_serve(
+    getvariable('port')::INTEGER,
+    static_dir := getvariable('static_dir'),
+    memory_limit := '4GB'
+);
 SELECT sleep_ms(86400000);

@@ -221,9 +221,8 @@
 
     const panelEl = card.querySelector("#judge-panel") || card.querySelector(".judge-panel");
     if (!panelEl) return;
-    // Rebuild vote lines (max 3, one line each)
+    // Rebuild vote lines — full ensemble, no silent cap.
     panelEl.innerHTML = votes
-      .slice(0, 3)
       .map((v) => {
         const sc = confGradientColor(v.score);
         return (
@@ -272,7 +271,7 @@
         escapeHtml(panel.panel_signal) +
         "</span>",
     ];
-    votes.slice(0, 3).forEach((v) => {
+    votes.forEach((v) => {
       const sc = confGradientColor(v.score);
       parts.push(
         '<span class="judge-chip" title="' +

@@ -684,12 +684,10 @@
             return a - b;
           });
         var pageStr = pages
-          .slice(0, 4)
           .map(function (p) {
             return "p." + p;
           })
           .join(", ");
-        if (pages.length > 4) pageStr += "…";
         var name = g.filename || "document_" + g.id;
         return (
           '<div class="match-row"><span class="match-dot"></span>' +

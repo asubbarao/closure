@@ -14,8 +14,6 @@
   var confClass = C.confClass;
   var asRows = C.asRows;
   var globToRegExp = C.globToRegExp;
-  var PREVIEW_LIMIT = 5;
-
   var params = new URLSearchParams(window.location.search);
   var entityId = strId(params.get('entity'));
   var caseIdParam = strId(params.get('case'));
@@ -36,8 +34,6 @@
   var rawRows = [];
   /** @type {Map<string, boolean>} suggestionId -> checked */
   var checked = new Map();
-  /** @type {Map<string, boolean>} docKey -> expanded */
-  var expanded = new Map();
   var bandFilter = 'all';
   var caseId = caseIdParam;
   var caseNo = '';
@@ -566,10 +562,6 @@
       var eligible = g.rows.filter(function (r) {
         return !isDecided(r);
       });
-      var isExp = expanded.get(g.key) === true;
-      var show = isExp || g.rows.length <= PREVIEW_LIMIT ? g.rows : g.rows.slice(0, PREVIEW_LIMIT);
-      var hiddenN = g.rows.length - show.length;
-
       var meta =
         g.rows.length +
         ' instance' +
@@ -612,18 +604,9 @@
       }
       html += '</div>';
 
-      show.forEach(function (r) {
+      g.rows.forEach(function (r) {
         html += renderRow(r);
       });
-
-      if (hiddenN > 0) {
-        html +=
-          '<button type="button" class="show-more" data-doc="' +
-          esc(g.key) +
-          '">Show ' +
-          hiddenN +
-          ' more instances in this document →</button>';
-      }
       html += '</div>';
     });
 
@@ -642,13 +625,6 @@
   function onBodyClick(e) {
     var t = e.target;
     if (!t) return;
-
-    // show more
-    if (t.classList && t.classList.contains('show-more')) {
-      expanded.set(t.getAttribute('data-doc'), true);
-      render();
-      return;
-    }
 
     // select all eligible in doc (non-flagged preferred; if already all eligible checked, select flagged too? — only non-flagged pending)
     if (t.classList && t.classList.contains('dg-select-all')) {

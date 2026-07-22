@@ -388,7 +388,8 @@
     if (!list || !rows || !rows.length) return;
 
     const frag = document.createDocumentFragment();
-    rows.slice(0, 12).forEach((a) => {
+    // Full audit list — no silent "top 12" truncation.
+    rows.forEach((a) => {
       const div = document.createElement("div");
       div.className = "row";
       const action = String(a.action || a.status || "").toLowerCase();
