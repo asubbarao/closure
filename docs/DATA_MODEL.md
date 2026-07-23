@@ -7,7 +7,8 @@
 | **Table when multi-consumer / re-run** | Something many handlers re-query is ideal for a table — if it also makes sense. |
 | **Adversarial test** | “Why a table?” Valid answer: *everything downstream is simpler/robust* (less LOC, less complexity). |
 | **Not a table** | One-off projection, pure live fold, or edge packing with a single consumer → view or join. |
-| **No lossy count boards** | Product surfaces are grains (rows). Profiles use `SUMMARIZE` / catalog. Filter dimensions; don’t invent `pending_count`. |
+| **No lossy aggs as model** | Don’t store `count`/`bool_or`/`min`/`max` as the fact. Store **`list(...)`** (array_agg); then `len(list)` / `[1]` / `[-1]` are free. |
+| **Pins, not rewrites** | Keep raw `text`; also pin `text_lower` (and cast/trim once). Downstream: `SELECT *` uses pins — never re-`lower(text)`. |
 | **Join, don’t nest** | Prefer `JOIN` of named relations over correlated scalar subqueries / `FROM (SELECT DISTINCT…)`. |
 | **Semantic YAML** | First-class schema graph (`closure_semantic.yaml`): tables, joins, dimensions. Not a KPI laundry. |
 | **SQL is verbose** | CTEs / tables / views read as English: `words_from_pdf`, `batches_from_user_events`, `hits_from_type_rules`. |
@@ -25,7 +26,8 @@
 | Review re-joins case + doc + page + marks | Snapshot page table | `v_document_page_surface` |
 | Canvas re-runs screen math every request | Flat left/top/width/height laundry | Pin **`screen screen_box`** on `suggestions` at write |
 | Fat `json_object` with `greatest` / path math | Bigger template logic | Pins + surface columns; ctx is a pure map |
-| Export gate everywhere | Cache on `cases` without refresh | `v_export_blocked` live fold on the case surface |
+| Export gate everywhere | `bool_or` / `count(*)` KPI | `flagged_pending_ids list` → `len(list) > 0` free |
+| “How many in batch?” | `count(*)` column | `suggestion_ids list` → `len(suggestion_ids)` |
 
 Grain tables stay pure (`cases`, `documents`, `entities`, `suggestions`, `decisions`). Surfaces are **named joins of those grains**, not a second truth.
 

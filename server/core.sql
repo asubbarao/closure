@@ -303,6 +303,7 @@ SET VARIABLE watchlist_bloom = (
     )
 );
 
+-- Line grain: keep word lists; line bbox = hull of word boxes (not min/max laundry).
 CREATE OR REPLACE TABLE document_lines AS
 SELECT wrd.document_id, wrd.page_no, wrd.case_id, wrd.y_key,
        dense_rank() OVER (
@@ -313,7 +314,8 @@ SELECT wrd.document_id, wrd.page_no, wrd.case_id, wrd.y_key,
        list(wrd.token_norm ORDER BY wrd.bbox.x0) AS token_norms,
        list(struct_pack(token_norm := wrd.token_norm, bbox := wrd.bbox)
             ORDER BY wrd.bbox.x0) AS word_meta,
-       (min(wrd.bbox.x0), min(wrd.bbox.y0), max(wrd.bbox.x1), max(wrd.bbox.y1))::bbox AS bbox
+       list(wrd.bbox ORDER BY wrd.bbox.x0) AS word_bboxes,
+       bbox_hull(list(wrd.bbox ORDER BY wrd.bbox.x0)) AS bbox
 FROM words wrd
 GROUP BY wrd.document_id, wrd.page_no, wrd.case_id, wrd.y_key;
 
@@ -394,15 +396,18 @@ GROUP BY case_id, canonical_text, kind;
 -- Suggestions = mark grain (interactor state in a real app).
 --   bbox    PDF page space (source of truth)
 --   screen  canvas pin (screen_box) — scale applied once at write
--- text/context as stored (from token pins). No re-trim. context may be NULL.
+-- text/context as stored + lower pins (SELECT * still has raw text). No re-lower in judge.
 CREATE OR REPLACE TABLE suggestions AS
 SELECT format('{:x}', rapidhash(concat_ws(chr(31),
            hit.document_id, hit.page_no, bbox_key(hit.bbox), hit.text, hit.kind, 'ai'))) AS id,
        hit.document_id, hit.page_no, hit.bbox,
        bbox_to_screen(hit.bbox, pag.scale, 0) AS screen,
        hit.text,
+       lower(hit.text) AS text_lower,
        hit.context,
+       lower(hit.context) AS context_lower,
        hit.confidence, hit.flag_tag, hit.reason, ent.id AS entity_id, hit.kind,
+       lower(hit.kind) AS kind_lower,
        'ai' AS source, TIMESTAMP '1970-01-01' AS created_at, lin.line_no,
        getvariable('detect_run_id') AS source_run_id, hit.detector_key
 FROM detect_hits hit
@@ -425,11 +430,15 @@ SELECT format('{:x}', rapidhash(concat_ws(chr(31),
            wrd.document_id, wrd.page_no, bbox_key(wrd.bbox), wrd.token, 'remainder'))) AS id,
        wrd.document_id, wrd.page_no, wrd.bbox,
        bbox_to_screen(wrd.bbox, pag.scale, 0) AS screen,
-       wrd.token AS text, wrd.token AS context,
+       wrd.token AS text,
+       lower(wrd.token) AS text_lower,
+       wrd.token AS context,
+       lower(wrd.token) AS context_lower,
        55 AS confidence, NULL::VARCHAR AS flag_tag,
        'remainder: residual PII-shaped token not in prior hits' AS reason,
        NULL::VARCHAR AS entity_id,
        CASE WHEN wrd.pii_kind IS NULL THEN 'UNKNOWN' ELSE wrd.pii_kind END AS kind,
+       lower(CASE WHEN wrd.pii_kind IS NULL THEN 'UNKNOWN' ELSE wrd.pii_kind END) AS kind_lower,
        'ai' AS source, now() AS created_at, NULL::INTEGER AS line_no,
        getvariable('detect_run_id') AS source_run_id,
        'detector:remainder' AS detector_key
@@ -444,9 +453,7 @@ WHERE wrd.is_pii
              OR (sug.context IS NOT NULL AND contains(sug.context, wrd.token)))
   );
 
--- ── Judge panel (deterministic): pattern · context · prior ─────────────────
--- text/kind already clean pins — no trim, no coalesce-to-'' (3-value logic).
--- FP path: keep / conflict → band flagged (human must dispose). No silent redact.
+-- ── Judge panel: uses text_lower / kind_lower pins (raw text still on row).
 CREATE OR REPLACE TABLE suggestion_judges AS
 WITH votes_from_pattern_context_prior AS (
     SELECT sug.id AS suggestion_id, sug.text, sug.context, sug.kind, sug.confidence,
@@ -458,17 +465,17 @@ WITH votes_from_pattern_context_prior AS (
            END AS vote_pattern,
            CASE
                WHEN sug.flag_tag = 'false_positive' THEN 'keep'
-               WHEN sug.text IS NOT NULL AND (
-                    ends_with(lower(sug.text), ' street')
-                 OR starts_with(lower(sug.text), 'det.')
-                 OR starts_with(lower(sug.text), 'ofc.')
-                 OR contains(lower(sug.text), ' v. ')
+               WHEN sug.text_lower IS NOT NULL AND (
+                    ends_with(sug.text_lower, ' street')
+                 OR starts_with(sug.text_lower, 'det.')
+                 OR starts_with(sug.text_lower, 'ofc.')
+                 OR contains(sug.text_lower, ' v. ')
                ) THEN 'keep'
-               WHEN sug.context IS NOT NULL AND (
-                    contains(lower(sug.context), ' street')
-                 OR contains(lower(sug.context), ' officer')
+               WHEN sug.context_lower IS NOT NULL AND (
+                    contains(sug.context_lower, ' street')
+                 OR contains(sug.context_lower, ' officer')
                ) THEN 'keep'
-               WHEN sug.kind IS NOT NULL AND contains(lower(sug.kind), 'citation') THEN 'keep'
+               WHEN sug.kind_lower IS NOT NULL AND contains(sug.kind_lower, 'citation') THEN 'keep'
                WHEN sug.confidence >= 70 THEN 'redact'
                ELSE 'review'
            END AS vote_context,
@@ -476,11 +483,11 @@ WITH votes_from_pattern_context_prior AS (
                WHEN sug.flag_tag = 'false_positive' THEN 'keep'
                WHEN sug.kind IN ('SSN', 'DATE OF BIRTH') THEN 'redact'
                WHEN sug.kind IS NOT NULL AND starts_with(sug.kind, 'PHONE') THEN 'redact'
-               WHEN sug.kind IS NOT NULL AND (
-                    contains(lower(sug.kind), 'not pii')
-                 OR contains(lower(sug.kind), 'officer')
-                 OR contains(lower(sug.kind), 'street')
-                 OR contains(lower(sug.kind), 'citation')
+               WHEN sug.kind_lower IS NOT NULL AND (
+                    contains(sug.kind_lower, 'not pii')
+                 OR contains(sug.kind_lower, 'officer')
+                 OR contains(sug.kind_lower, 'street')
+                 OR contains(sug.kind_lower, 'citation')
                ) THEN 'keep'
                ELSE 'review'
            END AS vote_prior
@@ -541,10 +548,12 @@ WITH latest_added_from_decisions AS (
 )
 SELECT add.suggestion_id AS id, add.document_id, add.page_no, add.bbox,
        bbox_to_screen(add.bbox, pag.scale, 0) AS screen,
-       add.text, add.context,
+       add.text, lower(add.text) AS text_lower,
+       add.context, lower(add.context) AS context_lower,
        CASE WHEN add.confidence IS NULL THEN 99 ELSE add.confidence END AS confidence,
        add.flag_tag, add.reason, add.entity_id,
-       NULL::VARCHAR AS kind, 'manual' AS source, add.ts AS created_at, lin.line_no,
+       NULL::VARCHAR AS kind, NULL::VARCHAR AS kind_lower,
+       'manual' AS source, add.ts AS created_at, lin.line_no,
        NULL::VARCHAR AS source_run_id, 'manual' AS detector_key
 FROM latest_added_from_decisions add
 LEFT JOIN document_lines lin
@@ -557,18 +566,22 @@ JOIN pages pag
 -- FP/FN product fold: status/band only. Leave NULLs as NULL (3-value).
 CREATE OR REPLACE VIEW v_suggestions AS
 WITH suggestions_ai_and_manual AS (
-    SELECT id, document_id, page_no, bbox, screen, text, context, confidence, flag_tag, reason,
-           entity_id, source, created_at, kind AS kind_stored, line_no, source_run_id, detector_key
+    SELECT id, document_id, page_no, bbox, screen, text, text_lower, context, context_lower,
+           confidence, flag_tag, reason,
+           entity_id, source, created_at, kind AS kind_stored, kind_lower, line_no, source_run_id, detector_key
     FROM suggestions
     UNION ALL BY NAME
-    SELECT id, document_id, page_no, bbox, screen, text, context, confidence, flag_tag, reason,
-           entity_id, source, created_at, kind, line_no, source_run_id, detector_key
+    SELECT id, document_id, page_no, bbox, screen, text, text_lower, context, context_lower,
+           confidence, flag_tag, reason,
+           entity_id, source, created_at, kind, kind_lower, line_no, source_run_id, detector_key
     FROM v_manual_suggestions
 )
 SELECT row.id, row.document_id, row.page_no, row.line_no, row.bbox, row.screen,
-       row.text, row.context, row.confidence, row.flag_tag, row.reason, row.entity_id, row.source, row.created_at,
+       row.text, row.text_lower, row.context, row.context_lower,
+       row.confidence, row.flag_tag, row.reason, row.entity_id, row.source, row.created_at,
        row.source_run_id, row.detector_key,
        CASE WHEN ent.kind IS NOT NULL THEN ent.kind ELSE row.kind_stored END AS kind,
+       CASE WHEN ent.kind IS NOT NULL THEN lower(ent.kind) ELSE row.kind_lower END AS kind_lower,
        ent.canonical_text AS entity_text,
        CASE
            WHEN dec.status IS NOT NULL THEN dec.status
@@ -589,8 +602,8 @@ SELECT row.id, row.document_id, row.page_no, row.line_no, row.bbox, row.screen,
        jdg.vote_prior,
        CASE WHEN jdg.judge_reason IS NOT NULL THEN jdg.judge_reason ELSE row.reason END AS judge_reason,
        CASE WHEN row.entity_id IS NOT NULL THEN 'e:' || row.entity_id
-            WHEN row.text IS NOT NULL THEN
-                 't:' || lower(row.text) || '|' ||
+            WHEN row.text_lower IS NOT NULL THEN
+                 't:' || row.text_lower || '|' ||
                  CASE WHEN ent.kind IS NOT NULL THEN ent.kind ELSE row.kind_stored END
             ELSE NULL
        END AS group_key

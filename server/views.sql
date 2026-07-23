@@ -17,7 +17,8 @@ WHERE table_schema = 'main'
   AND table_name IN (
       'cases', 'documents', 'pages', 'words', 'entities', 'suggestions', 'decisions',
       'suggestion_judges', 'v_suggestions', 'v_decide_targets', 'v_nav',
-      'v_export_blocked', 'v_export_plans', 'v_audit', 'v_decision_batches',
+      'v_export_blocked', 'v_case_flagged_pending', 'v_export_plans', 'v_audit',
+      'v_decision_batches',
       'v_history_events', 'v_hostfs', 'v_zips', 'v_shell_patterns',
       'v_url_hosts', 'v_suggestion_line_context', 'v_cols', 'v_page_marks',
       'v_case_surface', 'v_document_page_surface',
@@ -56,12 +57,21 @@ FROM v_src_decisions log
 LEFT JOIN documents doc ON doc.id = log.document_id
 LEFT JOIN v_suggestions sug ON sug.id = log.suggestion_id;
 
-CREATE OR REPLACE VIEW v_export_blocked AS
+-- Export gate: store the id list; len(list) is free (not bool_or / count*).
+CREATE OR REPLACE VIEW v_case_flagged_pending AS
 SELECT doc.case_id,
-       bool_or(sug.band = 'flagged' AND sug.status = 'pending') AS export_blocked
+       list(sug.id ORDER BY sug.id) AS flagged_pending_ids
 FROM documents doc
-LEFT JOIN v_suggestions sug ON sug.document_id = doc.id
+JOIN v_suggestions sug ON sug.document_id = doc.id
+WHERE sug.band = 'flagged' AND sug.status = 'pending'
 GROUP BY doc.case_id;
+
+CREATE OR REPLACE VIEW v_export_blocked AS
+SELECT cas.id AS case_id,
+       coalesce(fp.flagged_pending_ids, []) AS flagged_pending_ids,
+       len(coalesce(fp.flagged_pending_ids, [])) > 0 AS export_blocked
+FROM cases cas
+LEFT JOIN v_case_flagged_pending fp ON fp.case_id = cas.id;
 
 CREATE OR REPLACE VIEW v_nav AS
 SELECT case_id, '/documents/' || id AS href, filename AS text
@@ -79,29 +89,53 @@ SELECT kind, suggestion_id, status, actor, reason, ts AS event_ts,
 FROM v_src_decisions
 WHERE batch_id IS NOT NULL;
 
-CREATE OR REPLACE VIEW v_undone_batches AS
-SELECT undoes_batch_id AS batch_id
-FROM v_history_events
-WHERE undoes_batch_id IS NOT NULL
-GROUP BY undoes_batch_id;
-
+-- Batches: array_agg everything that matters; ts / is_undo / counts = list ops free.
 CREATE OR REPLACE VIEW v_decision_batches AS
 WITH batches_from_history_events AS (
     SELECT batch_id,
-           min(event_ts) AS ts,
-           max(event_ts) AS ts_end,
-           any_value(actor) AS actor,
-           any_value(batch_label) AS label,
            list(suggestion_id ORDER BY event_ts) AS suggestion_ids,
-           bool_or(undoes_batch_id IS NOT NULL) AS is_undo,
-           max(undoes_batch_id) AS undoes_batch_id,
-           max(case_id) AS case_id
+           list(event_ts ORDER BY event_ts) AS event_timestamps,
+           list(actor ORDER BY event_ts) AS actors,
+           list(batch_label ORDER BY event_ts) AS labels,
+           list(undoes_batch_id ORDER BY event_ts) AS undoes_batch_ids,
+           list(case_id ORDER BY event_ts) AS case_ids
     FROM v_history_events
     GROUP BY batch_id
+),
+batches_with_list_ops AS (
+    SELECT batch_id,
+           suggestion_ids,
+           event_timestamps,
+           actors,
+           labels,
+           undoes_batch_ids,
+           case_ids,
+           event_timestamps[1] AS ts,
+           event_timestamps[len(event_timestamps)] AS ts_end,
+           actors[1] AS actor,
+           labels[1] AS label,
+           case_ids[1] AS case_id,
+           list_filter(undoes_batch_ids, x -> x IS NOT NULL) AS undoes_nonnull
+    FROM batches_from_history_events
 )
-SELECT bat.*, und.batch_id IS NOT NULL AS undone
-FROM batches_from_history_events bat
-LEFT JOIN v_undone_batches und ON und.batch_id = bat.batch_id;
+SELECT bat.batch_id,
+       bat.suggestion_ids,
+       bat.event_timestamps,
+       bat.ts,
+       bat.ts_end,
+       bat.actor,
+       bat.label,
+       bat.case_id,
+       bat.undoes_nonnull[1] AS undoes_batch_id,
+       len(bat.undoes_nonnull) > 0 AS is_undo,
+       und.batch_id IS NOT NULL AS undone
+FROM batches_with_list_ops bat
+LEFT JOIN (
+    SELECT undoes_batch_id AS batch_id
+    FROM v_history_events
+    WHERE undoes_batch_id IS NOT NULL
+    GROUP BY undoes_batch_id
+) und ON und.batch_id = bat.batch_id;
 
 CREATE OR REPLACE VIEW v_export_plans AS
 WITH redaction_boxes_from_accepted AS (
@@ -114,7 +148,9 @@ WITH redaction_boxes_from_accepted AS (
     WHERE sug.status = 'accepted'
     GROUP BY sug.document_id
 )
-SELECT blk.case_id, blk.export_blocked AS blocked,
+SELECT blk.case_id,
+       blk.flagged_pending_ids,
+       len(blk.flagged_pending_ids) > 0 AS blocked,
        doc.id AS document_id, doc.filename, doc.source_path,
        'exports/' || replace(replace(doc.filename, '/', '_'), chr(92), '_') || '_redacted.pdf' AS out_path,
        coalesce(box.boxes, []) AS boxes
@@ -154,7 +190,9 @@ SELECT case_id,
            ts_short := strftime(ts, '%Y-%m-%d %H:%M'),
            actor := actor,
            label := label,
+           suggestion_ids := suggestion_ids,
            members := array_to_string(suggestion_ids, ', '),
+           n_members := len(suggestion_ids),
            is_undo := is_undo,
            undone := undone
        ) ORDER BY ts DESC) AS batches
@@ -191,7 +229,8 @@ SELECT cas.id AS case_id,
        struct_pack(id := cas.id, case_no := cas.case_no, title := cas.title) AS case_row,
        coalesce(docs.documents, []) AS documents,
        coalesce(ents.entities, []) AS entities,
-       coalesce(blk.export_blocked, false) AS export_blocked
+       coalesce(blk.flagged_pending_ids, []) AS flagged_pending_ids,
+       len(coalesce(blk.flagged_pending_ids, [])) > 0 AS export_blocked
 FROM cases cas
 LEFT JOIN v_case_documents docs ON docs.case_id = cas.id
 LEFT JOIN v_case_entities ents ON ents.case_id = cas.id
