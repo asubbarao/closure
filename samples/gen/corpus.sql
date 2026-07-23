@@ -168,25 +168,11 @@ SELECT write_pdf(body, getvariable('samples_dir') || '/' || filename) AS path, f
 FROM _docs;
 
 -- ── real court documents ──────────────────────────────────────────────────
--- Public-domain federal filings fetched by scripts/fetch-public.sh into the
--- same directory as the generated ones. The case grouping is DECLARED by
--- that script (samples/court_manifest.json) — we picked these five files and
--- already know which matter each belongs to, so nothing here re-derives it
--- from document text (same principle as _cases above: case_no is assigned
--- once and carried as a column, never rediscovered from the document body).
--- If the fetch was skipped, the manifest is empty and the corpus is the
--- generated one alone.
---
--- They carry NO watchlist entries, deliberately. A published opinion has no
--- known-PII list, which is the real cold-start a reviewer faces: shape
--- detectors and finetype fire, name matching has nothing seeded, and the
--- missed-redaction queue is what covers the gap.
-
-CREATE OR REPLACE TEMP TABLE _court AS
-SELECT filename, case_no
-FROM read_json_auto(getvariable('samples_dir') || '/court_manifest.json',
-                     format := 'array', columns := {filename: 'VARCHAR', case_no: 'VARCHAR'},
-                     ignore_errors := true);
+-- samples/gen/court.sql fetches + verifies public federal filings into this
+-- same directory, and populates _court in this same session (COURT_DOCS=1).
+-- When it did not run, _court stays empty and the corpus is the generated one
+-- alone — so this is IF NOT EXISTS, never CREATE OR REPLACE.
+CREATE TEMP TABLE IF NOT EXISTS _court (filename VARCHAR, case_no VARCHAR);
 
 -- ── artifacts (still not audit) ───────────────────────────────────────────
 

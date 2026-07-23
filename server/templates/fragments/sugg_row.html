@@ -1,10 +1,21 @@
-<div class="sugg" data-id="{{ s.id }}" data-status="{{ s.status }}">
+<div class="sugg" data-id="{{ s.id }}" data-status="{{ s.status }}" data-band="{{ s.band }}">
   <div style="flex:1">
     <div style="font-weight:600">{{ s.text }}</div>
-    <div class="mono" style="font-size:11px;opacity:.75">p.{{ s.page_no }} · {{ s.band }} · {{ s.confidence }} · {{ s.status }}</div>
+    <div class="mono" style="font-size:11px;opacity:.75">
+      p.{{ s.page_no }} · {{ s.band }} · {{ s.confidence }} · {{ s.status }}
+      {% if s.judge_panel and s.judge_panel != 'none' %} · judge:{{ s.judge_panel }}{% endif %}
+    </div>
+    {% if s.band == 'flagged' and s.status == 'pending' %}
+    <div class="why mono" style="font-size:11px;margin-top:4px;color:var(--rej)">
+      FP risk — {{ s.judge_reason or s.reason }} · reject = not PII · accept = redact anyway
+    </div>
+    {% endif %}
   </div>
   {% if s.status == 'pending' %}
-  <button type="button" class="btn" data-action="decide" data-id="{{ s.id }}" data-status="accepted">A</button>
-  <button type="button" class="btn danger" data-action="decide" data-id="{{ s.id }}" data-status="rejected">R</button>
+  <button type="button" class="btn" data-action="decide" data-id="{{ s.id }}" data-status="accepted"
+    title="Accept — lay redaction">A</button>
+  <button type="button" class="btn danger" data-action="decide" data-id="{{ s.id }}" data-status="rejected"
+    data-reason="{% if s.band == 'flagged' %}false positive{% endif %}"
+    title="Reject — false positive / keep visible">R</button>
   {% endif %}
 </div>

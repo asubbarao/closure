@@ -29,7 +29,10 @@ Page HTML is **VARCHAR** from `tera_render` only — never `parse_html` on pages
 | `suggestions` | AI + fold via `v_suggestions` |
 | `words` / token spine | finetype + rules + detect |
 
-Detect: type hits + rapidfuzz watchlist → suggestions / entities.
+Detect: type hits + rapidfuzz → suggestions / entities.  
+**Remainder (FN):** residual `is_pii` tokens not already suggested.  
+**Judge (FP):** `suggestion_judges` panel (pattern/context/prior); keep|conflict → band `flagged`.  
+**Audit:** `v_audit` / `v_decision_batches` over append-only `decisions`.
 
 ## Host / packs / shell / cache
 

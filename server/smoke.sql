@@ -1,73 +1,60 @@
--- smoke.sql — schema + product invariants (SQL checks, not a second type system).
--- Run after model load: .read server/smoke.sql
---
--- Presence = bind the surface (DESCRIBE). Missing relation/column fails in the binder.
--- Counts = tall (rel, n) grain — not scalar-subselect laundry, not query() theater.
+-- smoke.sql — bind + raw SUMMARIZE only.
+-- Empty table ⇒ SUMMARIZE.count = 0 (no separate count(*) laundry).
+-- COLUMNS(*) / native SUMMARIZE replace hand-rolled min/max/count boards.
 
--- Core tables / live views
 FROM (DESCRIBE SELECT * FROM decisions);
 FROM (DESCRIBE SELECT * FROM documents);
 FROM (DESCRIBE SELECT * FROM suggestions);
 FROM (DESCRIBE SELECT * FROM kind_rules);
+FROM (DESCRIBE SELECT * FROM watchlist);
+FROM (DESCRIBE SELECT * FROM suggestion_judges);
 FROM (DESCRIBE SELECT * FROM v_suggestions);
 FROM (DESCRIBE SELECT * FROM v_hostfs);
 FROM (DESCRIBE SELECT * FROM v_export_blocked);
 FROM (DESCRIBE SELECT * FROM v_nav);
 FROM (DESCRIBE SELECT * FROM v_cols);
+FROM (DESCRIBE SELECT * FROM v_audit);
+FROM (DESCRIBE SELECT * FROM v_suggestion_line_context);
+FROM (DESCRIBE SELECT * FROM v_url_hosts);
+FROM (DESCRIBE SELECT * FROM v_http_cache);
 
--- Earned-extension surfaces (bind only — no dns_lookup / network cols)
-FROM (DESCRIBE SELECT suggestion_id, hit_line, line_text, dist FROM v_suggestion_line_context);
-FROM (DESCRIBE SELECT hostname, token_n FROM v_url_hosts);
-FROM (DESCRIBE SELECT term, term_norm FROM watchlist);
-FROM (DESCRIBE SELECT ondisk_bytes, filesystems, data_cache_type FROM v_http_cache);
-FROM (DESCRIBE SELECT * FROM v_http_cache_config);
-FROM (DESCRIBE SELECT * FROM v_http_cache_filesystems);
+-- Full column profiles (Duck's SUMMARIZE already uses COLUMNS under the hood)
+FROM (SUMMARIZE cases);
+FROM (SUMMARIZE documents);
+FROM (SUMMARIZE words);
+FROM (SUMMARIZE suggestions);
+FROM (SUMMARIZE decisions);
+FROM (SUMMARIZE watchlist);
+FROM (SUMMARIZE suggestion_judges);
+FROM (SUMMARIZE v_suggestions);
 
--- Nav shell: every case has library + stream + audit (docs alone is incomplete)
+-- Non-empty: SUMMARIZE.count is the row count for every column
 SELECT CASE
-    WHEN count(*) FILTER (
-        WHERE NOT has_lib OR NOT has_stream OR NOT has_audit
-    ) > 0
-    THEN error('smoke: v_nav missing library/stream/audit shell for a case')
-    ELSE format('smoke nav: {} cases with shell', count(*))
-END AS nav_ok
+    WHEN (SELECT min(count) FROM (SUMMARIZE cases)) = 0
+        THEN error('smoke: cases empty')
+    WHEN (SELECT min(count) FROM (SUMMARIZE documents)) = 0
+        THEN error('smoke: documents empty')
+    WHEN (SELECT min(count) FROM (SUMMARIZE words)) = 0
+        THEN error('smoke: words empty')
+    WHEN (SELECT min(count) FROM (SUMMARIZE suggestions)) = 0
+        THEN error('smoke: suggestions empty')
+    WHEN (SELECT min(count) FROM (SUMMARIZE kind_rules)) = 0
+        THEN error('smoke: kind_rules empty')
+    WHEN coalesce(len(getvariable('sample_pdfs')), 0) = 0
+        THEN error('smoke: sample_pdfs pin empty')
+    ELSE 'smoke: corpus non-empty'
+END AS smoke_corpus;
+
+SELECT CASE
+    WHEN bool_and(has_lib AND has_stream AND has_audit)
+        THEN 'smoke nav: shell ok'
+    ELSE error('smoke: v_nav missing library/stream/audit for a case')
+END AS smoke_nav
 FROM (
+    FROM v_nav
     SELECT case_id,
            bool_or(href = '/cases/' || case_id) AS has_lib,
            bool_or(href = '/cases/' || case_id || '/stream') AS has_stream,
            bool_or(href = '/cases/' || case_id || '/audit') AS has_audit
-    FROM v_nav
-    GROUP BY case_id
+    GROUP BY ALL
 );
-
--- Semantic: real measures + dims bind
-FROM (
-    SELECT * FROM semantic_view(
-        'closure',
-        dimensions := ['status', 'band'],
-        metrics := ['n', 'avg_confidence', 'min_confidence', 'max_confidence']
-    )
-    LIMIT 0
-);
-
-WITH counts AS (
-    SELECT 'cases' AS rel, count(*)::BIGINT AS n FROM cases
-    UNION ALL BY NAME SELECT 'documents' AS rel, count(*)::BIGINT AS n FROM documents
-    UNION ALL BY NAME SELECT 'words' AS rel, count(*)::BIGINT AS n FROM words
-    UNION ALL BY NAME SELECT 'suggestions' AS rel, count(*)::BIGINT AS n FROM suggestions
-    UNION ALL BY NAME SELECT 'kind_rules' AS rel, count(*)::BIGINT AS n FROM kind_rules
-    UNION ALL BY NAME SELECT 'sample_pdfs' AS rel,
-        coalesce(len(getvariable('sample_pdfs')), 0)::BIGINT AS n
-    UNION ALL BY NAME SELECT 'v_cols' AS rel, count(*)::BIGINT AS n FROM v_cols
-),
-empty AS (
-    SELECT list(rel ORDER BY rel) AS empty_rels FROM counts WHERE n = 0
-)
-SELECT CASE
-    WHEN len(empty_rels) > 0
-        THEN error(format('smoke: empty {}', empty_rels))
-    ELSE format(
-        'smoke ok: {}',
-        (SELECT list(struct_pack(rel := rel, n := n) ORDER BY rel) FROM counts))
-END AS smoke
-FROM empty;

@@ -27,14 +27,10 @@ mkdir -p .tmp
 # Real public court filings alongside the generated corpus — opt-in, because
 # they carry no watchlist (a published opinion has no known-PII list) and would
 # otherwise become the default landing case, showing a reviewer a case with no
-# name matches. COURT_DOCS=1 make setup  → the real-document cold-start demo.
-# Either way the manifest is written, so corpus.sql's read never faults.
-if [[ "${COURT_DOCS:-0}" == "1" ]]; then
-  SAMPLES_DIR="${SAMPLES_DIR:-samples}" ./scripts/fetch-public.sh
-else
-  mkdir -p "${SAMPLES_DIR:-samples}"
-  echo '[]' > "${SAMPLES_DIR:-samples}/court_manifest.json"
-fi
+# name matches. COURT_DOCS=1 make setup → the real-document cold-start demo.
+# The fetch is SQL (samples/gen/court.sql), same session as the corpus.
+COURT_READ=""
+[[ "${COURT_DOCS:-0}" == "1" ]] && COURT_READ=".read samples/gen/court.sql"
 
 echo "==> setup (corpus + page PNGs) via $DUCKDB_BIN ($ver)"
 # CLI meta-commands (.read) need the SQL shell, not -c.
@@ -48,6 +44,7 @@ SET VARIABLE samples_dir = '${SAMPLES_DIR:-samples}';
 SET VARIABLE pages_dir = 'pages';
 SET VARIABLE png_dpi = ${PNG_DPI:-100};
 SET VARIABLE skip_png = ${SKIP_PNG:-0};
+${COURT_READ}
 .read scripts/setup.sql
 ${PAGES_PDF_LOAD}
 .read scripts/setup_pages.sql

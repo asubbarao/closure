@@ -9,8 +9,8 @@
 -- Avoid: re-deriving labels/geometry in every page view.
 --
 -- Catalog:  SELECT * FROM v_cols
--- Metrics:  semantic_view('closure', …)  — edit server/config/closure_semantic.yaml
--- Open:     GET /api/catalog/:relation/rows (allowlisted via v_cols)
+-- Rollups: FROM … SELECT … GROUP BY ALL (Friendly SQL). SUMMARIZE for profiles.
+-- Open:    GET /api/catalog/:relation/rows|summary
 
 DROP SEMANTIC VIEW IF EXISTS suggestion_metrics;
 DROP SEMANTIC VIEW IF EXISTS closure;
@@ -44,28 +44,37 @@ FROM documents;
 CREATE OR REPLACE VIEW v_page_marks AS
 SELECT s.id, s.document_id, s.page_no, s.line_no, s.bbox,
        s.text, s.confidence, s.status, s.band, s.kind, s.entity_id, s.flag_tag,
-       round(s.bbox.x0 * p.scale, 2) AS left_px,
-       round(s.bbox.y0 * p.scale, 2) AS top_px,
-       round((s.bbox.x1 - s.bbox.x0) * p.scale, 2) AS width,
-       round((s.bbox.y1 - s.bbox.y0) * p.scale, 2) AS height
+       UNNEST(bbox_px(s.bbox, p.scale, 0))
 FROM v_suggestions s
 JOIN pages p ON p.document_id = s.document_id AND p.page_no = s.page_no;
 
 CREATE OR REPLACE VIEW v_page_words AS
 SELECT w.document_id, w.page_no, w.word, w.bbox, w.font_size,
-       round(w.bbox.x0 * p.scale, 2) AS left_px,
-       round(w.bbox.y0 * p.scale, 2) AS top_px,
-       round((w.bbox.x1 - w.bbox.x0) * p.scale, 2) AS width,
-       round(greatest(w.bbox.y1 - w.bbox.y0, 4) * p.scale, 2) AS height,
+       UNNEST(bbox_px(w.bbox, p.scale, 4)),
        round(coalesce(w.font_size, 9) * p.scale * 0.95, 1) AS font_px
 FROM words w
 JOIN pages p ON p.document_id = w.document_id AND p.page_no = w.page_no;
 
+-- Append-only decision log (legal reconstructability). Never rewrites history.
 CREATE OR REPLACE VIEW v_audit AS
-SELECT l.ts, coalesce(l.actor, 'reviewer') AS actor, coalesce(l.kind, 'decision') AS action,
-       l.suggestion_id, coalesce(l.case_id, d.case_id) AS case_id,
-       coalesce(l.text, l.suggestion_id, '') AS target, l.reason
-FROM v_src_decisions l LEFT JOIN documents d ON d.id = l.document_id;
+SELECT l.ts,
+       coalesce(l.actor, 'reviewer') AS actor,
+       coalesce(l.kind, 'decision') AS action,
+       l.status,
+       l.suggestion_id,
+       coalesce(l.case_id, d.case_id) AS case_id,
+       l.document_id,
+       coalesce(l.text, l.suggestion_id, '') AS target,
+       l.reason,
+       l.batch_id,
+       l.batch_label,
+       l.undoes_batch_id,
+       s.band,
+       s.kind AS pii_kind,
+       s.judge_panel
+FROM v_src_decisions l
+LEFT JOIN documents d ON d.id = l.document_id
+LEFT JOIN v_suggestions s ON s.id = l.suggestion_id;
 
 CREATE OR REPLACE VIEW v_export_blocked AS
 SELECT d.case_id,
@@ -74,12 +83,16 @@ FROM documents d
 LEFT JOIN v_suggestions s ON s.document_id = d.id
 GROUP BY d.case_id;
 
+-- Friendly SQL: GROUP BY ALL over suggestions — no semantic metric "n".
 CREATE OR REPLACE VIEW v_entity_stream AS
-SELECT e.case_id, e.id AS entity_id, e.canonical_text, e.kind,
-       e.kind_label, e.mono, m.n AS hit_count
 FROM entities e
-LEFT JOIN semantic_view('closure', dimensions := ['entity_id'], metrics := ['n']) m
-  ON m.entity_id = e.id;
+LEFT JOIN (
+    FROM v_suggestions
+    SELECT entity_id, count() AS hit_count
+    GROUP BY ALL
+) m ON m.entity_id = e.id
+SELECT e.case_id, e.id AS entity_id, e.canonical_text, e.kind,
+       e.kind_label, e.mono, m.hit_count;
 
 CREATE OR REPLACE VIEW v_nav AS
 -- AS case_id/href/text on every arm — UNION ALL BY NAME matches names.
@@ -102,7 +115,7 @@ FROM v_src_decisions WHERE nullif(batch_id, '') IS NOT NULL;
 CREATE OR REPLACE VIEW v_decision_batches AS
 SELECT e.batch_id, min(e.event_ts) AS ts, max(e.event_ts) AS ts_end,
        any_value(e.actor) AS actor, any_value(e.batch_label) AS label,
-       count(*)::INTEGER AS decision_count,
+       count()::INTEGER AS decision_count,
        bool_or(e.undoes_batch_id IS NOT NULL) AS is_undo,
        max(e.undoes_batch_id) AS undoes_batch_id, max(e.case_id) AS case_id,
        exists (SELECT 1 FROM v_history_events u WHERE u.undoes_batch_id = e.batch_id) AS undone
@@ -111,11 +124,8 @@ FROM v_history_events e GROUP BY e.batch_id;
 CREATE OR REPLACE VIEW v_export_plans AS
 WITH boxes AS (
     SELECT s.document_id,
-           list(struct_pack(
-               page := s.page_no::INTEGER,
-               x := s.bbox.x0, y := (p.height_pt - s.bbox.y1),
-               w := (s.bbox.x1 - s.bbox.x0), h := (s.bbox.y1 - s.bbox.y0)
-           ) ORDER BY s.page_no, s.id) AS boxes
+           list(struct_insert(bbox_pdf(s.bbox, p.height_pt), page := s.page_no::INTEGER)
+                ORDER BY s.page_no, s.id) AS boxes
     FROM v_suggestions s
     JOIN pages p ON p.document_id = s.document_id AND p.page_no = s.page_no
     WHERE s.status = 'accepted' GROUP BY s.document_id
@@ -160,17 +170,26 @@ SELECT t.case_id,
            'documents', coalesce((
                SELECT list(u ORDER BY u.filename) FROM v_doc_ui u WHERE u.case_id = t.case_id
            ), []),
+           -- Tall grains: GROUP BY ALL (friendly SQL), not semantic metric laundry
            'by_status', coalesce((
-               SELECT list(m ORDER BY status)
-               FROM semantic_view('closure', dimensions := ['case_id', 'status'],
-                    metrics := ['n', 'avg_confidence']) m
-               WHERE m.case_id = t.case_id
+               SELECT list(struct_pack(status := status, n := c) ORDER BY status)
+               FROM (
+                   FROM v_suggestions s
+                   JOIN documents d ON d.id = s.document_id
+                   WHERE d.case_id = t.case_id
+                   SELECT status, count() AS c
+                   GROUP BY ALL
+               )
            ), []),
            'by_band', coalesce((
-               SELECT list(m ORDER BY band)
-               FROM semantic_view('closure', dimensions := ['case_id', 'band'],
-                    metrics := ['n', 'avg_confidence']) m
-               WHERE m.case_id = t.case_id
+               SELECT list(struct_pack(band := band, n := c) ORDER BY band)
+               FROM (
+                   FROM v_suggestions s
+                   JOIN documents d ON d.id = s.document_id
+                   WHERE d.case_id = t.case_id
+                   SELECT band, count() AS c
+                   GROUP BY ALL
+               )
            ), []),
            'entities', t.entities,
            'audit', coalesce((
@@ -197,14 +216,42 @@ CREATE OR REPLACE VIEW v_audit_ctx AS
 SELECT c.id AS case_id,
        json_object(
            'case', struct_pack(id := c.id, case_no := c.case_no, title := c.title),
+           'export_blocked', coalesce((
+               SELECT export_blocked FROM v_export_blocked b WHERE b.case_id = c.id
+           ), false),
+           'batches', coalesce((
+               SELECT list(struct_pack(
+                   batch_id := batch_id,
+                   ts_short := strftime(ts, '%Y-%m-%d %H:%M'),
+                   actor := actor,
+                   label := label,
+                   decision_count := decision_count,
+                   is_undo := is_undo,
+                   undone := undone
+               ) ORDER BY ts DESC)
+               FROM v_decision_batches
+               WHERE case_id = c.id
+           ), []),
            'events', coalesce((
                SELECT list(struct_pack(
                    ts_short := strftime(a.ts, '%Y-%m-%d %H:%M:%S'),
-                   action := a.action, actor := a.actor,
-                   target := coalesce(a.target, ''), reason := coalesce(a.reason, '')
+                   action := a.action,
+                   status := coalesce(a.status, ''),
+                   actor := a.actor,
+                   target := coalesce(a.target, ''),
+                   reason := coalesce(a.reason, ''),
+                   band := coalesce(a.band, ''),
+                   batch_label := coalesce(a.batch_label, ''),
+                   is_undo := a.undoes_batch_id IS NOT NULL
                ) ORDER BY a.ts DESC)
                FROM v_audit a WHERE a.case_id = c.id
-           ), [])
+           ), []),
+           'flagged_pending', coalesce((
+               FROM v_suggestions s
+               JOIN documents d ON d.id = s.document_id
+               WHERE d.case_id = c.id AND s.band = 'flagged' AND s.status = 'pending'
+               SELECT count()::INTEGER
+           ), 0)
        ) AS ctx
 FROM cases c;
 
@@ -227,10 +274,13 @@ SELECT d.id AS document_id, p.page_no,
                WHERE m.document_id = d.id AND m.page_no = p.page_no
            ), []),
            'by_status', coalesce((
-               SELECT list(m ORDER BY status)
-               FROM semantic_view('closure', dimensions := ['document_id', 'status'],
-                    metrics := ['n']) m
-               WHERE m.document_id = d.id
+               SELECT list(struct_pack(status := status, n := c) ORDER BY status)
+               FROM (
+                   FROM v_suggestions s
+                   WHERE s.document_id = d.id
+                   SELECT status, count() AS c
+                   GROUP BY ALL
+               )
            ), []),
            'suggestions', coalesce((
                SELECT list(s ORDER BY (page_no = p.page_no) DESC,

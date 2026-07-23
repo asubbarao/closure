@@ -47,6 +47,7 @@ make setup && make run    # http://127.0.0.1:8117/  and  /docs
 | **GET routes** | `v_route_get` only → generated `CREATE ROUTE` |
 | **POST routes** | Resource-nested decisions / export (explicit PARAM) |
 | **Client** | `data-action` + keyboard; no SPA state |
+| **Rollups** | Friendly SQL: `FROM … SELECT … GROUP BY ALL` / `SUMMARIZE` — not metric laundry |
 
 ## HTTP surface (current)
 
@@ -105,6 +106,9 @@ static/
 
 - **decisions** append-only; status = latest fold on `v_suggestions`
 - Detect: finetype + rapidfuzz + bloom → suggestions / entities
+- **FN:** remainder scan inserts residual PII-shaped tokens not already hit
+- **FP / judge:** pattern · context · prior panel; `keep` or `conflict` → **flagged** (no bulk)
+- **Audit:** `v_audit` + `/cases/:id/audit` — batches + events (who/what/when)
 - Export blocked while flagged pending (`v_export_blocked`)
 
 ## Checks

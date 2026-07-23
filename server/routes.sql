@@ -36,18 +36,34 @@ SELECT * FROM (VALUES
     -- ── product reads ────────────────────────────────────────────────────
     ('case_nav',      'GET', '/api/cases/:id/nav',
      $$SELECT href, text FROM v_nav WHERE case_id = $id ORDER BY href$$),
+    -- Case rollup: GROUP BY ALL on dims; measures are count()/avg on the group
+    -- (not a metrics catalog). Prefer /api/catalog/v_suggestions/summary for profiles.
     ('case_metrics',  'GET', '/api/cases/:id/metrics',
-     $$SELECT status, band, n, avg_confidence, min_confidence, max_confidence
-       FROM semantic_view(
-           'closure',
-           dimensions := ['case_id', 'status', 'band'],
-           metrics := ['n', 'avg_confidence', 'min_confidence', 'max_confidence']
-       )
-       WHERE case_id = $id ORDER BY status, band$$),
+     $$FROM v_suggestions s
+       JOIN documents d ON d.id = s.document_id
+       WHERE d.case_id = $id
+       SELECT status, band, count(), avg(confidence)
+       GROUP BY ALL
+       ORDER BY ALL$$),
     ('suggestion_context', 'GET', '/api/suggestions/:id/context',
      $$SELECT suggestion_id, document_id, page_no, hit_line, line_number, line_text, dist
        FROM v_suggestion_line_context
        WHERE suggestion_id = $id ORDER BY line_number$$),
+    ('suggestion_judges', 'GET', '/api/suggestions/:id/judges',
+     $$SELECT j.suggestion_id, j.vote_pattern, j.vote_context, j.vote_prior, j.panel, j.judge_reason,
+              s.band, s.status, s.text, s.kind
+       FROM suggestion_judges j
+       JOIN v_suggestions s ON s.id = j.suggestion_id
+       WHERE j.suggestion_id = $id$$),
+    ('case_audit_api', 'GET', '/api/cases/:id/audit',
+     $$SELECT ts, actor, action, status, target, reason, band, batch_id, batch_label, undoes_batch_id
+       FROM v_audit WHERE case_id = $id ORDER BY ts DESC$$),
+    ('case_flagged', 'GET', '/api/cases/:id/flagged',
+     $$SELECT s.id, s.document_id, s.page_no, s.text, s.band, s.status, s.judge_panel, s.judge_reason, s.reason
+       FROM v_suggestions s
+       JOIN documents d ON d.id = s.document_id
+       WHERE d.case_id = $id AND s.band = 'flagged' AND s.status = 'pending'
+       ORDER BY s.document_id, s.page_no, s.id$$),
 
     -- ── catalog (allowlisted relations via v_cols) ───────────────────────
     ('catalog_list',  'GET', '/api/catalog',
@@ -94,7 +110,7 @@ COPY (
 
 .read .tmp/routes_get.sql
 
-SELECT count(*)::BIGINT AS routes_get FROM v_route_get;
+FROM (SUMMARIZE v_route_get);
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- POST product writes (resource-nested; STATUS 201 on decision creates)

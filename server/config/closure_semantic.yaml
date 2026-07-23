@@ -1,33 +1,18 @@
-# ═══════════════════════════════════════════════════════════════════════════
-# Closure semantic model  (name: closure)
+# Closure semantic model — dimensions for slicing, not a metrics laundry.
 #
-# WHAT THIS IS
-#   Relations for metrics: fact s (v_suggestions) ⋈ documents ⋈ cases ⋈ entities.
-#   Dimensions = axes to group/filter. Metrics = real measures (COUNT/AVG/…).
-#   status / band / kind are dimensions — never invent pending_count columns.
+# Prefer Friendly SQL for ad-hoc rollups:
+#   FROM v_suggestions s JOIN documents d ON d.id = s.document_id
+#   WHERE d.case_id = ?
+#   SELECT status, band, count(), avg(confidence)
+#   GROUP BY ALL
 #
-# HOW TO USE (after boot)
-#   FROM semantic_view('closure',
-#        dimensions := ['case_id', 'status'],
-#        metrics    := ['n', 'avg_confidence']);
-#   WHERE case_id = '…';
+# SUMMARIZE for raw profiles:
+#   FROM (SUMMARIZE v_suggestions);
+#   GET /api/catalog/:relation/summary
 #
-#   Catalog:  SELECT * FROM v_cols;
-#             SELECT * FROM show_semantic_dimensions('closure');
-#   Open:     SELECT * FROM query(format('SELECT * FROM {}', 'v_suggestions'));
-#   Profile:  SELECT * FROM query(format('FROM (SUMMARIZE {})', 'v_suggestions'));
-#   HTTP:     GET /api/catalog  /api/catalog/:relation/rows|/summary
-#
-# HOW TO EXTEND
-#   1. tables + joins + dimensions + metrics (real measures only)
-#   2. Re-boot (DROP + CREATE SEMANTIC VIEW in views.sql)
-#   No grain views, no UNION routes, no coalesce count pivots.
-#
-# DO NOT
-#   - Pivot status/band into pending_count columns
-#   - Wrapper views that are SELECT * FROM t
-#   - Hand-roll GROUP BY the semantic layer already owns
-# ═══════════════════════════════════════════════════════════════════════════
+# Optional semantic_view (if you need a named model):
+#   FROM semantic_view('closure', dimensions := ['status', 'band'], metrics := ['n']);
+# "How many pending?" → filter status, don't invent pending_count.
 
 comment: Review graph — suggestions ⋈ documents ⋈ cases ⋈ entities
 
@@ -35,7 +20,6 @@ tables:
   - alias: s
     table: v_suggestions
     pk_columns: [id]
-    comment: Suggestion fact (AI + manual)
   - alias: d
     table: documents
     pk_columns: [id]
@@ -88,6 +72,9 @@ dimensions:
   - name: detector_key
     expr: s.detector_key
     source_table: s
+  - name: judge_panel
+    expr: s.judge_panel
+    source_table: s
   - name: flag_tag
     expr: s.flag_tag
     source_table: s
@@ -109,25 +96,15 @@ dimensions:
   - name: entity_text
     expr: e.canonical_text
     source_table: e
-  - name: entity_mono
-    expr: e.mono
-    source_table: e
   - name: group_key
     expr: s.group_key
     source_table: s
 
-# Real measures only. "How many pending?" → dimensions status + metric n.
-# Never invent pending_count / flagged_count columns — slice on status/band.
+# Minimal real measures if you call semantic_view — prefer GROUP BY ALL in app SQL.
 metrics:
   - name: n
     expr: COUNT(*)
     source_table: s
   - name: avg_confidence
     expr: AVG(s.confidence)
-    source_table: s
-  - name: max_confidence
-    expr: MAX(s.confidence)
-    source_table: s
-  - name: min_confidence
-    expr: MIN(s.confidence)
     source_table: s

@@ -23,7 +23,7 @@ FROM read_pdf('pathvariable:sample_pdfs');
 
 CREATE OR REPLACE VIEW v_src_pdf_words AS
 SELECT filename, parse_filename(filename, true) AS doc_filename,
-       page AS page_no, word, (x0, y0, x1, y1)::bbox AS bbox, font_size
+       page AS page_no, word, bbox_of(x0, y0, x1, y1) AS bbox, font_size
 FROM read_pdf_words('pathvariable:sample_pdfs');
 
 -- PDF-native lines (pdf extension). Geometry still comes from words → document_lines.
@@ -217,7 +217,7 @@ SELECT w.document_id, w.page_no, w.case_id, w.y_key,
        list(w.token_norm ORDER BY w.bbox.x0) AS token_norms,
        list(struct_pack(token_norm := w.token_norm, bbox := w.bbox)
             ORDER BY w.bbox.x0) AS word_meta,
-       (min(w.bbox.x0), min(w.bbox.y0), max(w.bbox.x1), max(w.bbox.y1))::bbox AS bbox
+       bbox_of(min(w.bbox.x0), min(w.bbox.y0), max(w.bbox.x1), max(w.bbox.y1)) AS bbox
 FROM words w
 GROUP BY w.document_id, w.page_no, w.case_id, w.y_key;
 
@@ -239,11 +239,7 @@ WITH type_hits AS (
 name_hits AS (
     -- No CROSS JOIN / LATERAL: score in an inner SELECT, filter outer.
     SELECT document_id, page_no, case_id, text, context,
-           list_reduce(
-               list_transform(mw, m -> m.bbox),
-               (a, b) -> (least(a.x0, b.x0), least(a.y0, b.y0),
-                          greatest(a.x1, b.x1), greatest(a.y1, b.y1))::bbox
-           ) AS bbox,
+           bbox_hull(list_transform(mw, m -> m.bbox)) AS bbox,
            kind, greatest(1, least(99, round(sc)::INTEGER)) AS confidence,
            'rapidfuzz: ' || text AS reason,
            CASE WHEN is_not_pii THEN 'false_positive' END AS flag_tag,
@@ -287,11 +283,8 @@ FROM (
 ) u GROUP BY case_id, canonical_text, kind;
 
 CREATE OR REPLACE TABLE suggestions AS
-SELECT format('{:x}', rapidhash(
-           h.document_id || chr(31) || h.page_no::VARCHAR || chr(31)
-           || round(h.bbox.x0, 0)::VARCHAR || chr(31) || round(h.bbox.y0, 0)::VARCHAR || chr(31)
-           || round(h.bbox.x1, 0)::VARCHAR || chr(31) || round(h.bbox.y1, 0)::VARCHAR || chr(31)
-           || h.text || chr(31) || h.kind || chr(31) || 'ai')) AS id,
+SELECT format('{:x}', rapidhash(concat_ws(chr(31),
+           h.document_id, h.page_no, bbox_key(h.bbox), h.text, h.kind, 'ai'))) AS id,
        h.document_id, h.page_no, h.bbox, h.text, coalesce(h.context, h.text) AS context,
        h.confidence, h.flag_tag, h.reason, e.id AS entity_id, h.kind,
        'ai' AS source, TIMESTAMP '1970-01-01' AS created_at, dl.line_no,
@@ -304,15 +297,85 @@ LEFT JOIN document_lines dl ON dl.document_id = h.document_id AND dl.page_no = h
 
 DROP TABLE IF EXISTS _detect_hits;
 
--- Session profile pin for base extract (before derived suggestion view).
--- Re-read: SELECT * FROM unnest(getvariable('profile_words')) AS u(r);
-COPY (FROM (SUMMARIZE words)) TO 'variable:profile_words' (FORMAT variable, LIST rows);
+-- ── FN remainder: PII-shaped tokens not already covered by a suggestion ────
+-- Candidates only (still human-accepted). Catches misses type/name detectors left.
+INSERT INTO suggestions BY NAME
+SELECT format('{:x}', rapidhash(concat_ws(chr(31),
+           w.document_id, w.page_no, bbox_key(w.bbox), w.token, 'remainder'))) AS id,
+       w.document_id, w.page_no, w.bbox, w.token AS text, w.token AS context,
+       55 AS confidence, NULL::VARCHAR AS flag_tag,
+       'remainder: residual PII-shaped token not in prior hits' AS reason,
+       NULL::VARCHAR AS entity_id, coalesce(w.pii_kind, 'UNKNOWN') AS kind,
+       'ai' AS source, now() AS created_at, NULL::INTEGER AS line_no,
+       getvariable('detect_run_id') AS source_run_id,
+       'detector:remainder' AS detector_key
+FROM words w
+WHERE w.is_pii
+  AND NOT exists (
+      SELECT 1 FROM suggestions s
+      WHERE s.document_id = w.document_id AND s.page_no = w.page_no
+        AND (lower(s.text) = lower(w.token)
+             OR contains(lower(s.context), lower(w.token)))
+  );
+
+-- ── Judge panel (deterministic): pattern · context · prior ─────────────────
+-- FP path: keep / conflict → band flagged (human must dispose). No silent redact.
+CREATE OR REPLACE TABLE suggestion_judges AS
+WITH v AS (
+    SELECT s.id AS suggestion_id, s.text, s.context, s.kind, s.confidence,
+           s.flag_tag, s.detector_key,
+           CASE
+               WHEN s.confidence >= 90 THEN 'redact'
+               WHEN s.confidence < 60 THEN 'keep'
+               ELSE 'review'
+           END AS vote_pattern,
+           CASE
+               WHEN s.flag_tag = 'false_positive' THEN 'keep'
+               WHEN ends_with(lower(trim(s.text)), ' street')
+                 OR contains(lower(s.context), ' street') THEN 'keep'
+               WHEN starts_with(lower(trim(s.text)), 'det.')
+                 OR starts_with(lower(trim(s.text)), 'ofc.')
+                 OR contains(lower(s.context), ' officer') THEN 'keep'
+               WHEN contains(lower(s.text), ' v. ')
+                 OR contains(lower(coalesce(s.kind, '')), 'citation') THEN 'keep'
+               WHEN s.confidence >= 70 THEN 'redact'
+               ELSE 'review'
+           END AS vote_context,
+           CASE
+               WHEN s.flag_tag = 'false_positive' THEN 'keep'
+               WHEN s.kind IN ('SSN', 'DATE OF BIRTH')
+                 OR starts_with(coalesce(s.kind, ''), 'PHONE') THEN 'redact'
+               WHEN contains(lower(coalesce(s.kind, '')), 'not pii')
+                 OR contains(lower(coalesce(s.kind, '')), 'officer')
+                 OR contains(lower(coalesce(s.kind, '')), 'street')
+                 OR contains(lower(coalesce(s.kind, '')), 'citation') THEN 'keep'
+               ELSE 'review'
+           END AS vote_prior
+    FROM suggestions s
+)
+SELECT suggestion_id, vote_pattern, vote_context, vote_prior,
+       CASE
+           WHEN vote_pattern = vote_context AND vote_context = vote_prior THEN vote_pattern
+           WHEN vote_pattern = vote_context THEN vote_pattern
+           WHEN vote_pattern = vote_prior THEN vote_pattern
+           WHEN vote_context = vote_prior THEN vote_context
+           ELSE 'conflict'
+       END AS panel,
+       'pattern=' || vote_pattern || ' context=' || vote_context ||
+           ' prior=' || vote_prior AS judge_reason
+FROM v;
 
 INSERT INTO pipeline_runs BY NAME
 SELECT getvariable('detect_run_id') AS run_id,
        'detect' AS kind,
        now() AS ts,
        NULL::JSON AS raw;
+
+INSERT INTO pipeline_runs BY NAME
+SELECT uuid()::VARCHAR AS run_id, 'judge' AS kind, now() AS ts, NULL::JSON AS raw;
+
+-- Session profile pin for base extract (before derived suggestion view).
+COPY (FROM (SUMMARIZE words)) TO 'variable:profile_words' (FORMAT variable, LIST rows);
 
 -- ── projections (unmat views only) ─────────────────────────────────────────
 
@@ -332,6 +395,7 @@ FROM (SELECT suggestion_id, max_by(d, d.ts) AS r FROM v_src_decisions d
 LEFT JOIN document_lines dl ON dl.document_id = m.r.document_id AND dl.page_no = m.r.page_no
  AND dl.y_key = round(m.r.bbox.y0, 0);
 
+-- FP/FN product fold: judge panel drives band; humans still dispose.
 CREATE OR REPLACE VIEW v_suggestions AS
 WITH base AS (
     SELECT id, document_id, page_no, bbox, text, context, confidence, flag_tag, reason,
@@ -342,20 +406,30 @@ WITH base AS (
            entity_id, source, created_at, kind, line_no, source_run_id, detector_key
     FROM v_manual_suggestions
 )
--- bbox stays STRUCT; unpack only at HTTP/JS edge (routes / canvas px).
 SELECT b.id, b.document_id, b.page_no, b.line_no, b.bbox,
        b.text, b.context, b.confidence, b.flag_tag, b.reason, b.entity_id, b.source, b.created_at,
        b.source_run_id, b.detector_key,
        coalesce(e.kind, b.kind_stored) AS kind, e.canonical_text AS entity_text,
        coalesce(ld.status, CASE b.source WHEN 'manual' THEN 'accepted' ELSE 'pending' END) AS status,
-       CASE WHEN b.flag_tag = 'false_positive' THEN 'flagged'
-            WHEN b.confidence >= 90 THEN 'high'
-            WHEN b.confidence >= 60 THEN 'review' ELSE 'flagged' END AS band,
+       -- FLAGGED = likely FP or judge conflict — never bulk-accepted
+       CASE
+           WHEN b.flag_tag = 'false_positive' THEN 'flagged'
+           WHEN j.panel IN ('keep', 'conflict') THEN 'flagged'
+           WHEN b.confidence >= 90 AND coalesce(j.panel, 'redact') = 'redact' THEN 'high'
+           WHEN b.confidence >= 60 THEN 'review'
+           ELSE 'flagged'
+       END AS band,
+       coalesce(j.panel, 'none') AS judge_panel,
+       coalesce(j.vote_pattern, '') AS vote_pattern,
+       coalesce(j.vote_context, '') AS vote_context,
+       coalesce(j.vote_prior, '') AS vote_prior,
+       coalesce(j.judge_reason, b.reason) AS judge_reason,
        CASE WHEN b.entity_id IS NOT NULL THEN 'e:' || b.entity_id
             ELSE 't:' || lower(b.text) || '|' || coalesce(e.kind, b.kind_stored) END AS group_key
 FROM base b
 LEFT JOIN entities e ON e.id = b.entity_id
-LEFT JOIN v_latest_decision ld ON ld.suggestion_id = b.id;
+LEFT JOIN v_latest_decision ld ON ld.suggestion_id = b.id
+LEFT JOIN suggestion_judges j ON j.suggestion_id = b.id;
 
 -- After v_suggestions exists (SUMMARIZE cannot precede CREATE VIEW).
 COPY (FROM (SUMMARIZE v_suggestions)) TO 'variable:profile_suggestions' (FORMAT variable, LIST rows);
@@ -392,7 +466,7 @@ WHERE s.line_no IS NOT NULL
 -- dns earned: resolve hostnames extracted from document tokens (lazy — network on read).
 CREATE OR REPLACE VIEW v_url_hosts AS
 SELECT hostname,
-       count(*)::BIGINT AS token_n,
+       count() AS token_n,
        dns_lookup(hostname) AS a_record,
        dns_lookup_all(hostname) AS a_records
 FROM token_types

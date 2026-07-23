@@ -74,7 +74,11 @@
     var caseId = el.getAttribute("data-case-id") || body.dataset.caseId || "";
     var docId = el.getAttribute("data-doc-id") || body.dataset.docId || "";
     if (a === "decide") {
-      go(api.decide(el.getAttribute("data-id"), el.getAttribute("data-status")));
+      var st = el.getAttribute("data-status");
+      var why = el.getAttribute("data-reason") || "";
+      var url = api.decide(el.getAttribute("data-id"), st);
+      if (why) url += "&reason=" + encodeURIComponent(why);
+      go(url);
     } else if (a === "entity") {
       go(api.entity(el.getAttribute("data-entity-id"), el.getAttribute("data-status")));
     } else if (a === "band") {

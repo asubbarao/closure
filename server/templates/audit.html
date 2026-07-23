@@ -1,26 +1,69 @@
 {% extends "base.html" %}
 {% block title %}Audit · {{ case.case_no }}{% endblock %}
+{% block body_attrs %} data-surface="case" data-case-id="{{ case.id }}" data-actor="reviewer"{% endblock %}
 {% block body %}
 <header class="appbar">
   <a class="btn" href="/cases/{{ case.id }}">← Library</a>
   <strong>Audit · {{ case.case_no }}</strong>
+  <span class="sp"></span>
+  {% if flagged_pending %}<span class="mono" style="color:var(--rej)">⚑ {{ flagged_pending }} flagged pending</span>{% endif %}
+  {% if export_blocked %}<span class="mono" style="color:var(--rej)">export blocked</span>{% endif %}
+  {% include "fragments/case_actions.html" %}
 </header>
 <div class="wrap">
-  <table>
-    <thead><tr><th>When</th><th>Action</th><th>Target</th><th>Actor</th><th>Reason</th></tr></thead>
-    <tbody>
-    {% for e in events %}
-      <tr>
-        <td class="mono">{{ e.ts_short }}</td>
-        <td>{{ e.action }}</td>
-        <td>{{ e.target }}</td>
-        <td>{{ e.actor }}</td>
-        <td style="color:var(--ink2)">{{ e.reason }}</td>
-      </tr>
-    {% else %}
-      <tr><td colspan="5" style="color:var(--ink2)">No events.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
+  <p style="color:var(--ink2);margin-bottom:12px">
+    Append-only decision log — who / what / when / prior batch. Undo never rewrites history.
+  </p>
+
+  {% if batches %}
+  <div class="card">
+    <h3 style="margin-bottom:8px">Batches</h3>
+    <table>
+      <thead><tr><th>When</th><th>Label</th><th>Actor</th><th>n</th><th></th></tr></thead>
+      <tbody>
+      {% for b in batches %}
+        <tr>
+          <td class="mono">{{ b.ts_short }}</td>
+          <td>{{ b.label }}</td>
+          <td>{{ b.actor }}</td>
+          <td class="mono">{{ b.decision_count }}</td>
+          <td class="mono" style="color:var(--ink2)">
+            {% if b.is_undo %}undo{% elif b.undone %}undone{% else %}—{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h3 style="margin-bottom:8px">Events</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>When</th><th>Action</th><th>Status</th><th>Band</th>
+          <th>Target</th><th>Actor</th><th>Reason / batch</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for e in events %}
+        <tr>
+          <td class="mono">{{ e.ts_short }}</td>
+          <td>{% if e.is_undo %}↩ {% endif %}{{ e.action }}</td>
+          <td class="mono">{{ e.status }}</td>
+          <td class="mono">{{ e.band }}</td>
+          <td>{{ e.target }}</td>
+          <td>{{ e.actor }}</td>
+          <td style="color:var(--ink2)">
+            {{ e.reason }}{% if e.batch_label %} · {{ e.batch_label }}{% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7" style="color:var(--ink2)">No events yet — decisions appear here as you work.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}
