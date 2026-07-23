@@ -73,6 +73,27 @@ test.describe("bulk · multi-doc · keyboard", () => {
     ).toBe(flag0);
   });
 
+  test("entity work API exposes multi-doc pending lists", async ({
+    request,
+  }) => {
+    const res = await request.get(api.entityWork(caseId));
+    expect(res.ok()).toBeTruthy();
+    const work = (await res.json()) as Array<{
+      entity_id: string;
+      n_pending: number;
+      n_docs: number;
+      pending_doc_ids: string[];
+      pending_filenames: string[];
+    }>;
+    expect(work.length).toBeGreaterThan(0);
+    const multi = work.find((e) => e.n_docs >= 2 && e.n_pending > 0);
+    // Corpus usually has multi-doc entities; if not, single-doc still valid lists
+    const sample = multi ?? work.find((e) => e.n_pending > 0);
+    expect(sample).toBeTruthy();
+    expect(sample!.pending_doc_ids.length).toBe(sample!.n_docs);
+    expect(sample!.pending_filenames.length).toBeGreaterThan(0);
+  });
+
   test("entity bulk clears non-flagged (multi-doc when present)", async ({
     request,
   }) => {
@@ -302,8 +323,6 @@ test.describe("bulk · multi-doc · keyboard", () => {
     page,
     request,
   }) => {
-    // Re-flag path: if prior test cleared all, accept-high won't recreate flagged.
-    // Page must still load; if items remain from other cases, skip content asserts.
     await page.goto(`/cases/${caseId}/flagged`);
     await expect(page.locator("body[data-surface='flagged']")).toBeVisible();
     await expect(page.getByText("Flagged triage")).toBeVisible();
@@ -316,7 +335,36 @@ test.describe("bulk · multi-doc · keyboard", () => {
     const flagged = await res.json();
     if (Array.isArray(flagged) && flagged.length > 0) {
       await expect(page.locator(".flagged-row").first()).toBeVisible();
-      await expect(page.getByText("Panel:")).toBeVisible();
+      await expect(page.getByText(/Panel/)).toBeVisible();
+      await expect(
+        page.locator("[data-action='doc-flagged-bulk']").first()
+      ).toBeVisible();
     }
+  });
+
+  test("FN remainder page + optional bulk redact", async ({ page, request }) => {
+    await page.goto(`/cases/${caseId}/remainder`);
+    await expect(page.locator("body[data-surface='remainder']")).toBeVisible();
+    await expect(page.getByText("FN remainder")).toBeVisible();
+    await expect(
+      page.locator("[data-action='remainder-bulk'][data-status='accepted']")
+    ).toBeVisible();
+
+    const res = await request.get(`/api/cases/${caseId}/remainder`);
+    expect(res.ok()).toBeTruthy();
+    const rem = (await res.json()) as Array<{ id: string; status: string }>;
+    if (rem.length === 0) return;
+
+    const before = rem.length;
+    await postDecision(request, api.remainderBulk(caseId, "accepted"));
+    const afterRes = await request.get(`/api/cases/${caseId}/remainder`);
+    const after = (await afterRes.json()) as unknown[];
+    expect(after.length).toBe(0);
+
+    const batRes = await request.get(api.batches(caseId));
+    const batches = (await batRes.json()) as Array<{ label: string; n_members: number }>;
+    const remBatch = batches.find((b) => b.label && b.label.includes("remainder"));
+    expect(remBatch, "remainder bulk is one audit batch").toBeTruthy();
+    expect(remBatch!.n_members).toBeGreaterThanOrEqual(before);
   });
 });

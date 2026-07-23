@@ -25,6 +25,8 @@ SELECT * FROM (VALUES
      $$SELECT html FROM v_stream_page WHERE case_id = $id$$),
     ('page_flagged',  'GET', '/cases/:id/flagged',
      $$SELECT html FROM v_flagged_page WHERE case_id = $id$$),
+    ('page_remainder','GET', '/cases/:id/remainder',
+     $$SELECT html FROM v_remainder_page WHERE case_id = $id$$),
     ('page_audit',    'GET', '/cases/:id/audit',
      $$SELECT html FROM v_audit_page WHERE case_id = $id$$),
     ('page_document', 'GET', '/documents/:id',
@@ -65,11 +67,26 @@ SELECT * FROM (VALUES
        FROM v_audit WHERE case_id = $id ORDER BY ts DESC$$),
     ('case_flagged', 'GET', '/api/cases/:id/flagged',
      $$SELECT id, document_id, filename, page_no, text, kind, confidence, band, status,
-              entity_id, entity_text, judge_panel, judge_reason, reason,
+              entity_id, entity_text, detector_key, judge_panel, judge_reason, reason,
               vote_pattern, vote_context, vote_prior, flag_tag
        FROM v_flagged_pending
        WHERE case_id = $id
        ORDER BY filename, page_no, id$$),
+    ('case_remainder', 'GET', '/api/cases/:id/remainder',
+     $$SELECT id, document_id, filename, page_no, text, kind, confidence, band, status,
+              detector_key, reason, judge_panel, judge_reason
+       FROM v_remainder_pending
+       WHERE case_id = $id
+       ORDER BY filename, page_no, id$$),
+    ('case_entity_work', 'GET', '/api/cases/:id/entity-work',
+     $$SELECT entity_id, canonical_text, kind, kind_label,
+              pending_ids, pending_doc_ids, pending_filenames, flagged_ids,
+              len(pending_ids) AS n_pending,
+              len(pending_doc_ids) AS n_docs,
+              len(flagged_ids) AS n_flagged
+       FROM v_entity_work
+       WHERE case_id = $id
+       ORDER BY kind, canonical_text$$),
     ('case_batches', 'GET', '/api/cases/:id/batches',
      $$SELECT batch_id, ts, ts_end, actor, label, case_id,
               suggestion_ids, event_timestamps,
@@ -245,6 +262,27 @@ FROM v_decide_targets tgt
 WHERE tgt.document_id = $id AND tgt.status = 'pending' AND tgt.band = 'flagged'
 RETURNING suggestion_id, status;
 
+-- FN remainder bulk case-wide: accept = redact miss; reject = noise
+CREATE OR REPLACE ROUTE case_remainder_decide POST '/api/cases/:id/remainder/decision'
+  STATUS 201
+  PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
+AS INSERT INTO decisions BY NAME
+WITH new_batch AS (SELECT uuid()::VARCHAR AS batch_id)
+SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor,
+       coalesce(nullif($reason, ''),
+                CASE $status WHEN 'accepted' THEN 'bulk remainder redact'
+                             ELSE 'bulk remainder noise' END) AS reason,
+       now() AS ts, tgt.document_id, tgt.case_id, tgt.text, (SELECT batch_id FROM new_batch) AS batch_id,
+       CASE $status WHEN 'accepted' THEN 'FN remainder → redact all'
+                    ELSE 'FN remainder → noise all' END AS batch_label,
+       NULL::VARCHAR AS undoes_batch_id,
+       tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
+       tgt.source, 'case_remainder' AS scope
+FROM v_decide_targets tgt
+WHERE tgt.case_id = $id AND tgt.status = 'pending'
+  AND tgt.detector_key = 'detector:remainder'
+RETURNING suggestion_id, status;
+
 -- Manual mark (add missed)
 CREATE OR REPLACE ROUTE document_mark_add POST '/api/documents/:id/marks'
   STATUS 201
@@ -292,7 +330,7 @@ JOIN last_batch_for_case bat ON evt.batch_id = bat.batch_id
 WHERE evt.kind = 'decision'
 RETURNING suggestion_id, status;
 
--- Export redacted PDFs (blocked while flagged pending). Side-effect TVF; return plan grain.
+-- Export redacted PDFs (blocked while flagged pending). Side-effect TVF.
 CREATE OR REPLACE ROUTE case_export POST '/api/cases/:id/export' AS
 SELECT plan.document_id, plan.out_path, plan.boxes,
        (SELECT bool_or(true) FROM pdf_redact(plan.source_path, plan.out_path, plan.boxes)) AS redacted

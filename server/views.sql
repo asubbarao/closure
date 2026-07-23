@@ -24,8 +24,9 @@ WHERE table_schema = 'main'
       'v_case_surface', 'v_document_page_surface',
       'v_http_cache', 'v_http_cache_config', 'v_http_cache_status',
       'v_http_cache_access', 'v_http_cache_filesystems',
-      'v_route_get', 'v_case_html', 'v_stream_page', 'v_flagged_page', 'v_audit_page', 'v_review_page',
-      'v_flagged_pending', 'v_decision_batches'
+      'v_route_get', 'v_case_html', 'v_stream_page', 'v_flagged_page', 'v_remainder_page',
+      'v_audit_page', 'v_review_page',
+      'v_flagged_pending', 'v_remainder_pending', 'v_entity_work', 'v_decision_batches'
   )
 GROUP BY table_name;
 
@@ -83,6 +84,8 @@ UNION ALL BY NAME
 SELECT id AS case_id, '/cases/' || id || '/stream' AS href, 'Entity stream' AS text FROM cases
 UNION ALL BY NAME
 SELECT id AS case_id, '/cases/' || id || '/flagged' AS href, 'Flagged triage' AS text FROM cases
+UNION ALL BY NAME
+SELECT id AS case_id, '/cases/' || id || '/remainder' AS href, 'FN remainder' AS text FROM cases
 UNION ALL BY NAME
 SELECT id AS case_id, '/cases/' || id || '/audit' AS href, 'Audit' AS text FROM cases;
 
@@ -168,13 +171,62 @@ SELECT case_id, list(doc ORDER BY filename) AS documents
 FROM documents doc
 GROUP BY case_id;
 
+-- Entity work grain: pending non-flagged ids/docs (multi-doc bulk); flagged separate.
+CREATE OR REPLACE VIEW v_entity_work AS
+WITH pending_work AS (
+    SELECT sug.entity_id, sug.id, sug.document_id, sug.page_no, doc.filename
+    FROM v_suggestions sug
+    JOIN documents doc ON doc.id = sug.document_id
+    WHERE sug.entity_id IS NOT NULL
+      AND sug.status = 'pending' AND sug.band <> 'flagged'
+),
+flagged_work AS (
+    SELECT sug.entity_id, sug.id
+    FROM v_suggestions sug
+    WHERE sug.entity_id IS NOT NULL
+      AND sug.status = 'pending' AND sug.band = 'flagged'
+)
+SELECT ent.id AS entity_id,
+       ent.case_id,
+       ent.canonical_text,
+       ent.kind,
+       ent.kind_label,
+       ent.mono,
+       coalesce((
+           SELECT list(p.id ORDER BY p.document_id, p.page_no)
+           FROM pending_work p WHERE p.entity_id = ent.id
+       ), []) AS pending_ids,
+       coalesce((
+           SELECT list(DISTINCT p.document_id ORDER BY p.document_id)
+           FROM pending_work p WHERE p.entity_id = ent.id
+       ), []) AS pending_doc_ids,
+       coalesce((
+           SELECT list(DISTINCT p.filename ORDER BY p.filename)
+           FROM pending_work p WHERE p.entity_id = ent.id
+       ), []) AS pending_filenames,
+       coalesce((
+           SELECT list(f.id ORDER BY f.id)
+           FROM flagged_work f WHERE f.entity_id = ent.id
+       ), []) AS flagged_ids
+FROM entities ent;
+
 CREATE OR REPLACE VIEW v_case_entities AS
 SELECT case_id,
        list(struct_pack(
-           id := id, canonical_text := canonical_text, kind := kind,
-           kind_label := kind_label, mono := mono
+           id := entity_id,
+           canonical_text := canonical_text,
+           kind := kind,
+           kind_label := kind_label,
+           mono := mono,
+           pending_ids := coalesce(pending_ids, []),
+           pending_doc_ids := coalesce(pending_doc_ids, []),
+           pending_filenames := coalesce(pending_filenames, []),
+           flagged_ids := coalesce(flagged_ids, []),
+           n_pending := len(coalesce(pending_ids, [])),
+           n_docs := len(coalesce(pending_doc_ids, [])),
+           n_flagged := len(coalesce(flagged_ids, []))
        ) ORDER BY kind, canonical_text) AS entities
-FROM entities
+FROM v_entity_work
 GROUP BY case_id;
 
 CREATE OR REPLACE VIEW v_case_audit_recent AS
@@ -244,7 +296,7 @@ LEFT JOIN v_export_blocked blk ON blk.case_id = cas.id;
 CREATE OR REPLACE VIEW v_flagged_pending AS
 SELECT sug.id, sug.document_id, doc.filename, doc.case_id, sug.page_no,
        sug.text, sug.kind, sug.confidence, sug.status, sug.band,
-       sug.entity_id, sug.entity_text,
+       sug.entity_id, sug.entity_text, sug.detector_key,
        sug.judge_panel, sug.judge_reason, sug.reason,
        sug.vote_pattern, sug.vote_context, sug.vote_prior,
        sug.flag_tag
@@ -252,16 +304,61 @@ FROM v_suggestions sug
 JOIN documents doc ON doc.id = sug.document_id
 WHERE sug.band = 'flagged' AND sug.status = 'pending';
 
+-- Flat list (API) + document-grouped list (triage UI multi-doc).
 CREATE OR REPLACE VIEW v_case_flagged_rows AS
 SELECT case_id,
        list(struct_pack(
            id := id, document_id := document_id, filename := filename,
            page_no := page_no, text := text, kind := kind, confidence := confidence,
-           entity_id := entity_id, entity_text := entity_text,
+           entity_id := entity_id, entity_text := entity_text, detector_key := detector_key,
            judge_panel := judge_panel, judge_reason := judge_reason, reason := reason,
            vote_pattern := vote_pattern, vote_context := vote_context, vote_prior := vote_prior
        ) ORDER BY filename, page_no, id) AS flagged
 FROM v_flagged_pending
+GROUP BY case_id;
+
+CREATE OR REPLACE VIEW v_case_flagged_by_doc AS
+SELECT case_id,
+       list(struct_pack(
+           document_id := document_id,
+           filename := filename,
+           ids := ids,
+           n := len(ids),
+           rows := rows
+       ) ORDER BY filename) AS by_doc
+FROM (
+    SELECT case_id, document_id, filename,
+           list(id ORDER BY page_no, id) AS ids,
+           list(struct_pack(
+               id := id, page_no := page_no, text := text, kind := kind,
+               confidence := confidence, entity_id := entity_id, entity_text := entity_text,
+               detector_key := detector_key,
+               judge_panel := judge_panel, judge_reason := judge_reason, reason := reason,
+               vote_pattern := vote_pattern, vote_context := vote_context, vote_prior := vote_prior
+           ) ORDER BY page_no, id) AS rows
+    FROM v_flagged_pending
+    GROUP BY case_id, document_id, filename
+)
+GROUP BY case_id;
+
+-- FN remainder queue: detector said miss; human accepts (redact) or rejects (noise).
+CREATE OR REPLACE VIEW v_remainder_pending AS
+SELECT sug.id, sug.document_id, doc.filename, doc.case_id, sug.page_no,
+       sug.text, sug.kind, sug.confidence, sug.status, sug.band,
+       sug.detector_key, sug.reason, sug.judge_panel, sug.judge_reason
+FROM v_suggestions sug
+JOIN documents doc ON doc.id = sug.document_id
+WHERE sug.status = 'pending'
+  AND sug.detector_key = 'detector:remainder';
+
+CREATE OR REPLACE VIEW v_case_remainder_rows AS
+SELECT case_id,
+       list(struct_pack(
+           id := id, document_id := document_id, filename := filename,
+           page_no := page_no, text := text, kind := kind, confidence := confidence,
+           band := band, reason := reason, judge_panel := judge_panel
+       ) ORDER BY filename, page_no, id) AS remainder
+FROM v_remainder_pending
 GROUP BY case_id;
 
 CREATE OR REPLACE VIEW v_document_page_surface AS
@@ -335,10 +432,23 @@ SELECT sfc.case_id,
            'case', sfc.case_row,
            'export_blocked', sfc.export_blocked,
            'n_flagged_pending', sfc.n_flagged_pending,
-           'flagged', coalesce(flg.flagged, [])
+           'flagged', coalesce(flg.flagged, []),
+           'by_doc', coalesce(bd.by_doc, [])
        ) AS ctx
 FROM v_case_surface sfc
-LEFT JOIN v_case_flagged_rows flg ON flg.case_id = sfc.case_id;
+LEFT JOIN v_case_flagged_rows flg ON flg.case_id = sfc.case_id
+LEFT JOIN v_case_flagged_by_doc bd ON bd.case_id = sfc.case_id;
+
+CREATE OR REPLACE VIEW v_remainder_ctx AS
+SELECT sfc.case_id,
+       json_object(
+           'case', sfc.case_row,
+           'export_blocked', sfc.export_blocked,
+           'remainder', coalesce(rem.remainder, []),
+           'n_remainder', len(coalesce(rem.remainder, []))
+       ) AS ctx
+FROM v_case_surface sfc
+LEFT JOIN v_case_remainder_rows rem ON rem.case_id = sfc.case_id;
 
 CREATE OR REPLACE VIEW v_audit_ctx AS
 SELECT sfc.case_id,
@@ -360,7 +470,20 @@ SELECT sfc.document_id, sfc.page_no,
            'doc', sfc.doc_row,
            'page', sfc.page_row,
            'marks', sfc.marks,
-           'suggestions', sfc.suggestions
+           'suggestions', sfc.suggestions,
+           'n_doc_flagged', (
+               SELECT len(list(sug.id))
+               FROM v_suggestions sug
+               WHERE sug.document_id = sfc.document_id
+                 AND sug.band = 'flagged' AND sug.status = 'pending'
+           ),
+           'n_doc_remainder', (
+               SELECT len(list(sug.id))
+               FROM v_suggestions sug
+               WHERE sug.document_id = sfc.document_id
+                 AND sug.status = 'pending'
+                 AND sug.detector_key = 'detector:remainder'
+           )
        ) AS ctx
 FROM v_document_page_surface sfc;
 
@@ -381,6 +504,12 @@ SELECT case_id,
        '/cases/' || case_id || '/flagged' AS path,
        tera_render('flagged.html', ctx, template_path := 'server/templates/**/*.html') AS html
 FROM v_flagged_ctx;
+
+CREATE OR REPLACE VIEW v_remainder_page AS
+SELECT case_id,
+       '/cases/' || case_id || '/remainder' AS path,
+       tera_render('remainder.html', ctx, template_path := 'server/templates/**/*.html') AS html
+FROM v_remainder_ctx;
 
 CREATE OR REPLACE VIEW v_audit_page AS
 SELECT case_id,

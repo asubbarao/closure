@@ -11,13 +11,21 @@ and the test that now makes that class of bug impossible to miss.
 
 ## Three scorers, because a name can be missed three ways
 
-`name_scorers` is a table, not a `WHERE` clause — thresholds are data you edit:
+`name_scorers` is a table, not a `WHERE` clause. Each row names a **function**
+(`scorer_fn`) and its threshold; a scorer is data, not code:
 
-| scorer     | function                                   | catches                                  |
-|------------|--------------------------------------------|------------------------------------------|
-| `edit`     | `rapidfuzz_ratio`                          | typos that keep the spelling close       |
-| `jaro`     | `jaro_winkler_similarity`                  | prefix-weighted near-misses              |
-| `phonetic` | `double_metaphone` primary code, equal     | a name *heard and respelled*             |
+| scorer     | `scorer_fn`      | wraps                                   | catches                            |
+|------------|------------------|-----------------------------------------|------------------------------------|
+| `edit`     | `score_edit`     | `rapidfuzz_ratio`                       | typos that keep the spelling close |
+| `jaro`     | `score_jaro`     | `jaro_winkler_similarity`               | prefix-weighted near-misses        |
+| `phonetic` | `score_phonetic` | `double_metaphone` primary codes agree  | a name *heard and respelled*       |
+
+Every scorer has one uniform shape — `score(token, term) -> 0..100` — so
+`name_rule_hits` is **one scan**, not three near-identical UNION arms:
+`func_apply`'s `apply(scr.scorer_fn, token, term)` picks the function by name from
+the table row. Adding a fourth scorer is a macro plus one inserted row; the scan
+and every downstream table follow unchanged. There are no arms to keep in sync
+and no `AS scorer` alias to lose.
 
 rapidfuzz and jaro both index **spelling**. Double Metaphone indexes **sound**:
 it maps a word to a phonetic code (a short string like `KLP`), so two words that
@@ -61,14 +69,18 @@ unnests each multi-word term into its tokens and stores `double_metaphone(tok)[1
 per token; document tokens are keyed the same way; the scorer joins token-code to
 token-code. `kaleb` → `KLP` now matches `kaleb` → `KLP`.
 
-## Why it hid: an emptiness check cannot see a dead UNION arm
+## Why it hid: an emptiness check cannot see a dead scorer
 
-The old `smoke.sql` asserted every table was *non-empty*. `name_rule_hits` is a
-`UNION ALL BY NAME` of the three scorers' hits. On a normal corpus the `edit` and
-`jaro` arms produce plenty of rows, so the table is non-empty — **whether or not
-the phonetic arm contributes anything**. A dead arm is invisible to a
-"table has rows" check. (`UNION ALL BY NAME` makes it worse: an arm that loses
-its `AS scorer` alias does not error — it silently nulls the discriminator.)
+The old `smoke.sql` asserted every table was *non-empty*. On a normal corpus the
+`edit` and `jaro` scorers produce plenty of `name_rule_hits` rows, so the table
+is non-empty — **whether or not the phonetic scorer contributes anything**. A
+scorer that matches nothing is invisible to a "table has rows" check.
+
+(This was worse in the old three-arm form: `name_rule_hits` was a
+`UNION ALL BY NAME` of one arm per scorer, and an arm that lost its `AS scorer`
+alias would not error — `BY NAME` matched columns by name and silently nulled the
+discriminator. The `func_apply` scan removed the arms; the `not_null` invariant
+below still guards the discriminator as cheap insurance.)
 
 So the invariant has to be about the **trace**, not the winners. `name_rule_hits`
 records *every* scorer that fired, before `name_token_match` picks one primary per

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}FN remainder · {{ case.case_no }}{% endblock %}
+{% block body_attrs %} data-surface="remainder" data-case-id="{{ case.id }}" data-actor="reviewer"{% endblock %}
+{% block body %}
+<header class="appbar">
+  <a class="btn" href="/cases/{{ case.id }}">← Library</a>
+  <strong>FN remainder</strong>
+  <span class="mono" style="color:var(--ink2)">
+    {{ case.case_no }} · {{ n_remainder }} residual PII-shaped tokens (detector:remainder)
+  </span>
+  <span class="sp"></span>
+  <a class="btn" href="/cases/{{ case.id }}/flagged">Flagged FP</a>
+  <a class="btn" href="/cases/{{ case.id }}/audit">Audit</a>
+  {% include "fragments/case_actions.html" %}
+</header>
+<div class="wrap">
+  <p style="color:var(--ink2);margin-bottom:12px;max-width:72ch">
+    These were not caught by type/name detectors — residual PII-shaped tokens.
+    <strong>Accept</strong> = redact the miss (FN fix).
+    <strong>Reject</strong> = noise / not real PII.
+  </p>
+
+  <div class="card" style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <button type="button" class="btn primary" data-action="remainder-bulk" data-case-id="{{ case.id }}"
+            data-status="accepted">All remainder → redact</button>
+    <button type="button" class="btn danger" data-action="remainder-bulk" data-case-id="{{ case.id }}"
+            data-status="rejected">All remainder → noise</button>
+  </div>
+
+  {% for r in remainder %}
+  <div class="card" style="margin-bottom:8px" id="r-{{ r.id }}">
+    <div style="display:flex;gap:12px;align-items:flex-start">
+      <div style="flex:1">
+        <div style="font-weight:600">{{ r.text }}</div>
+        <div class="mono" style="font-size:11px;color:var(--ink2);margin-top:4px">
+          <a href="/documents/{{ r.document_id }}{% if r.page_no > 1 %}/pages/{{ r.page_no }}{% endif %}">
+            {{ r.filename }}.pdf · p.{{ r.page_no }}
+          </a>
+          · {{ r.kind }} · conf {{ r.confidence }} · band {{ r.band }}
+        </div>
+        {% if r.reason %}
+        <div class="mono" style="font-size:11px;margin-top:6px;color:var(--ink2)">{{ r.reason }}</div>
+        {% endif %}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button type="button" class="btn" data-action="decide" data-id="{{ r.id }}"
+                data-status="accepted">Accept redact</button>
+        <button type="button" class="btn danger" data-action="decide" data-id="{{ r.id }}"
+                data-status="rejected" data-reason="remainder noise">Reject noise</button>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="card" style="color:var(--ink2)">No pending remainder candidates.</div>
+  {% endfor %}
+</div>
+{% endblock %}

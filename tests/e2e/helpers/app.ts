@@ -187,6 +187,12 @@ export const api = {
     `/api/cases/${encodeURIComponent(caseId)}/export`,
   flaggedBulk: (caseId: string, status: string, actor = "e2e") =>
     `/api/cases/${encodeURIComponent(caseId)}/flagged/decision?status=${status}&actor=${actor}`,
+  docFlaggedBulk: (docId: string, status: string, actor = "e2e") =>
+    `/api/documents/${encodeURIComponent(docId)}/flagged/decision?status=${status}&actor=${actor}`,
+  remainderBulk: (caseId: string, status: string, actor = "e2e") =>
+    `/api/cases/${encodeURIComponent(caseId)}/remainder/decision?status=${status}&actor=${actor}`,
+  entityWork: (caseId: string) =>
+    `/api/cases/${encodeURIComponent(caseId)}/entity-work`,
   batches: (caseId: string) =>
     `/api/cases/${encodeURIComponent(caseId)}/batches`,
   mark: (

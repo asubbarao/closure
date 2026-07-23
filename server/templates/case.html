@@ -7,7 +7,8 @@
   <span class="mono" style="color:var(--ink2)">{{ case.case_no }} — {{ case.title }}</span>
   <span class="sp"></span>
   <a class="btn" href="/cases/{{ case.id }}/stream">Entity stream</a>
-  <a class="btn" href="/cases/{{ case.id }}/flagged">Flagged triage</a>
+  <a class="btn" href="/cases/{{ case.id }}/flagged">Flagged FP</a>
+  <a class="btn" href="/cases/{{ case.id }}/remainder">FN remainder</a>
   <a class="btn" href="/cases/{{ case.id }}/audit">Audit</a>
   {% include "fragments/case_actions.html" %}
 </header>

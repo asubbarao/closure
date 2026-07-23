@@ -12,7 +12,7 @@ Closure is a **full application runtime** in one process: HTTP, auth, OpenAPI, f
 | Auth | `CREATE AUTH` + `REQUIRE`; `CLOSURE_API_KEY` |
 | Outbound | **curl_httpfs** (MultiCurl transport) + **cache_httpfs** (on-disk read cache under `.tmp/cache_httpfs`) |
 | Contracts | Tables, typed params, `bbox` — no second Pydantic layer |
-| Checks | `smoke.sql` + Playwright e2e |
+| Checks | `tests/check.sql` (dqtest, declarative) + Playwright e2e |
 | Peer SQL | `ATTACH … AS pg` when `CLOSURE_POSTGRES` set |
 
 **Thesis:** for data-shaped products (FOIA review, case packs, set-based bulk), this should beat FastAPI + ORM on honesty and composition.
@@ -32,10 +32,13 @@ Closure is a **full application runtime** in one process: HTTP, auth, OpenAPI, f
 ## Boot order
 
 ```
-config → extensions → auth
-  → hostfs + scalarfs pins → [postgres]
-  → model → routes (catalog install) → smoke → serve
+build.sql: config → extensions → auth
+  → hostfs + scalarfs pins → [postgres] → model
+app.sql:   build.sql → routes (catalog install) → serve
 ```
+
+Invariants are not in the serve path — `tests/check.sql` (dqtest) reads the same
+`build.sql` model and asserts on it, run by `make check`.
 
 ## Env
 
@@ -49,7 +52,7 @@ config → extensions → auth
 
 ## Ops
 
-Single process = shared buffer pool. Durable SoR = files + append-only `decisions`. Restart under launchd/systemd; smoke after boot.
+Single process = shared buffer pool. Durable SoR = files + append-only `decisions`. Restart under launchd/systemd; `make check` after boot.
 
 ## Related
 

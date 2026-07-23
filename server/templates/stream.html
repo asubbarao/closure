@@ -7,11 +7,15 @@
   <strong>Entity stream</strong>
   <span class="mono" style="color:var(--ink2)">{{ case.case_no }} — decide once, multi-doc</span>
   <span class="sp"></span>
+  <a class="btn" href="/cases/{{ case.id }}/flagged">Flagged FP</a>
+  <a class="btn" href="/cases/{{ case.id }}/remainder">FN remainder</a>
   <a class="btn" href="/cases/{{ case.id }}/audit">Audit</a>
   {% include "fragments/case_actions.html" %}
 </header>
 <div class="wrap">
-  <p style="color:var(--ink2);margin-bottom:12px">Bulk skips flagged · open a document for page work</p>
+  <p style="color:var(--ink2);margin-bottom:12px">
+    Decide once across docs · bulk skips flagged (clear those in Flagged FP) · filenames show multi-doc span
+  </p>
   {% for e in entities %}
   <div class="card" style="margin-top:8px">
     {% include "fragments/entity_row.html" %}

@@ -18,7 +18,7 @@ CREATE OR REPLACE TYPE screen_box AS STRUCT(
     x DOUBLE, y DOUBLE, w DOUBLE, h DOUBLE
 );
 
--- pdf_redact() wants bottom-left origin + size (page stamped at plan time).
+-- pdf_redact / pdf_redact_lateral want bottom-left origin + size (page stamped at plan time).
 CREATE OR REPLACE TYPE redact_box AS STRUCT(
     x DOUBLE, y DOUBLE, w DOUBLE, h DOUBLE
 );

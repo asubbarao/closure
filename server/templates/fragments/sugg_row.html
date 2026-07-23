@@ -3,7 +3,8 @@
     <div style="font-weight:600">{{ s.text }}</div>
     <div class="mono" style="font-size:11px;opacity:.75">
       p.{{ s.page_no }} · {{ s.band }} · {{ s.confidence }} · {{ s.status }}
-      {% if s.judge_panel and s.judge_panel != 'none' %} · judge:{{ s.judge_panel }}{% endif %}
+      {% if s.detector_key == 'detector:remainder' %} · <strong>FN remainder</strong>{% endif %}
+      {% if s.judge_panel %} · judge:{{ s.judge_panel }}{% endif %}
     </div>
     {% if s.band == 'flagged' and s.status == 'pending' %}
     <div class="why mono" style="font-size:11px;margin-top:4px;color:var(--rej)">

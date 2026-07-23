@@ -16,6 +16,12 @@
   <button type="button" class="btn" data-action="accept-high" data-case-id="{{ case.id }}" title="H">HIGH case</button>
   <button type="button" class="btn" data-action="band" data-doc-id="{{ doc.id }}" data-band="high" data-status="accepted" title="Shift+A">HIGH doc</button>
   <button type="button" class="btn" data-action="band" data-doc-id="{{ doc.id }}" data-band="review" data-status="rejected" title="Shift+R">Reject REVIEW</button>
+  {% if n_doc_flagged and n_doc_flagged > 0 %}
+  <button type="button" class="btn danger" data-action="doc-flagged-bulk" data-doc-id="{{ doc.id }}"
+          data-status="rejected" title="Doc FP clear">Doc FP · {{ n_doc_flagged }}</button>
+  {% endif %}
+  <a class="btn" href="/cases/{{ case.id }}/flagged">Case FP</a>
+  <a class="btn" href="/cases/{{ case.id }}/remainder">FN</a>
 </header>
 <div class="review-body">
   <div class="review-canvas">
@@ -25,7 +31,7 @@
     </div>
   </div>
   <aside class="review-rail queue">
-    <h3>j/k · a/r · A HIGH · R REVIEW · H case · e entity · n add · u undo · [/]</h3>
+    <h3>j/k a/r · A/R bands · H high · e entity · n add FN · u undo · [/]</h3>
     {% for s in suggestions %}{% include "fragments/sugg_row.html" %}{% endfor %}
   </aside>
 </div>

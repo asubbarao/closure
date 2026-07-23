@@ -288,16 +288,16 @@ SELECT term, list(DISTINCT token_norm) AS matching_tokens
 FROM name_token_match GROUP BY term;
 
 -- Bloom over prepared watchlist tokens (v1.5.1 = bitfilters hash-compat pin).
-SET VARIABLE watchlist_bloom = (
-    SELECT bitfilters_duckdb_bloom_filter_create('v1.5.1', 64, hv)
-    FROM (
-        SELECT bitfilters_duckdb_hash('v1.5.1', term_norm) AS hv
-        FROM watchlist WHERE NOT is_not_pii
-        UNION ALL
-        SELECT bitfilters_duckdb_hash('v1.5.1', tok) AS hv
-        FROM watchlist, unnest(term_tokens) AS token_rows(tok)
-        WHERE NOT is_not_pii AND length(tok) >= 3
-    )
+-- A relation, not a session variable: the detect scan joins/subqueries it.
+CREATE OR REPLACE TABLE watchlist_bloom AS
+SELECT bitfilters_duckdb_bloom_filter_create('v1.5.1', 64, hv) AS filter
+FROM (
+    SELECT bitfilters_duckdb_hash('v1.5.1', term_norm) AS hv
+    FROM watchlist WHERE NOT is_not_pii
+    UNION ALL
+    SELECT bitfilters_duckdb_hash('v1.5.1', tok) AS hv
+    FROM watchlist, unnest(term_tokens) AS token_rows(tok)
+    WHERE NOT is_not_pii AND length(tok) >= 3
 );
 
 -- Line grain: keep word lists; line bbox = hull of word boxes (not min/max laundry).
@@ -316,8 +316,9 @@ SELECT wrd.document_id, wrd.page_no, wrd.case_id, wrd.y_key,
 FROM words wrd
 GROUP BY wrd.document_id, wrd.page_no, wrd.case_id, wrd.y_key;
 
--- detect: join prepared columns only
-SET VARIABLE detect_run_id = (SELECT uuid()::VARCHAR);
+-- detect: join prepared columns only. One run id per detect pass, stamped on
+-- every suggestion + pipeline_runs — a relation, not a session variable.
+CREATE OR REPLACE TABLE detect_run AS SELECT uuid()::VARCHAR AS run_id;
 
 CREATE OR REPLACE TABLE detect_hits AS
 WITH hits_from_type_rules AS (
@@ -338,7 +339,7 @@ lines_passing_watchlist_bloom AS (
     SELECT document_id, page_no, y_key
     FROM words
     WHERE bitfilters_duckdb_bloom_filter_probe(
-        'v1.5.1', getvariable('watchlist_bloom'), token_norm)
+        'v1.5.1', (SELECT filter FROM watchlist_bloom), token_norm)
     GROUP BY document_id, page_no, y_key
     UNION
     SELECT wrd.document_id, wrd.page_no, wrd.y_key
@@ -406,7 +407,7 @@ SELECT format('{:x}', rapidhash(concat_ws(chr(31),
        hit.confidence, hit.flag_tag, hit.reason, ent.id AS entity_id, hit.kind,
        lower(hit.kind) AS kind_lower,
        'ai' AS source, TIMESTAMP '1970-01-01' AS created_at, lin.line_no,
-       getvariable('detect_run_id') AS source_run_id, hit.detector_key
+       (SELECT run_id FROM detect_run) AS source_run_id, hit.detector_key
 FROM detect_hits hit
 LEFT JOIN entities ent
   ON ent.case_id = hit.case_id AND ent.kind = hit.kind
@@ -437,7 +438,7 @@ SELECT format('{:x}', rapidhash(concat_ws(chr(31),
        CASE WHEN wrd.pii_kind IS NULL THEN 'UNKNOWN' ELSE wrd.pii_kind END AS kind,
        lower(CASE WHEN wrd.pii_kind IS NULL THEN 'UNKNOWN' ELSE wrd.pii_kind END) AS kind_lower,
        'ai' AS source, now() AS created_at, NULL::INTEGER AS line_no,
-       getvariable('detect_run_id') AS source_run_id,
+       (SELECT run_id FROM detect_run) AS source_run_id,
        'detector:remainder' AS detector_key
 FROM words wrd
 JOIN pages pag
@@ -503,7 +504,7 @@ SELECT suggestion_id, vote_pattern, vote_context, vote_prior,
 FROM votes_from_pattern_context_prior;
 
 INSERT INTO pipeline_runs BY NAME
-SELECT getvariable('detect_run_id') AS run_id,
+SELECT (SELECT run_id FROM detect_run) AS run_id,
        'detect' AS kind,
        now() AS ts,
        NULL::JSON AS raw;
@@ -669,6 +670,7 @@ SELECT sug.id AS suggestion_id,
        sug.confidence,
        sug.flag_tag,
        sug.source,
+       sug.detector_key,
        sug.judge_panel,
        sug.judge_reason,
        sug.vote_pattern,

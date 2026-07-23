@@ -1,9 +1,24 @@
-{# e: { id, canonical_text, kind_label, mono } #}
+{# e: multi-doc work grain — pending_ids / pending_filenames / flagged_ids lists #}
 <div class="entity-row" id="e-{{ e.id }}">
   <div style="flex:1">
     <div class="{% if e.mono %}mono{% endif %}" style="font-weight:600">{{ e.canonical_text }}</div>
-    <div class="mono" style="font-size:11px;color:var(--ink2)">{{ e.kind_label }}</div>
+    <div class="mono" style="font-size:11px;color:var(--ink2)">
+      {{ e.kind_label }}
+      {% if e.n_pending %} · {{ e.n_pending }} pending{% if e.n_docs and e.n_docs > 1 %} across {{ e.n_docs }} docs{% endif %}{% endif %}
+      {% if e.n_flagged %} · {{ e.n_flagged }} flagged (use FP triage){% endif %}
+    </div>
+    {% if e.pending_filenames and e.pending_filenames | length > 0 %}
+    <div class="mono" style="font-size:11px;color:var(--ink2);margin-top:2px">
+      {% for fn in e.pending_filenames %}{{ fn }}{% if not loop.last %}, {% endif %}{% endfor %}
+    </div>
+    {% endif %}
   </div>
-  <button type="button" class="btn" data-action="entity" data-entity-id="{{ e.id }}" data-status="accepted">Accept all</button>
-  <button type="button" class="btn danger" data-action="entity" data-entity-id="{{ e.id }}" data-status="rejected">Reject all</button>
+  {% if e.n_pending and e.n_pending > 0 %}
+  <button type="button" class="btn" data-action="entity" data-entity-id="{{ e.id }}" data-status="accepted"
+          title="Accept all non-flagged for this entity (multi-doc)">Accept all</button>
+  <button type="button" class="btn danger" data-action="entity" data-entity-id="{{ e.id }}" data-status="rejected"
+          title="Reject all non-flagged for this entity">Reject all</button>
+  {% else %}
+  <span class="mono" style="font-size:11px;color:var(--ink2)">no bulk work</span>
+  {% endif %}
 </div>

@@ -48,7 +48,7 @@ Grain tables stay pure (`cases`, `documents`, `entities`, `suggestions`, `decisi
 | **Live views** | Decision fold, mark px, export gate |
 | **Page pipeline** | grain → surface (`case_row` / `doc_row` / `page_row` packs) → thin `v_*_ctx` → html |
 | **HTTP** | `v_route_get` installs GETs; POSTs nest under resources |
-| **Checks** | `smoke.sql` + e2e against catalog/product APIs |
+| **Checks** | `tests/check.sql` (dqtest, declarative) + e2e against catalog/product APIs |
 
 Page HTML is **VARCHAR** from `tera_render` only — never `parse_html` on pages (breaks `<script src>`).
 
@@ -110,5 +110,7 @@ FROM (SUMMARIZE v_suggestions);
 ## Load order
 
 ```
-config → extensions → auth → pins → [postgres] → model → routes → smoke → serve
+build.sql:  config → extensions → auth → pins → [postgres] → model
+app.sql:    build.sql → routes → serve
+make check: build.sql → dqtest invariants (out of the serve path)
 ```
