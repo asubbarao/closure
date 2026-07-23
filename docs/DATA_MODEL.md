@@ -11,6 +11,8 @@
 | **Join, don’t nest** | Prefer `JOIN` of named relations over correlated scalar subqueries / `FROM (SELECT DISTINCT…)`. |
 | **Semantic YAML** | First-class schema graph (`closure_semantic.yaml`): tables, joins, dimensions. Not a KPI laundry. |
 | **SQL is verbose** | CTEs / tables / views read as English: `words_from_pdf`, `batches_from_user_events`, `hits_from_type_rules`. |
+| **Trim once** | `token` / `term` stripped at the source pin; never re-`trim(text)` in judges/routes. |
+| **3-value / presence** | Real content keeps `NULL` vs `''` distinct. For presence gates (env, “has a token”), `nullif(x, '') IS NOT NULL` — empty folds to NULL, one check, not `IS NOT NULL AND <> ''`. |
 | **Surface, not mega-table** | If many handlers re-spell the same multi-join, name it once as an unmat **surface** view (`v_case_surface`). Do **not** materialize a denormalized “page DTO” table — live folds (status, export_blocked) would go stale. |
 | **Geometry is first-class** | `bbox` (PDF) + `screen` (`screen_box`) on the mark grain — STRUCT types, not four flat columns or parse soup. Status/band stay live folds. UNNEST ok at a SQL edge if needed. |
 | **Tera is the JSON edge only** | `tera_render(template, JSON)` — surfaces hold typed columns; `v_*_ctx` only maps column → template key. No geometry math in the tera bag. |
@@ -42,7 +44,7 @@ Grain tables stay pure (`cases`, `documents`, `entities`, `suggestions`, `decisi
 | **Host tree** | `v_hostfs` — path scalars every query |
 | **Tables** | Facts + display pins; durable: `decisions`, … |
 | **Live views** | Decision fold, mark px, export gate |
-| **Page pipeline** | grain → **surface** (`v_case_surface`, `v_document_page_surface`) → `v_*_ctx` → html |
+| **Page pipeline** | grain → surface (`case_row` / `doc_row` / `page_row` packs) → thin `v_*_ctx` → html |
 | **HTTP** | `v_route_get` installs GETs; POSTs nest under resources |
 | **Checks** | `smoke.sql` + e2e against catalog/product APIs |
 
@@ -72,17 +74,20 @@ Detect: type hits + rapidfuzz → suggestions / entities.
 
 ## Semantic schema
 
-```yaml
-# server/config/closure_semantic.yaml
-# joins + dimensions = the review graph
-# metrics: only real measures (avg_confidence) — no n=COUNT(*) product field
-```
+`server/config/closure_semantic.yaml` is part of the model — not a KPI board.
+
+| Piece | Meaning |
+|-------|---------|
+| **tables** | `v_suggestions` · `documents` · `cases` · `entities` · `suggestion_judges` |
+| **joins** | mark→doc→case, mark→entity, mark→judge |
+| **dimensions** | status, band, kind, case, entity, judge votes, … |
+| **metrics** | `avg_confidence` only (filter dimensions instead of inventing counts) |
 
 ```sql
 CREATE SEMANTIC VIEW closure FROM YAML FILE 'server/config/closure_semantic.yaml';
--- ad-hoc slice (console / ops), not embedded page KPIs:
-FROM semantic_view('closure', dimensions := ['case_id', 'status', 'band'],
-                   metrics := ['avg_confidence']);
+FROM semantic_view('closure',
+  dimensions := ['case_id', 'status', 'band'],
+  metrics := ['avg_confidence']);
 FROM (SUMMARIZE v_suggestions);
 ```
 

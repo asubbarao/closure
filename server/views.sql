@@ -1,14 +1,9 @@
--- views.sql — live folds + page edge over a table model.
+-- views.sql — live folds + product surfaces + thin tera edge.
 --
--- Naming (clarity first):
---   tables / views / CTEs  verbose snake_case  (data_from_pdf_words, batches_from_events)
---   view prefix            v_* is fine
---   relation aliases       2–3 letters (sug, doc, pag, cas, ent, …)
---   lambdas only           1-letter ok  list_transform(col, x -> …)
---
--- Table rule: create a TABLE only when multi-consumer re-run work makes
--- everything downstream simpler/robust. Prefer JOINs of named relations.
--- Lossy count* boards are not product. Semantic graph: closure_semantic.yaml.
+-- Naming: verbose CTEs/views; aliases 2–3 letters (sug, doc, pag, cas);
+--         lambdas only use 1-letter (list_transform(xs, x -> …)).
+-- Surfaces name the join once. Ctx only maps typed columns → template keys.
+-- Geometry is first-class on the mark grain (bbox / screen). No count boards.
 
 DROP SEMANTIC VIEW IF EXISTS suggestion_metrics;
 DROP SEMANTIC VIEW IF EXISTS closure;
@@ -32,11 +27,8 @@ WHERE table_schema = 'main'
   )
 GROUP BY table_name;
 
--- ── live folds (change every decision POST) ────────────────────────────────
+-- ── live folds ─────────────────────────────────────────────────────────────
 
--- Marks = suggestion grain + live status/band.
--- Geometry is first-class: bbox (PDF), screen (canvas). UNNEST only if a consumer
--- needs flat CSS fields; the table/view keep typed STRUCTs.
 CREATE OR REPLACE VIEW v_page_marks AS
 SELECT sug.id, sug.document_id, sug.page_no, sug.line_no,
        sug.bbox, sug.screen,
@@ -45,13 +37,14 @@ FROM v_suggestions sug;
 
 CREATE OR REPLACE VIEW v_audit AS
 SELECT log.ts,
-       coalesce(log.actor, 'reviewer') AS actor,
-       coalesce(log.kind, 'decision') AS action,
+       CASE WHEN log.actor IS NULL THEN 'reviewer' ELSE log.actor END AS actor,
+       CASE WHEN log.kind IS NULL THEN 'decision' ELSE log.kind END AS action,
        log.status,
        log.suggestion_id,
-       coalesce(log.case_id, doc.case_id) AS case_id,
+       CASE WHEN log.case_id IS NOT NULL THEN log.case_id ELSE doc.case_id END AS case_id,
        log.document_id,
-       coalesce(log.text, log.suggestion_id, '') AS target,
+       -- target may be NULL; templates render empty — do not invent ''
+       CASE WHEN log.text IS NOT NULL THEN log.text ELSE log.suggestion_id END AS target,
        log.reason,
        log.batch_id,
        log.batch_label,
@@ -71,9 +64,7 @@ LEFT JOIN v_suggestions sug ON sug.document_id = doc.id
 GROUP BY doc.case_id;
 
 CREATE OR REPLACE VIEW v_nav AS
-SELECT case_id,
-       '/documents/' || id AS href,
-       filename AS text
+SELECT case_id, '/documents/' || id AS href, filename AS text
 FROM documents
 UNION ALL BY NAME
 SELECT id AS case_id, '/cases/' || id AS href, 'Library' AS text FROM cases
@@ -86,7 +77,7 @@ CREATE OR REPLACE VIEW v_history_events AS
 SELECT kind, suggestion_id, status, actor, reason, ts AS event_ts,
        document_id, case_id, text, batch_id, batch_label, undoes_batch_id
 FROM v_src_decisions
-WHERE nullif(batch_id, '') IS NOT NULL;
+WHERE batch_id IS NOT NULL;
 
 CREATE OR REPLACE VIEW v_undone_batches AS
 SELECT undoes_batch_id AS batch_id
@@ -95,10 +86,7 @@ WHERE undoes_batch_id IS NOT NULL
 GROUP BY undoes_batch_id;
 
 CREATE OR REPLACE VIEW v_decision_batches AS
-SELECT bat.batch_id, bat.ts, bat.ts_end, bat.actor, bat.label, bat.suggestion_ids,
-       bat.is_undo, bat.undoes_batch_id, bat.case_id,
-       und.batch_id IS NOT NULL AS undone
-FROM (
+WITH batches_from_history_events AS (
     SELECT batch_id,
            min(event_ts) AS ts,
            max(event_ts) AS ts_end,
@@ -110,7 +98,9 @@ FROM (
            max(case_id) AS case_id
     FROM v_history_events
     GROUP BY batch_id
-) bat
+)
+SELECT bat.*, und.batch_id IS NOT NULL AS undone
+FROM batches_from_history_events bat
 LEFT JOIN v_undone_batches und ON und.batch_id = bat.batch_id;
 
 CREATE OR REPLACE VIEW v_export_plans AS
@@ -132,11 +122,7 @@ FROM v_export_blocked blk
 JOIN documents doc ON doc.case_id = blk.case_id
 LEFT JOIN redaction_boxes_from_accepted box ON box.document_id = doc.id;
 
--- ── product surfaces (named spines — not denormalized fact tables) ─────────
--- Grain truth stays in cases / documents / entities / suggestions / decisions.
--- Re-spelling the same multi-join in every page handler is the smell; one
--- unmat surface view is the fix. A TABLE would go stale on every decision POST
--- (export_blocked, marks) — that fails the adversarial table test.
+-- ── list packs (multi-consumer → surface) ──────────────────────────────────
 
 CREATE OR REPLACE VIEW v_case_documents AS
 SELECT case_id, list(doc ORDER BY filename) AS documents
@@ -156,7 +142,7 @@ CREATE OR REPLACE VIEW v_case_audit_recent AS
 SELECT case_id,
        list(struct_pack(
            ts_short := strftime(ts, '%H:%M'), action := action, actor := actor,
-           target := coalesce(target, ''), reason := coalesce(reason, '')
+           target := target, reason := reason
        ) ORDER BY ts DESC) AS audit
 FROM v_audit
 GROUP BY case_id;
@@ -180,22 +166,29 @@ SELECT case_id,
        list(struct_pack(
            ts_short := strftime(ts, '%Y-%m-%d %H:%M:%S'),
            action := action,
-           status := coalesce(status, ''),
+           status := status,
            actor := actor,
-           target := coalesce(target, ''),
-           reason := coalesce(reason, ''),
-           band := coalesce(band, ''),
-           batch_label := coalesce(batch_label, ''),
+           target := target,
+           reason := reason,
+           band := band,
+           batch_label := batch_label,
            is_undo := undoes_batch_id IS NOT NULL
        ) ORDER BY ts DESC) AS events
 FROM v_audit
 GROUP BY case_id;
 
--- Case spine: join packs once. Library / stream / audit / API all read this.
+CREATE OR REPLACE VIEW v_page_mark_lists AS
+SELECT document_id, page_no, list(mrk) AS marks
+FROM v_page_marks mrk
+GROUP BY document_id, page_no;
+
+-- ── product surfaces (named spines) ────────────────────────────────────────
+
 CREATE OR REPLACE VIEW v_case_surface AS
 SELECT cas.id AS case_id,
        cas.case_no,
        cas.title,
+       struct_pack(id := cas.id, case_no := cas.case_no, title := cas.title) AS case_row,
        coalesce(docs.documents, []) AS documents,
        coalesce(ents.entities, []) AS entities,
        coalesce(blk.export_blocked, false) AS export_blocked
@@ -204,29 +197,32 @@ LEFT JOIN v_case_documents docs ON docs.case_id = cas.id
 LEFT JOIN v_case_entities ents ON ents.case_id = cas.id
 LEFT JOIN v_export_blocked blk ON blk.case_id = cas.id;
 
-CREATE OR REPLACE VIEW v_page_mark_lists AS
-SELECT document_id, page_no, list(mrk) AS marks
-FROM v_page_marks mrk
-GROUP BY document_id, page_no;
-
--- Document×page spine: case + doc + page pins + marks + queue suggestions.
--- All product fields typed here; tera only maps columns → template keys (JSON).
 CREATE OR REPLACE VIEW v_document_page_surface AS
 SELECT doc.id AS document_id,
        doc.case_id,
        doc.filename,
        doc.page_count,
        pag.page_no,
-       pag.width_pt,
-       pag.height_pt,
        pag.scale,
        pag.display_w,
        pag.display_h,
-       greatest(pag.page_no - 1, 1) AS page_prev,
-       least(pag.page_no + 1, doc.page_count) AS page_next,
-       '/pages/' || doc.filename || '/p' || pag.page_no || '.png' AS png_href,
+       pag.width_pt,
+       pag.height_pt,
        cas.case_no,
        cas.title AS case_title,
+       struct_pack(id := cas.id, case_no := cas.case_no, title := cas.title) AS case_row,
+       struct_pack(id := doc.id, filename := doc.filename, page_count := doc.page_count) AS doc_row,
+       struct_pack(
+           page_no := pag.page_no,
+           prev := greatest(pag.page_no - 1, 1),
+           next := least(pag.page_no + 1, doc.page_count),
+           width_pt := pag.width_pt,
+           height_pt := pag.height_pt,
+           scale := round(pag.scale, 4),
+           display_w := pag.display_w,
+           display_h := pag.display_h,
+           png_href := '/pages/' || doc.filename || '/p' || pag.page_no || '.png'
+       ) AS page_row,
        coalesce(ml.marks, []) AS marks,
        coalesce(sl.suggestions, []) AS suggestions
 FROM documents doc
@@ -234,21 +230,19 @@ JOIN cases cas ON cas.id = doc.case_id
 JOIN pages pag ON pag.document_id = doc.id
 LEFT JOIN v_page_mark_lists ml
   ON ml.document_id = doc.id AND ml.page_no = pag.page_no
+-- Rail = this page only (not every pending on the doc — that blew SSR to 12MB+).
 LEFT JOIN LATERAL (
-    SELECT list(sug ORDER BY (sug.page_no = pag.page_no) DESC,
-                         (sug.status = 'pending') DESC, sug.page_no, sug.id) AS suggestions
+    SELECT list(sug ORDER BY (sug.status = 'pending') DESC, sug.id) AS suggestions
     FROM v_suggestions sug
-    WHERE sug.document_id = doc.id
-      AND (sug.page_no = pag.page_no OR sug.status = 'pending')
+    WHERE sug.document_id = doc.id AND sug.page_no = pag.page_no
 ) sl ON true;
 
--- ── tera edge only: surface columns → JSON keys the templates already use ──
--- tera_render(template, JSON) requires a bag; logic stays upstream of here.
+-- ── tera edge: surface fields → template keys (no join / geometry logic) ──
 
 CREATE OR REPLACE VIEW v_case_ctx AS
 SELECT sfc.case_id,
        json_object(
-           'case', struct_pack(id := sfc.case_id, case_no := sfc.case_no, title := sfc.title),
+           'case', sfc.case_row,
            'documents', sfc.documents,
            'entities', sfc.entities,
            'audit', coalesce(aud.audit, []),
@@ -260,7 +254,7 @@ LEFT JOIN v_case_audit_recent aud ON aud.case_id = sfc.case_id;
 CREATE OR REPLACE VIEW v_stream_ctx AS
 SELECT sfc.case_id,
        json_object(
-           'case', struct_pack(id := sfc.case_id, case_no := sfc.case_no, title := sfc.title),
+           'case', sfc.case_row,
            'entities', sfc.entities,
            'export_blocked', sfc.export_blocked
        ) AS ctx
@@ -269,7 +263,7 @@ FROM v_case_surface sfc;
 CREATE OR REPLACE VIEW v_audit_ctx AS
 SELECT sfc.case_id,
        json_object(
-           'case', struct_pack(id := sfc.case_id, case_no := sfc.case_no, title := sfc.title),
+           'case', sfc.case_row,
            'export_blocked', sfc.export_blocked,
            'batches', coalesce(bat.batches, []),
            'events', coalesce(evt.events, [])
@@ -281,17 +275,9 @@ LEFT JOIN v_case_events evt ON evt.case_id = sfc.case_id;
 CREATE OR REPLACE VIEW v_review_ctx AS
 SELECT sfc.document_id, sfc.page_no,
        json_object(
-           'case', struct_pack(id := sfc.case_id, case_no := sfc.case_no, title := sfc.case_title),
-           'doc',  struct_pack(id := sfc.document_id, filename := sfc.filename, page_count := sfc.page_count),
-           'page', struct_pack(
-               page_no := sfc.page_no,
-               prev := sfc.page_prev,
-               next := sfc.page_next,
-               width_pt := sfc.width_pt, height_pt := sfc.height_pt,
-               scale := round(sfc.scale, 4),
-               display_w := sfc.display_w, display_h := sfc.display_h,
-               png_href := sfc.png_href
-           ),
+           'case', sfc.case_row,
+           'doc', sfc.doc_row,
+           'page', sfc.page_row,
            'marks', sfc.marks,
            'suggestions', sfc.suggestions
        ) AS ctx

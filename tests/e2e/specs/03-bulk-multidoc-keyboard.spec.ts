@@ -250,10 +250,12 @@ test.describe("bulk · multi-doc · keyboard", () => {
     page,
     request,
   }) => {
-    let rows = await suggestionsViaApi(request);
+    const rows = await suggestionsViaApi(request, caseId);
     const flagged = rows.filter(
       (r) =>
-        r.status === "pending" && r.band === "flagged" && docSet.has(r.document_id)
+        r.status === "pending" &&
+        r.band === "flagged" &&
+        docSet.has(r.document_id)
     );
     await page.goto(`/cases/${caseId}`);
     const btn = page.locator("#export-btn, [data-action='export']");
@@ -262,10 +264,30 @@ test.describe("bulk · multi-doc · keyboard", () => {
     if (flagged.length === 0) return;
 
     await expect(btn).toBeDisabled();
-    for (const f of flagged) {
-      await postDecision(request, api.decide(f.id, "accepted"));
+
+    // Chunked parallel POSTs — full fan-out wedged quackapi (20s post timeout).
+    const chunk = 25;
+    for (let i = 0; i < flagged.length; i += chunk) {
+      const slice = flagged.slice(i, i + chunk);
+      await Promise.all(
+        slice.map((f) =>
+          request.post(api.decide(f.id, "accepted"), {
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+            data: {},
+            timeout: 60_000,
+          }).then((res) => {
+            expect(res.ok(), `POST decide ${f.id} → ${res.status()}`).toBeTruthy();
+          })
+        )
+      );
     }
+
     await page.goto(`/cases/${caseId}`);
-    await expect(page.locator("#export-btn, [data-action='export']")).toBeEnabled();
+    await expect(page.locator("#export-btn, [data-action='export']")).toBeEnabled({
+      timeout: 30_000,
+    });
   });
 });

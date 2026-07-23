@@ -77,13 +77,13 @@ SELECT * FROM (VALUES
     -- $relation is the route literal (query TVF rejects lateral column args).
     -- JOIN v_cols is the allowlist (empty join → no rows if unknown relation).
     ('catalog_rows',  'GET', '/api/catalog/:relation/rows',
-     $$SELECT q.*
-       FROM query(format('SELECT * FROM {}', $relation)) q
-       JOIN v_cols c ON c.relation = $relation$$),
+     $$SELECT rows.*
+       FROM query(format('SELECT * FROM {}', $relation)) rows
+       JOIN v_cols allow ON allow.relation = $relation$$),
     ('catalog_summary','GET', '/api/catalog/:relation/summary',
-     $$SELECT q.*
-       FROM query(format('FROM (SUMMARIZE {})', $relation)) q
-       JOIN v_cols c ON c.relation = $relation$$),
+     $$SELECT rows.*
+       FROM query(format('FROM (SUMMARIZE {})', $relation)) rows
+       JOIN v_cols allow ON allow.relation = $relation$$),
 
     -- ── ops (debug / machine; not the FOIA product loop) ─────────────────
     ('ops_hostfs',    'GET', '/api/ops/hostfs',
@@ -132,7 +132,8 @@ AS INSERT INTO decisions BY NAME
 WITH new_batch AS (SELECT uuid()::VARCHAR AS batch_id)
 SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor, $reason AS reason,
        now() AS ts, tgt.document_id, tgt.case_id, tgt.text, (SELECT batch_id FROM new_batch) AS batch_id,
-       $status || ' — ' || coalesce(tgt.text, '') AS batch_label, NULL::VARCHAR AS undoes_batch_id
+       CASE WHEN tgt.text IS NOT NULL THEN $status || ' — ' || tgt.text ELSE $status END AS batch_label,
+       NULL::VARCHAR AS undoes_batch_id
 FROM v_decide_targets tgt
 WHERE tgt.suggestion_id = $id
 RETURNING suggestion_id, status;
@@ -145,7 +146,11 @@ AS INSERT INTO decisions BY NAME
 WITH new_batch AS (SELECT uuid()::VARCHAR AS batch_id)
 SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor, $reason AS reason,
        now() AS ts, tgt.document_id, tgt.case_id, tgt.text, (SELECT batch_id FROM new_batch) AS batch_id,
-       $status || ' entity — ' || coalesce(tgt.entity_text, tgt.text, '') AS batch_label,
+       CASE
+           WHEN tgt.entity_text IS NOT NULL THEN $status || ' entity — ' || tgt.entity_text
+           WHEN tgt.text IS NOT NULL THEN $status || ' entity — ' || tgt.text
+           ELSE $status || ' entity'
+       END AS batch_label,
        NULL::VARCHAR AS undoes_batch_id
 FROM v_decide_targets tgt
 WHERE tgt.entity_id = $id AND tgt.status = 'pending' AND tgt.band <> 'flagged'
@@ -158,7 +163,7 @@ CREATE OR REPLACE ROUTE document_band_decide POST '/api/documents/:id/bands/:ban
 AS INSERT INTO decisions BY NAME
 WITH new_batch AS (SELECT uuid()::VARCHAR AS batch_id)
 SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor,
-       coalesce(nullif($reason, ''), 'bulk band ' || $band) AS reason,
+       CASE WHEN $reason IS NULL OR $reason = '' THEN 'bulk band ' || $band ELSE $reason END AS reason,
        now() AS ts, tgt.document_id, tgt.case_id, tgt.text, (SELECT batch_id FROM new_batch) AS batch_id,
        $status || ' band ' || $band AS batch_label, NULL::VARCHAR AS undoes_batch_id
 FROM v_decide_targets tgt
@@ -178,7 +183,8 @@ SELECT 'decision' AS kind, tgt.suggestion_id, 'accepted' AS status, $actor AS ac
        'Accepted high' AS batch_label, NULL::VARCHAR AS undoes_batch_id
 FROM v_decide_targets tgt
 WHERE tgt.case_id = $id AND tgt.status = 'pending' AND tgt.confidence >= $threshold
-  AND tgt.band <> 'flagged' AND tgt.flag_tag <> 'false_positive'
+  AND tgt.band <> 'flagged'
+  AND (tgt.flag_tag IS NULL OR tgt.flag_tag <> 'false_positive')
 RETURNING suggestion_id, status;
 
 -- Manual mark (add missed)
@@ -190,13 +196,15 @@ CREATE OR REPLACE ROUTE document_mark_add POST '/api/documents/:id/marks'
 AS INSERT INTO decisions BY NAME
 WITH new_mark AS (SELECT uuid()::VARCHAR AS batch_id, uuid()::VARCHAR AS suggestion_id)
 SELECT 'added' AS kind, new_mark.suggestion_id, $id AS document_id, $page::INTEGER AS page_no,
-       ($x0, $y0, $x1, $y1)::bbox AS bbox, $text AS text, coalesce($text, '') AS context,
-       99 AS confidence, $kind AS flag_tag, coalesce($reason, 'manual add') AS reason,
+       ($x0, $y0, $x1, $y1)::bbox AS bbox, $text AS text, $text AS context,
+       99 AS confidence, $kind AS flag_tag,
+       CASE WHEN $reason IS NULL OR $reason = '' THEN 'manual add' ELSE $reason END AS reason,
        NULL::VARCHAR AS entity_id, 'manual' AS source, 'accepted' AS status,
        $actor AS actor, now() AS ts,
        (SELECT case_id FROM documents WHERE id = $id) AS case_id,
        'one' AS scope, new_mark.batch_id,
-       'Added missed — ' || coalesce($text, '') AS batch_label, NULL::VARCHAR AS undoes_batch_id
+       CASE WHEN $text IS NOT NULL THEN 'Added missed — ' || $text ELSE 'Added missed' END AS batch_label,
+       NULL::VARCHAR AS undoes_batch_id
 FROM new_mark
 RETURNING suggestion_id, status;
 
@@ -212,10 +220,14 @@ WITH last_batch_for_case AS (
 ),
 new_batch AS (SELECT uuid()::VARCHAR AS batch_id)
 SELECT 'decision' AS kind, evt.suggestion_id,
-       coalesce(lag(evt.status) OVER (PARTITION BY evt.suggestion_id ORDER BY evt.event_ts), 'pending') AS status,
+       CASE
+           WHEN lag(evt.status) OVER (PARTITION BY evt.suggestion_id ORDER BY evt.event_ts) IS NOT NULL
+           THEN lag(evt.status) OVER (PARTITION BY evt.suggestion_id ORDER BY evt.event_ts)
+           ELSE 'pending'
+       END AS status,
        $actor AS actor, 'undo' AS reason, now() AS ts,
        evt.document_id, evt.case_id, evt.text, (SELECT batch_id FROM new_batch) AS batch_id,
-       'Undo — ' || coalesce(bat.label, bat.batch_id) AS batch_label,
+       CASE WHEN bat.label IS NOT NULL THEN 'Undo — ' || bat.label ELSE 'Undo — ' || bat.batch_id END AS batch_label,
        bat.batch_id AS undoes_batch_id
 FROM v_history_events evt
 JOIN last_batch_for_case bat ON evt.batch_id = bat.batch_id

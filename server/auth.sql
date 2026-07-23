@@ -8,9 +8,7 @@
 
 CREATE OR REPLACE AUTH closure_api AS API_KEY;
 
--- Register key only when CLOSURE_API_KEY is set (routes stay open unless REQUIRE).
--- quackapi_add_api_key is a TVF that rejects empty keys and only accepts
--- constant args (no lateral columns) — gate via query() + CASE.
+-- nullif(env, '') → NULL when unset or empty; one presence check.
 SELECT *
 FROM query(
     CASE

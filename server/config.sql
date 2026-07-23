@@ -1,4 +1,6 @@
 -- config.sql — app_config(key, value, source). CLOSURE_<KEY> env overrides default.
+-- Presence: nullif(x, '') folds '' → NULL so one IS NULL check covers unset and empty.
+-- (nullif does not invent values the other way; real non-empty strings stay.)
 
 CREATE OR REPLACE TABLE app_config AS
 SELECT key,
@@ -11,8 +13,6 @@ FROM (VALUES
     ('samples_dir', 'samples'),
     ('exports_dir', 'exports'),
     ('actor', coalesce(nullif(getenv('USER'), ''), 'reviewer'))
-    -- tera template_path is a binder constant in routes/views
-    -- (not app_config): 'server/templates/**/*.html'
 ) AS t(key, dflt);
 
 SELECT CASE

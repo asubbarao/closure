@@ -42,9 +42,14 @@ FROM (
 )
 WHERE file_entry.filename IS NOT NULL;
 
+-- term trimmed once here; downstream never re-trims.
 CREATE OR REPLACE VIEW v_src_watchlist AS
-SELECT term, kind, case_no FROM read_json_auto('pathvariable:watchlist_path')
-WHERE nullif(trim(term), '') IS NOT NULL;
+WITH terms_trimmed AS (
+    SELECT trim(term) AS term, kind, case_no
+    FROM read_json_auto('pathvariable:watchlist_path')
+    WHERE term IS NOT NULL
+)
+SELECT term, kind, case_no FROM terms_trimmed WHERE nullif(term, '') IS NOT NULL;
 
 CREATE OR REPLACE VIEW v_src_decisions AS SELECT * FROM decisions;
 
@@ -106,6 +111,7 @@ JOIN documents doc ON doc.filename = pdf.doc_filename;
 --   token_kind        one primary kind per token (priority pick)
 --   words             cheap app table: occurrence ⨝ types ⨝ primary kind
 
+-- token pinned once (punctuation stripped). Downstream uses token / token_norm only.
 CREATE OR REPLACE TABLE word_raw AS
 WITH words_from_pdf AS (
     SELECT doc.id AS document_id, doc.case_id, wrd.page_no, wrd.word, wrd.bbox, wrd.font_size,
@@ -113,12 +119,15 @@ WITH words_from_pdf AS (
            round(wrd.bbox.y0, 0) AS y_key
     FROM v_src_pdf_words wrd
     JOIN documents doc ON doc.filename = wrd.doc_filename
-    WHERE length(trim(wrd.word, '.,;:()"''[]')) > 0
+),
+tokens_present AS (
+    -- empty after strip is a real empty string → drop; NULL token does not appear
+    SELECT * FROM words_from_pdf WHERE nullif(token, '') IS NOT NULL
 ),
 tokens_compacted AS (
     SELECT *,
            replace(replace(replace(replace(token, '-', ''), '(', ''), ')', ''), '.', '') AS token_compact
-    FROM words_from_pdf
+    FROM tokens_present
 )
 SELECT document_id, case_id, page_no, word, bbox, font_size, token, y_key,
        lower(unaccent(token)) AS token_norm,
@@ -193,14 +202,14 @@ FROM word_raw raw
 JOIN token_types typ ON typ.token = raw.token
 LEFT JOIN token_kind kind ON kind.token = raw.token;
 
+-- term already trimmed in v_src_watchlist — normalize once, never re-trim.
 CREATE OR REPLACE TABLE watchlist AS
 SELECT term, kind, case_no,
-       lower(unaccent(trim(term))) AS term_norm,
-       string_split(lower(unaccent(trim(term))), ' ') AS term_tokens,
-       replace(replace(replace(replace(trim(term), '-', ''), '(', ''), ')', ''), '.', '') AS term_compact,
-       (position('NOT PII' IN kind) > 0) AS is_not_pii
-FROM v_src_watchlist
-WHERE nullif(trim(term), '') IS NOT NULL;
+       lower(unaccent(term)) AS term_norm,
+       string_split(lower(unaccent(term)), ' ') AS term_tokens,
+       replace(replace(replace(replace(term, '-', ''), '(', ''), ')', ''), '.', '') AS term_compact,
+       (kind IS NOT NULL AND position('NOT PII' IN kind) > 0) AS is_not_pii
+FROM v_src_watchlist;
 
 -- ── name matching: the same trace shape the token side already has ────────
 --   watchlist_tokens  prepared watchlist side (norm + splink phonetic key)
@@ -232,38 +241,40 @@ SELECT * FROM (VALUES
 ) AS t(scorer, min_score, priority);
 
 CREATE OR REPLACE TABLE name_rule_hits AS
-WITH doc_tokens AS (
+WITH tokens_from_documents AS (
     SELECT DISTINCT token_norm, double_metaphone(token_norm)[1] AS token_dm
     FROM words WHERE length(token_norm) >= 3
 ),
-scored AS (
-    SELECT d.token_norm, wt.term, wt.term_token, wt.term_dm, wt.kind,
+scores_token_to_watchlist AS (
+    SELECT tok.token_norm, wt.term, wt.term_token, wt.term_dm, wt.kind,
            wt.case_no, wt.is_not_pii,
-           rapidfuzz_ratio(d.token_norm, wt.term_token) AS edit_score,
-           100.0 * jaro_winkler_similarity(d.token_norm, wt.term_token) AS jaro_score,
-           d.token_dm = wt.term_dm AS same_sound
-    FROM doc_tokens d CROSS JOIN watchlist_tokens wt
+           rapidfuzz_ratio(tok.token_norm, wt.term_token) AS edit_score,
+           100.0 * jaro_winkler_similarity(tok.token_norm, wt.term_token) AS jaro_score,
+           tok.token_dm = wt.term_dm AS same_sound
+    FROM tokens_from_documents tok
+    CROSS JOIN watchlist_tokens wt
 )
 SELECT token_norm, term, term_token, kind, case_no, is_not_pii,
-       'edit' AS scorer, s.priority, edit_score AS score,
+       'edit' AS scorer, scr.priority, edit_score AS score,
        format('rapidfuzz_ratio({}, {}) = {}', token_norm, term_token,
               round(edit_score, 1)) AS evidence
-FROM scored, name_scorers s
-WHERE s.scorer = 'edit' AND edit_score >= s.min_score
+FROM scores_token_to_watchlist
+JOIN name_scorers scr ON scr.scorer = 'edit' AND edit_score >= scr.min_score
 UNION ALL BY NAME
 SELECT token_norm, term, term_token, kind, case_no, is_not_pii,
-       'jaro' AS scorer, s.priority, jaro_score AS score,
+       'jaro' AS scorer, scr.priority, jaro_score AS score,
        format('jaro_winkler({}, {}) = {}', token_norm, term_token,
               round(jaro_score, 1)) AS evidence
-FROM scored, name_scorers s
-WHERE s.scorer = 'jaro' AND jaro_score >= s.min_score
+FROM scores_token_to_watchlist
+JOIN name_scorers scr ON scr.scorer = 'jaro' AND jaro_score >= scr.min_score
 UNION ALL BY NAME
 SELECT token_norm, term, term_token, kind, case_no, is_not_pii,
-       'phonetic' AS scorer, s.priority, jaro_score AS score,
+       'phonetic' AS scorer, scr.priority, jaro_score AS score,
        format('double_metaphone({}) = {} = double_metaphone({})',
               token_norm, term_dm, term_token) AS evidence
-FROM scored, name_scorers s
-WHERE s.scorer = 'phonetic' AND same_sound AND jaro_score >= s.min_score;
+FROM scores_token_to_watchlist
+JOIN name_scorers scr
+  ON scr.scorer = 'phonetic' AND same_sound AND jaro_score >= scr.min_score;
 
 -- One primary scorer per (document token, watchlist term) — not a coalesce.
 CREATE OR REPLACE TABLE name_token_match AS
@@ -383,12 +394,14 @@ GROUP BY case_id, canonical_text, kind;
 -- Suggestions = mark grain (interactor state in a real app).
 --   bbox    PDF page space (source of truth)
 --   screen  canvas pin (screen_box) — scale applied once at write
+-- text/context as stored (from token pins). No re-trim. context may be NULL.
 CREATE OR REPLACE TABLE suggestions AS
 SELECT format('{:x}', rapidhash(concat_ws(chr(31),
            hit.document_id, hit.page_no, bbox_key(hit.bbox), hit.text, hit.kind, 'ai'))) AS id,
        hit.document_id, hit.page_no, hit.bbox,
        bbox_to_screen(hit.bbox, pag.scale, 0) AS screen,
-       hit.text, coalesce(hit.context, hit.text) AS context,
+       hit.text,
+       hit.context,
        hit.confidence, hit.flag_tag, hit.reason, ent.id AS entity_id, hit.kind,
        'ai' AS source, TIMESTAMP '1970-01-01' AS created_at, lin.line_no,
        getvariable('detect_run_id') AS source_run_id, hit.detector_key
@@ -415,7 +428,8 @@ SELECT format('{:x}', rapidhash(concat_ws(chr(31),
        wrd.token AS text, wrd.token AS context,
        55 AS confidence, NULL::VARCHAR AS flag_tag,
        'remainder: residual PII-shaped token not in prior hits' AS reason,
-       NULL::VARCHAR AS entity_id, coalesce(wrd.pii_kind, 'UNKNOWN') AS kind,
+       NULL::VARCHAR AS entity_id,
+       CASE WHEN wrd.pii_kind IS NULL THEN 'UNKNOWN' ELSE wrd.pii_kind END AS kind,
        'ai' AS source, now() AS created_at, NULL::INTEGER AS line_no,
        getvariable('detect_run_id') AS source_run_id,
        'detector:remainder' AS detector_key
@@ -426,11 +440,12 @@ WHERE wrd.is_pii
   AND NOT exists (
       SELECT 1 FROM suggestions sug
       WHERE sug.document_id = wrd.document_id AND sug.page_no = wrd.page_no
-        AND (lower(sug.text) = lower(wrd.token)
-             OR contains(lower(sug.context), lower(wrd.token)))
+        AND (sug.text = wrd.token
+             OR (sug.context IS NOT NULL AND contains(sug.context, wrd.token)))
   );
 
 -- ── Judge panel (deterministic): pattern · context · prior ─────────────────
+-- text/kind already clean pins — no trim, no coalesce-to-'' (3-value logic).
 -- FP path: keep / conflict → band flagged (human must dispose). No silent redact.
 CREATE OR REPLACE TABLE suggestion_judges AS
 WITH votes_from_pattern_context_prior AS (
@@ -443,24 +458,30 @@ WITH votes_from_pattern_context_prior AS (
            END AS vote_pattern,
            CASE
                WHEN sug.flag_tag = 'false_positive' THEN 'keep'
-               WHEN ends_with(lower(trim(sug.text)), ' street')
-                 OR contains(lower(sug.context), ' street') THEN 'keep'
-               WHEN starts_with(lower(trim(sug.text)), 'det.')
-                 OR starts_with(lower(trim(sug.text)), 'ofc.')
-                 OR contains(lower(sug.context), ' officer') THEN 'keep'
-               WHEN contains(lower(sug.text), ' v. ')
-                 OR contains(lower(coalesce(sug.kind, '')), 'citation') THEN 'keep'
+               WHEN sug.text IS NOT NULL AND (
+                    ends_with(lower(sug.text), ' street')
+                 OR starts_with(lower(sug.text), 'det.')
+                 OR starts_with(lower(sug.text), 'ofc.')
+                 OR contains(lower(sug.text), ' v. ')
+               ) THEN 'keep'
+               WHEN sug.context IS NOT NULL AND (
+                    contains(lower(sug.context), ' street')
+                 OR contains(lower(sug.context), ' officer')
+               ) THEN 'keep'
+               WHEN sug.kind IS NOT NULL AND contains(lower(sug.kind), 'citation') THEN 'keep'
                WHEN sug.confidence >= 70 THEN 'redact'
                ELSE 'review'
            END AS vote_context,
            CASE
                WHEN sug.flag_tag = 'false_positive' THEN 'keep'
-               WHEN sug.kind IN ('SSN', 'DATE OF BIRTH')
-                 OR starts_with(coalesce(sug.kind, ''), 'PHONE') THEN 'redact'
-               WHEN contains(lower(coalesce(sug.kind, '')), 'not pii')
-                 OR contains(lower(coalesce(sug.kind, '')), 'officer')
-                 OR contains(lower(coalesce(sug.kind, '')), 'street')
-                 OR contains(lower(coalesce(sug.kind, '')), 'citation') THEN 'keep'
+               WHEN sug.kind IN ('SSN', 'DATE OF BIRTH') THEN 'redact'
+               WHEN sug.kind IS NOT NULL AND starts_with(sug.kind, 'PHONE') THEN 'redact'
+               WHEN sug.kind IS NOT NULL AND (
+                    contains(lower(sug.kind), 'not pii')
+                 OR contains(lower(sug.kind), 'officer')
+                 OR contains(lower(sug.kind), 'street')
+                 OR contains(lower(sug.kind), 'citation')
+               ) THEN 'keep'
                ELSE 'review'
            END AS vote_prior
     FROM suggestions sug
@@ -502,13 +523,7 @@ WHERE kind = 'decision' AND suggestion_id IS NOT NULL
 GROUP BY suggestion_id;
 
 CREATE OR REPLACE VIEW v_manual_suggestions AS
-SELECT add.suggestion_id AS id, add.document_id, add.page_no, add.bbox,
-       bbox_to_screen(add.bbox, pag.scale, 0) AS screen,
-       add.text, coalesce(add.context, add.text) AS context,
-       coalesce(add.confidence, 99) AS confidence, add.flag_tag, add.reason, add.entity_id,
-       NULL::VARCHAR AS kind, 'manual' AS source, add.ts AS created_at, lin.line_no,
-       NULL::VARCHAR AS source_run_id, 'manual' AS detector_key
-FROM (
+WITH latest_added_from_decisions AS (
     SELECT suggestion_id,
            max_by(document_id, ts) AS document_id,
            max_by(page_no, ts) AS page_no,
@@ -523,7 +538,15 @@ FROM (
     FROM v_src_decisions
     WHERE kind = 'added' AND suggestion_id IS NOT NULL
     GROUP BY suggestion_id
-) add
+)
+SELECT add.suggestion_id AS id, add.document_id, add.page_no, add.bbox,
+       bbox_to_screen(add.bbox, pag.scale, 0) AS screen,
+       add.text, add.context,
+       CASE WHEN add.confidence IS NULL THEN 99 ELSE add.confidence END AS confidence,
+       add.flag_tag, add.reason, add.entity_id,
+       NULL::VARCHAR AS kind, 'manual' AS source, add.ts AS created_at, lin.line_no,
+       NULL::VARCHAR AS source_run_id, 'manual' AS detector_key
+FROM latest_added_from_decisions add
 LEFT JOIN document_lines lin
   ON lin.document_id = add.document_id
  AND lin.page_no = add.page_no
@@ -531,7 +554,7 @@ LEFT JOIN document_lines lin
 JOIN pages pag
   ON pag.document_id = add.document_id AND pag.page_no = add.page_no;
 
--- FP/FN product fold: status/band only. Geometry is already first-class on the row.
+-- FP/FN product fold: status/band only. Leave NULLs as NULL (3-value).
 CREATE OR REPLACE VIEW v_suggestions AS
 WITH suggestions_ai_and_manual AS (
     SELECT id, document_id, page_no, bbox, screen, text, context, confidence, flag_tag, reason,
@@ -545,23 +568,32 @@ WITH suggestions_ai_and_manual AS (
 SELECT row.id, row.document_id, row.page_no, row.line_no, row.bbox, row.screen,
        row.text, row.context, row.confidence, row.flag_tag, row.reason, row.entity_id, row.source, row.created_at,
        row.source_run_id, row.detector_key,
-       coalesce(ent.kind, row.kind_stored) AS kind, ent.canonical_text AS entity_text,
-       coalesce(dec.status, CASE row.source WHEN 'manual' THEN 'accepted' ELSE 'pending' END) AS status,
+       CASE WHEN ent.kind IS NOT NULL THEN ent.kind ELSE row.kind_stored END AS kind,
+       ent.canonical_text AS entity_text,
+       CASE
+           WHEN dec.status IS NOT NULL THEN dec.status
+           WHEN row.source = 'manual' THEN 'accepted'
+           ELSE 'pending'
+       END AS status,
        -- FLAGGED = likely FP or judge conflict — never bulk-accepted
        CASE
            WHEN row.flag_tag = 'false_positive' THEN 'flagged'
            WHEN jdg.panel IN ('keep', 'conflict') THEN 'flagged'
-           WHEN row.confidence >= 90 AND coalesce(jdg.panel, 'redact') = 'redact' THEN 'high'
+           WHEN row.confidence >= 90 AND (jdg.panel IS NULL OR jdg.panel = 'redact') THEN 'high'
            WHEN row.confidence >= 60 THEN 'review'
            ELSE 'flagged'
        END AS band,
-       coalesce(jdg.panel, 'none') AS judge_panel,
-       coalesce(jdg.vote_pattern, '') AS vote_pattern,
-       coalesce(jdg.vote_context, '') AS vote_context,
-       coalesce(jdg.vote_prior, '') AS vote_prior,
-       coalesce(jdg.judge_reason, row.reason) AS judge_reason,
+       jdg.panel AS judge_panel,
+       jdg.vote_pattern,
+       jdg.vote_context,
+       jdg.vote_prior,
+       CASE WHEN jdg.judge_reason IS NOT NULL THEN jdg.judge_reason ELSE row.reason END AS judge_reason,
        CASE WHEN row.entity_id IS NOT NULL THEN 'e:' || row.entity_id
-            ELSE 't:' || lower(row.text) || '|' || coalesce(ent.kind, row.kind_stored) END AS group_key
+            WHEN row.text IS NOT NULL THEN
+                 't:' || lower(row.text) || '|' ||
+                 CASE WHEN ent.kind IS NOT NULL THEN ent.kind ELSE row.kind_stored END
+            ELSE NULL
+       END AS group_key
 FROM suggestions_ai_and_manual row
 LEFT JOIN entities ent ON ent.id = row.entity_id
 LEFT JOIN v_latest_decision dec ON dec.suggestion_id = row.id
@@ -606,11 +638,11 @@ SELECT hostname,
        dns_lookup(hostname) AS a_record,
        dns_lookup_all(hostname) AS a_records
 FROM token_types
-WHERE hostname IS NOT NULL AND nullif(hostname, '') IS NOT NULL
+WHERE nullif(hostname, '') IS NOT NULL
 GROUP BY hostname;
 
 CREATE OR REPLACE VIEW v_decide_targets AS
 SELECT sug.id AS suggestion_id, sug.document_id, doc.case_id, sug.text, sug.entity_id, sug.entity_text,
-       sug.band, sug.status, sug.group_key, sug.confidence, coalesce(sug.flag_tag, '') AS flag_tag
+       sug.band, sug.status, sug.group_key, sug.confidence, sug.flag_tag
 FROM v_suggestions sug
 JOIN documents doc ON doc.id = sug.document_id;

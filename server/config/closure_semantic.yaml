@@ -1,112 +1,140 @@
-# Closure semantic model — first-class schema graph (joins + dimensions).
-# Loaded: CREATE SEMANTIC VIEW closure FROM YAML FILE '…'
+# Closure semantic model — first-class schema graph for the review domain.
+# Loaded at boot: CREATE SEMANTIC VIEW closure FROM YAML FILE '…'
 #
-# This is part of the data model, not a KPI dashboard.
-#   dimensions  = typed slice axes (status, band, kind, case, entity, …)
-#   metrics     = only real measures you ask for at query time
-#                 (never invent pending_count / hit_count columns on grains)
+# Role in the app:
+#   tables + joins  = the FOIA review graph (what relates to what)
+#   dimensions      = typed slice axes (status, band, kind, case, entity, …)
+#   metrics         = real measures only (never invent pending_count / hit_count)
 #
-# Product handlers SELECT grain tables/views.
-# Ad-hoc slice (console / ops / catalog consumers):
+# Product handlers always SELECT grain tables/views (v_suggestions, entities, …).
+# Console / ops / ad-hoc analytics use this graph:
+#
 #   FROM semantic_view('closure',
 #     dimensions := ['case_id', 'status', 'band'],
 #     metrics := ['avg_confidence']);
 #
-# Profiles without inventing metrics:
+# Raw profile (no invented metrics):
 #   FROM (SUMMARIZE v_suggestions);
 #   GET /api/catalog/v_suggestions/summary
 
-comment: Review graph — suggestions ⋈ documents ⋈ cases ⋈ entities
+comment: >
+  FOIA review graph — suggestions (mark grain) ⋈ documents ⋈ cases ⋈ entities.
+  Geometry lives on the mark grain (bbox / screen STRUCTs), not as dimensions.
 
 tables:
-  - alias: s
+  - alias: sug
     table: v_suggestions
     pk_columns: [id]
-  - alias: d
+  - alias: doc
     table: documents
     pk_columns: [id]
-  - alias: c
+  - alias: cas
     table: cases
     pk_columns: [id]
-  - alias: e
+  - alias: ent
     table: entities
     pk_columns: [id]
+  - alias: jdg
+    table: suggestion_judges
+    pk_columns: [suggestion_id]
 
 joins:
-  - name: sug_doc
-    table: d
-    from_alias: s
+  - name: suggestion_to_document
+    table: doc
+    from_alias: sug
     fk_columns: [document_id]
     cardinality: ManyToOne
-  - name: doc_case
-    table: c
-    from_alias: d
+  - name: document_to_case
+    table: cas
+    from_alias: doc
     fk_columns: [case_id]
     cardinality: ManyToOne
-  - name: sug_entity
-    table: e
-    from_alias: s
+  - name: suggestion_to_entity
+    table: ent
+    from_alias: sug
     fk_columns: [entity_id]
     cardinality: ManyToOne
+  - name: suggestion_to_judge
+    table: jdg
+    from_alias: sug
+    fk_columns: [id]
+    # suggestion_judges.suggestion_id ← sug.id
+    cardinality: OneToOne
 
 dimensions:
+  # Mark grain
   - name: suggestion_id
-    expr: s.id
-    source_table: s
+    expr: sug.id
+    source_table: sug
   - name: document_id
-    expr: s.document_id
-    source_table: s
+    expr: sug.document_id
+    source_table: sug
   - name: page_no
-    expr: s.page_no
-    source_table: s
+    expr: sug.page_no
+    source_table: sug
   - name: status
-    expr: s.status
-    source_table: s
+    expr: sug.status
+    source_table: sug
   - name: band
-    expr: s.band
-    source_table: s
+    expr: sug.band
+    source_table: sug
   - name: kind
-    expr: s.kind
-    source_table: s
+    expr: sug.kind
+    source_table: sug
   - name: source
-    expr: s.source
-    source_table: s
+    expr: sug.source
+    source_table: sug
   - name: detector_key
-    expr: s.detector_key
-    source_table: s
+    expr: sug.detector_key
+    source_table: sug
   - name: judge_panel
-    expr: s.judge_panel
-    source_table: s
+    expr: sug.judge_panel
+    source_table: sug
   - name: flag_tag
-    expr: s.flag_tag
-    source_table: s
+    expr: sug.flag_tag
+    source_table: sug
   - name: confidence
-    expr: s.confidence
-    source_table: s
-  - name: filename
-    expr: d.filename
-    source_table: d
-  - name: case_id
-    expr: c.id
-    source_table: c
-  - name: case_no
-    expr: c.case_no
-    source_table: c
-  - name: entity_id
-    expr: e.id
-    source_table: e
-  - name: entity_kind
-    expr: e.kind
-    source_table: e
-  - name: entity_text
-    expr: e.canonical_text
-    source_table: e
+    expr: sug.confidence
+    source_table: sug
   - name: group_key
-    expr: s.group_key
-    source_table: s
+    expr: sug.group_key
+    source_table: sug
+  # Document / case
+  - name: filename
+    expr: doc.filename
+    source_table: doc
+  - name: case_id
+    expr: cas.id
+    source_table: cas
+  - name: case_no
+    expr: cas.case_no
+    source_table: cas
+  # Entity
+  - name: entity_id
+    expr: ent.id
+    source_table: ent
+  - name: entity_kind
+    expr: ent.kind
+    source_table: ent
+  - name: entity_text
+    expr: ent.canonical_text
+    source_table: ent
+  # Judge panel (when joined)
+  - name: vote_pattern
+    expr: jdg.vote_pattern
+    source_table: jdg
+  - name: vote_context
+    expr: jdg.vote_context
+    source_table: jdg
+  - name: vote_prior
+    expr: jdg.vote_prior
+    source_table: jdg
+  - name: panel
+    expr: jdg.panel
+    source_table: jdg
 
-# Real measure only. No n=COUNT(*) product metric — filter a dimension instead.
+# Real measures only. Prefer filter-on-dimension over inventing KPI columns.
 metrics:
   - name: avg_confidence
-    expr: AVG(s.confidence)
-    source_table: s
+    expr: AVG(sug.confidence)
+    source_table: sug

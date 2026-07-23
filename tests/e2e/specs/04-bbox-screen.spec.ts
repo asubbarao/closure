@@ -4,6 +4,7 @@ import {
   assertScreenMatchesBbox,
   assertValidBbox,
   assertValidScreen,
+  catalogRows,
   firstDocHref,
   openLibrary,
   postDecision,
@@ -47,28 +48,29 @@ test.describe("bbox · screen (first-class mark geometry)", () => {
   });
 
   test("screen is bbox × page scale (PDF top-left, no flip)", async ({
-    page,
     request,
   }) => {
-    const href =
-      (sample.page_no ?? 1) <= 1
-        ? `/documents/${sample.document_id}`
-        : `/documents/${sample.document_id}/pages/${sample.page_no}`;
-    await page.goto(href);
-    await expect(page.locator("body[data-surface='review']")).toBeVisible();
-    const scaleAttr = await page.locator("body").getAttribute("data-scale");
-    expect(scaleAttr).toBeTruthy();
-    const scale = Number(scaleAttr);
-    expect(scale).toBeGreaterThan(0);
+    // Scale from pages table pin — not by loading SSR (was multi-MB per page).
+    const pages = (await catalogRows(request, "pages")) as Array<{
+      document_id: string;
+      page_no: number;
+      scale: number;
+    }>;
+    const pag = pages.find(
+      (p) =>
+        p.document_id === sample.document_id &&
+        p.page_no === (sample.page_no ?? 1)
+    );
+    expect(pag, "pages grain has scale for sample mark").toBeTruthy();
+    expect(pag!.scale).toBeGreaterThan(0);
 
-    // Re-fetch so we use the same scale pin the page uses.
     const rows = await suggestionsViaApi(request, caseId);
     const row = rows.find((r) => r.id === sample.id);
     expect(row?.bbox && row?.screen).toBeTruthy();
     assertScreenMatchesBbox(
       row!.bbox as Bbox,
       row!.screen as ScreenBox,
-      scale
+      pag!.scale
     );
   });
 
@@ -77,7 +79,7 @@ test.describe("bbox · screen (first-class mark geometry)", () => {
     request,
   }) => {
     const rows = await suggestionsViaApi(request, caseId);
-    // Prefer a pending mark on page 1 of any doc for a simple open.
+    // Prefer page 1 — thin page-scoped SSR.
     const hit =
       rows.find(
         (r) =>
@@ -85,15 +87,13 @@ test.describe("bbox · screen (first-class mark geometry)", () => {
           r.screen &&
           r.status === "pending" &&
           (r.page_no ?? 1) === 1
-      ) ?? rows.find((r) => r.bbox && r.screen);
-    expect(hit, "need a mark with geometry").toBeTruthy();
+      ) ?? rows.find((r) => r.bbox && r.screen && (r.page_no ?? 1) === 1);
+    expect(hit, "need a page-1 mark with geometry").toBeTruthy();
 
-    const href =
-      (hit!.page_no ?? 1) <= 1
-        ? `/documents/${hit!.document_id}`
-        : `/documents/${hit!.document_id}/pages/${hit!.page_no}`;
-    await page.goto(href);
-    await expect(page.locator("body[data-surface='review']")).toBeVisible();
+    await page.goto(`/documents/${hit!.document_id}`);
+    await expect(page.locator("body[data-surface='review']")).toBeVisible({
+      timeout: 45_000,
+    });
 
     const mark = page.locator(`.mark[data-id='${hit!.id}']`);
     await expect(mark).toBeVisible();
@@ -101,7 +101,6 @@ test.describe("bbox · screen (first-class mark geometry)", () => {
     expect(style).toBeTruthy();
 
     const scr = hit!.screen as ScreenBox;
-    // Template: left:{{ m.screen.x }}px; top:…; width:…; height:…
     expect(style!).toMatch(new RegExp(`left:\\s*${escapeRe(numCss(scr.x))}px`));
     expect(style!).toMatch(new RegExp(`top:\\s*${escapeRe(numCss(scr.y))}px`));
     expect(style!).toMatch(

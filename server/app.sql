@@ -52,7 +52,8 @@ COPY (
 SET VARIABLE sample_zip_path = (
     SELECT absolute_path(path)
     FROM (SELECT nullif(getenv('CLOSURE_SAMPLE_ZIP'), '') AS path)
-    WHERE is_file(path) IS TRUE AND file_extension(path) = '.zip'
+    WHERE path IS NOT NULL
+      AND is_file(path) IS TRUE AND file_extension(path) = '.zip'
 );
 
 -- Optional Postgres as peer store (same SQL app)
