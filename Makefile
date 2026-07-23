@@ -1,12 +1,14 @@
-.PHONY: install setup run test clean smoke
+.PHONY: install setup run test check clean
 
 PORT ?= 8117
 BASE  = http://127.0.0.1:$(PORT)
 
-# SQL invariants only (needs prior model / samples). Example:
-#   duckdb closure.db -c ".read server/smoke.sql"
-smoke:
-	@$$(./scripts/duckdb-bin.sh) $(or $(DB),closure.db) -c ".read server/smoke.sql"
+# Declarative SQL invariants (tests/dq_tests.json) run by dqtest over a freshly
+# built model — no running server needed. Catches dead detector arms that an
+# emptiness check cannot see (a UNION arm matching nothing still leaves its table
+# non-empty). Needs a prior `make setup` (samples on disk).
+check:
+	@$$(./scripts/duckdb-bin.sh) :memory: -c ".read tests/check.sql"
 
 # One-time: DuckDB on PATH + INSTALL quackapi FROM community.
 install:
@@ -22,8 +24,8 @@ setup:
 run:
 	PORT=$(PORT) ./run.sh
 
-# Fresh DB + Playwright e2e (wipes closure.db so decisions start empty).
-test:
+# SQL invariants (dqtest) first, then fresh DB + Playwright e2e.
+test: check
 	@echo "==> e2e deps (npm + chromium if needed)"
 	@cd tests/e2e && npm install --no-fund --no-audit && npx playwright install chromium
 	@echo "==> fresh DB for deterministic e2e"

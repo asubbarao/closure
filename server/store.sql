@@ -42,6 +42,11 @@ CREATE OR REPLACE MACRO bbox_to_redact(b, page_height) AS (
 CREATE OR REPLACE MACRO bbox_key(b) AS
     concat_ws(chr(31), round(b.x0, 0), round(b.y0, 0), round(b.x1, 0), round(b.y1, 0));
 
+-- Validity as one operation on the type. A box with non-positive area is a
+-- detector/UI bug, not geometry — the check suite asks bbox_positive(bbox)
+-- instead of unpacking x0/y0/x1/y1 at the call site.
+CREATE OR REPLACE MACRO bbox_positive(b) AS (b.x1 > b.x0 AND b.y1 > b.y0);
+
 -- Hull of matched word boxes → one mark bbox (list of bbox → bbox).
 CREATE OR REPLACE MACRO bbox_hull(boxes) AS
     list_reduce(boxes, (a, b) -> (

@@ -1,0 +1,16 @@
+[
+  {"test_name":"cases_present",     "table_name":"cases",       "column_name":null,     "test_type":"row_count", "test_params":"{\"min\":1}", "description":"ingest produced at least one case"},
+  {"test_name":"documents_present", "table_name":"documents",   "column_name":null,     "test_type":"row_count", "test_params":"{\"min\":1}", "description":"manifest joined at least one PDF"},
+  {"test_name":"words_present",     "table_name":"words",       "column_name":null,     "test_type":"row_count", "test_params":"{\"min\":1}", "description":"pdf words tokenized"},
+  {"test_name":"suggestions_present","table_name":"suggestions","column_name":null,     "test_type":"row_count", "test_params":"{\"min\":1}", "description":"detectors produced suggestions"},
+  {"test_name":"kind_rules_present","table_name":"kind_rules",  "column_name":null,     "test_type":"row_count", "test_params":"{\"min\":1}", "description":"detector_rules.json loaded"},
+
+  {"test_name":"name_scorer_never_fires","table_name":"name_scorers","column_name":null,"test_type":"custom_sql", "test_params":"{\"sql\":\"SELECT scorer FROM {table} ANTI JOIN name_rule_hits USING (scorer)\"}", "description":"every declared name scorer must produce trace rows — a scorer that matches nothing (the whole-term-vs-token metaphone bug) is dead code an emptiness check cannot see"},
+
+  {"test_name":"name_hit_scorer_labelled","table_name":"name_rule_hits","column_name":"scorer","test_type":"not_null","test_params":null,"description":"a UNION ALL BY NAME arm that lost its AS scorer nulls the discriminator silently"},
+  {"test_name":"token_hit_rule_labelled","table_name":"token_rule_hits","column_name":"rule","test_type":"not_null","test_params":null,"description":"same for the token side — every trace row carries the rule that produced it"},
+
+  {"test_name":"suggestion_bbox_positive","table_name":"suggestions","column_name":null,"test_type":"custom_sql","test_params":"{\"sql\":\"SELECT id FROM {table} WHERE NOT bbox_positive(bbox)\"}","description":"a box that is not a box is a canvas bug — validity via the bbox type's own operation, not x0/y0/x1/y1 unpacking"},
+
+  {"test_name":"nav_shell_complete","table_name":"v_nav","column_name":null,"test_type":"custom_sql","test_params":"{\"sql\":\"SELECT case_id FROM (SELECT case_id, bool_or(href = '/cases/' || case_id) AS lib, bool_or(href = '/cases/' || case_id || '/stream') AS stream, bool_or(href = '/cases/' || case_id || '/audit') AS audit FROM {table} GROUP BY case_id) WHERE NOT (lib AND stream AND audit)\"}","description":"every case exposes library, stream and audit in the nav shell"}
+]

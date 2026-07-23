@@ -55,7 +55,7 @@ make setup && make run    # http://127.0.0.1:8117/  and  /docs
 
 | Method | Path |
 |--------|------|
-| GET | `/`, `/cases/:id`, `/cases/:id/stream`, `/cases/:id/audit` |
+| GET | `/`, `/cases/:id`, `/cases/:id/stream`, `/cases/:id/flagged`, `/cases/:id/audit` |
 | GET | `/documents/:id`, `/documents/:id/pages/:page` |
 
 ### Product API
@@ -65,10 +65,14 @@ make setup && make run    # http://127.0.0.1:8117/  and  /docs
 | GET | `/api/cases/:id/nav` | Nav links |
 | GET | `/api/cases/:id/suggestions` | Grain rows for case |
 | GET | `/api/cases/:id/entities` | Entity grain |
+| GET | `/api/cases/:id/flagged` | Flagged pending + judge votes |
+| GET | `/api/cases/:id/batches` | Decision batches (ids list, n_members) |
 | GET | `/api/suggestions/:id/context` | ±3 lines (read_lines) |
 | POST | `/api/suggestions/:id/decision` | Decide one · **201** |
 | POST | `/api/entities/:id/decision` | Entity bulk (skip flagged) · **201** |
 | POST | `/api/documents/:id/bands/:band/decision` | Band bulk · **201** |
+| POST | `/api/cases/:id/flagged/decision` | **Bulk flagged** (FP reject / redact accept) · **201** |
+| POST | `/api/documents/:id/flagged/decision` | Doc-scoped flagged bulk · **201** |
 | POST | `/api/documents/:id/marks` | Manual miss · **201** |
 | POST | `/api/cases/:id/accept-high` | Case-wide HIGH · **201** |
 | POST | `/api/cases/:id/undo` | Undo last batch · **201** |

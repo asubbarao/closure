@@ -246,7 +246,7 @@ test.describe("bulk · multi-doc · keyboard", () => {
     }
   });
 
-  test("export blocked while flagged; clear → enabled", async ({
+  test("export blocked while flagged; bulk FP batch clears gate", async ({
     page,
     request,
   }) => {
@@ -265,29 +265,58 @@ test.describe("bulk · multi-doc · keyboard", () => {
 
     await expect(btn).toBeDisabled();
 
-    // Chunked parallel POSTs — full fan-out wedged quackapi (20s post timeout).
-    const chunk = 25;
-    for (let i = 0; i < flagged.length; i += chunk) {
-      const slice = flagged.slice(i, i + chunk);
-      await Promise.all(
-        slice.map((f) =>
-          request.post(api.decide(f.id, "accepted"), {
-            headers: {
-              Accept: "application/json",
-              "Content-Type": "application/json",
-            },
-            data: {},
-            timeout: 60_000,
-          }).then((res) => {
-            expect(res.ok(), `POST decide ${f.id} → ${res.status()}`).toBeTruthy();
-          })
-        )
-      );
-    }
+    // One batch POST — product bulk, not N× decide.
+    await postDecision(request, api.flaggedBulk(caseId, "rejected"));
+
+    const after = await suggestionsViaApi(request, caseId);
+    expect(
+      after.filter(
+        (r) =>
+          r.band === "flagged" &&
+          r.status === "pending" &&
+          docSet.has(r.document_id)
+      ).length
+    ).toBe(0);
+
+    // Audit trail: one batch with many members
+    const batRes = await request.get(api.batches(caseId));
+    expect(batRes.ok()).toBeTruthy();
+    const batches = (await batRes.json()) as Array<{
+      label: string;
+      n_members: number;
+      is_undo: boolean;
+    }>;
+    const fpBatch = batches.find(
+      (b) => b.label && b.label.includes("FP") && !b.is_undo
+    );
+    expect(fpBatch, "audit has flagged→FP batch").toBeTruthy();
+    expect(fpBatch!.n_members).toBeGreaterThanOrEqual(flagged.length);
 
     await page.goto(`/cases/${caseId}`);
     await expect(page.locator("#export-btn, [data-action='export']")).toBeEnabled({
       timeout: 30_000,
     });
+  });
+
+  test("flagged triage page lists judge votes + bulk controls", async ({
+    page,
+    request,
+  }) => {
+    // Re-flag path: if prior test cleared all, accept-high won't recreate flagged.
+    // Page must still load; if items remain from other cases, skip content asserts.
+    await page.goto(`/cases/${caseId}/flagged`);
+    await expect(page.locator("body[data-surface='flagged']")).toBeVisible();
+    await expect(page.getByText("Flagged triage")).toBeVisible();
+    await expect(
+      page.locator("[data-action='flagged-bulk'][data-status='rejected']")
+    ).toBeVisible();
+
+    const res = await request.get(`/api/cases/${caseId}/flagged`);
+    expect(res.ok()).toBeTruthy();
+    const flagged = await res.json();
+    if (Array.isArray(flagged) && flagged.length > 0) {
+      await expect(page.locator(".flagged-row").first()).toBeVisible();
+      await expect(page.getByText("Panel:")).toBeVisible();
+    }
   });
 });

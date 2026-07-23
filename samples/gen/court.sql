@@ -46,13 +46,14 @@ SELECT s.filename, s.case_no, b.content,
 FROM read_blob(getvariable('court_urls')) b
 JOIN _court_sources s ON s.url = b.filename;
 
-SELECT CASE
-    WHEN count(*) FILTER (WHERE NOT verified) > 0
-    THEN error(format('court.sql: {} of {} downloads failed checksum',
-                      count(*) FILTER (WHERE NOT verified), count(*)))
-    ELSE format('court: {} filings verified', count(*))
-END AS court_fetch
-FROM _court_blobs;
+-- Gate as a relation of failures: error() fires per mismatched checksum, and an
+-- empty failure set raises nothing. No count(*) FILTER, no CASE ladder.
+SELECT error(format('court.sql: {} failed checksum (got {})', filename,
+             lower(sha256(content)))) AS court_fetch
+FROM _court_blobs WHERE NOT verified;
+
+SELECT format('court: {} filings verified', count(*)) AS court_fetch
+FROM _court_blobs WHERE verified;
 
 -- // hatch: no batch blob writer — one COPY per file. The statements are
 -- generated from the relation, not hand-written per document.

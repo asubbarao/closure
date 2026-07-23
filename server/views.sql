@@ -24,7 +24,8 @@ WHERE table_schema = 'main'
       'v_case_surface', 'v_document_page_surface',
       'v_http_cache', 'v_http_cache_config', 'v_http_cache_status',
       'v_http_cache_access', 'v_http_cache_filesystems',
-      'v_route_get', 'v_case_html', 'v_stream_page', 'v_audit_page', 'v_review_page'
+      'v_route_get', 'v_case_html', 'v_stream_page', 'v_flagged_page', 'v_audit_page', 'v_review_page',
+      'v_flagged_pending', 'v_decision_batches'
   )
 GROUP BY table_name;
 
@@ -80,6 +81,8 @@ UNION ALL BY NAME
 SELECT id AS case_id, '/cases/' || id AS href, 'Library' AS text FROM cases
 UNION ALL BY NAME
 SELECT id AS case_id, '/cases/' || id || '/stream' AS href, 'Entity stream' AS text FROM cases
+UNION ALL BY NAME
+SELECT id AS case_id, '/cases/' || id || '/flagged' AS href, 'Flagged triage' AS text FROM cases
 UNION ALL BY NAME
 SELECT id AS case_id, '/cases/' || id || '/audit' AS href, 'Audit' AS text FROM cases;
 
@@ -230,11 +233,36 @@ SELECT cas.id AS case_id,
        coalesce(docs.documents, []) AS documents,
        coalesce(ents.entities, []) AS entities,
        coalesce(blk.flagged_pending_ids, []) AS flagged_pending_ids,
+       len(coalesce(blk.flagged_pending_ids, [])) AS n_flagged_pending,
        len(coalesce(blk.flagged_pending_ids, [])) > 0 AS export_blocked
 FROM cases cas
 LEFT JOIN v_case_documents docs ON docs.case_id = cas.id
 LEFT JOIN v_case_entities ents ON ents.case_id = cas.id
 LEFT JOIN v_export_blocked blk ON blk.case_id = cas.id;
+
+-- Flagged triage grain: judge votes as workflow help (not ML scores).
+CREATE OR REPLACE VIEW v_flagged_pending AS
+SELECT sug.id, sug.document_id, doc.filename, doc.case_id, sug.page_no,
+       sug.text, sug.kind, sug.confidence, sug.status, sug.band,
+       sug.entity_id, sug.entity_text,
+       sug.judge_panel, sug.judge_reason, sug.reason,
+       sug.vote_pattern, sug.vote_context, sug.vote_prior,
+       sug.flag_tag
+FROM v_suggestions sug
+JOIN documents doc ON doc.id = sug.document_id
+WHERE sug.band = 'flagged' AND sug.status = 'pending';
+
+CREATE OR REPLACE VIEW v_case_flagged_rows AS
+SELECT case_id,
+       list(struct_pack(
+           id := id, document_id := document_id, filename := filename,
+           page_no := page_no, text := text, kind := kind, confidence := confidence,
+           entity_id := entity_id, entity_text := entity_text,
+           judge_panel := judge_panel, judge_reason := judge_reason, reason := reason,
+           vote_pattern := vote_pattern, vote_context := vote_context, vote_prior := vote_prior
+       ) ORDER BY filename, page_no, id) AS flagged
+FROM v_flagged_pending
+GROUP BY case_id;
 
 CREATE OR REPLACE VIEW v_document_page_surface AS
 SELECT doc.id AS document_id,
@@ -285,7 +313,8 @@ SELECT sfc.case_id,
            'documents', sfc.documents,
            'entities', sfc.entities,
            'audit', coalesce(aud.audit, []),
-           'export_blocked', sfc.export_blocked
+           'export_blocked', sfc.export_blocked,
+           'n_flagged_pending', sfc.n_flagged_pending
        ) AS ctx
 FROM v_case_surface sfc
 LEFT JOIN v_case_audit_recent aud ON aud.case_id = sfc.case_id;
@@ -295,15 +324,28 @@ SELECT sfc.case_id,
        json_object(
            'case', sfc.case_row,
            'entities', sfc.entities,
-           'export_blocked', sfc.export_blocked
+           'export_blocked', sfc.export_blocked,
+           'n_flagged_pending', sfc.n_flagged_pending
        ) AS ctx
 FROM v_case_surface sfc;
+
+CREATE OR REPLACE VIEW v_flagged_ctx AS
+SELECT sfc.case_id,
+       json_object(
+           'case', sfc.case_row,
+           'export_blocked', sfc.export_blocked,
+           'n_flagged_pending', sfc.n_flagged_pending,
+           'flagged', coalesce(flg.flagged, [])
+       ) AS ctx
+FROM v_case_surface sfc
+LEFT JOIN v_case_flagged_rows flg ON flg.case_id = sfc.case_id;
 
 CREATE OR REPLACE VIEW v_audit_ctx AS
 SELECT sfc.case_id,
        json_object(
            'case', sfc.case_row,
            'export_blocked', sfc.export_blocked,
+           'n_flagged_pending', sfc.n_flagged_pending,
            'batches', coalesce(bat.batches, []),
            'events', coalesce(evt.events, [])
        ) AS ctx
@@ -333,6 +375,12 @@ SELECT case_id,
        '/cases/' || case_id || '/stream' AS path,
        tera_render('stream.html', ctx, template_path := 'server/templates/**/*.html') AS html
 FROM v_stream_ctx;
+
+CREATE OR REPLACE VIEW v_flagged_page AS
+SELECT case_id,
+       '/cases/' || case_id || '/flagged' AS path,
+       tera_render('flagged.html', ctx, template_path := 'server/templates/**/*.html') AS html
+FROM v_flagged_ctx;
 
 CREATE OR REPLACE VIEW v_audit_page AS
 SELECT case_id,

@@ -88,15 +88,16 @@ SELECT CASE
 END AS smoke_bbox;
 
 SELECT CASE
-    WHEN bool_and(has_lib AND has_stream AND has_audit)
+    WHEN bool_and(has_lib AND has_stream AND has_flagged AND has_audit)
         THEN 'smoke nav: shell ok'
-    ELSE error('smoke: v_nav missing library/stream/audit for a case')
+    ELSE error('smoke: v_nav missing library/stream/flagged/audit for a case')
 END AS smoke_nav
 FROM (
     FROM v_nav
     SELECT case_id,
            bool_or(href = '/cases/' || case_id) AS has_lib,
            bool_or(href = '/cases/' || case_id || '/stream') AS has_stream,
+           bool_or(href = '/cases/' || case_id || '/flagged') AS has_flagged,
            bool_or(href = '/cases/' || case_id || '/audit') AS has_audit
     GROUP BY ALL
 );

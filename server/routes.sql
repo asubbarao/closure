@@ -23,6 +23,8 @@ SELECT * FROM (VALUES
      $$SELECT html FROM v_case_html WHERE case_id = $id$$),
     ('page_stream',   'GET', '/cases/:id/stream',
      $$SELECT html FROM v_stream_page WHERE case_id = $id$$),
+    ('page_flagged',  'GET', '/cases/:id/flagged',
+     $$SELECT html FROM v_flagged_page WHERE case_id = $id$$),
     ('page_audit',    'GET', '/cases/:id/audit',
      $$SELECT html FROM v_audit_page WHERE case_id = $id$$),
     ('page_document', 'GET', '/documents/:id',
@@ -62,12 +64,20 @@ SELECT * FROM (VALUES
      $$SELECT ts, actor, action, status, target, reason, band, batch_id, batch_label, undoes_batch_id
        FROM v_audit WHERE case_id = $id ORDER BY ts DESC$$),
     ('case_flagged', 'GET', '/api/cases/:id/flagged',
-     $$SELECT sug.id, sug.document_id, sug.page_no, sug.text, sug.band, sug.status,
-              sug.judge_panel, sug.judge_reason, sug.reason
-       FROM v_suggestions sug
-       JOIN documents doc ON doc.id = sug.document_id
-       WHERE doc.case_id = $id AND sug.band = 'flagged' AND sug.status = 'pending'
-       ORDER BY sug.document_id, sug.page_no, sug.id$$),
+     $$SELECT id, document_id, filename, page_no, text, kind, confidence, band, status,
+              entity_id, entity_text, judge_panel, judge_reason, reason,
+              vote_pattern, vote_context, vote_prior, flag_tag
+       FROM v_flagged_pending
+       WHERE case_id = $id
+       ORDER BY filename, page_no, id$$),
+    ('case_batches', 'GET', '/api/cases/:id/batches',
+     $$SELECT batch_id, ts, ts_end, actor, label, case_id,
+              suggestion_ids, event_timestamps,
+              len(suggestion_ids) AS n_members,
+              is_undo, undoes_batch_id, undone
+       FROM v_decision_batches
+       WHERE case_id = $id
+       ORDER BY ts DESC$$),
 
     -- ── catalog (allowlisted relations via v_cols) ───────────────────────
     ('catalog_list',  'GET', '/api/catalog',
@@ -124,7 +134,7 @@ FROM (SUMMARIZE v_route_get);
 -- POST product writes (resource-nested; STATUS 201 on decision creates)
 -- ═══════════════════════════════════════════════════════════════════════════
 
--- Decide one suggestion
+-- Decide one suggestion (full grain on decisions for audit reconstructability)
 CREATE OR REPLACE ROUTE suggestion_decide POST '/api/suggestions/:id/decision'
   STATUS 201
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
@@ -133,12 +143,14 @@ WITH new_batch AS (SELECT uuid()::VARCHAR AS batch_id)
 SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor, $reason AS reason,
        now() AS ts, tgt.document_id, tgt.case_id, tgt.text, (SELECT batch_id FROM new_batch) AS batch_id,
        CASE WHEN tgt.text IS NOT NULL THEN $status || ' — ' || tgt.text ELSE $status END AS batch_label,
-       NULL::VARCHAR AS undoes_batch_id
+       NULL::VARCHAR AS undoes_batch_id,
+       tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
+       tgt.source, 'one' AS scope
 FROM v_decide_targets tgt
 WHERE tgt.suggestion_id = $id
 RETURNING suggestion_id, status;
 
--- Entity bulk (case-wide; skips flagged)
+-- Entity bulk (case-wide; skips flagged — use flagged bulk for FP path)
 CREATE OR REPLACE ROUTE entity_decide POST '/api/entities/:id/decision'
   STATUS 201
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
@@ -151,7 +163,9 @@ SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor
            WHEN tgt.text IS NOT NULL THEN $status || ' entity — ' || tgt.text
            ELSE $status || ' entity'
        END AS batch_label,
-       NULL::VARCHAR AS undoes_batch_id
+       NULL::VARCHAR AS undoes_batch_id,
+       tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
+       tgt.source, 'entity' AS scope
 FROM v_decide_targets tgt
 WHERE tgt.entity_id = $id AND tgt.status = 'pending' AND tgt.band <> 'flagged'
 RETURNING suggestion_id, status;
@@ -163,14 +177,16 @@ CREATE OR REPLACE ROUTE document_band_decide POST '/api/documents/:id/bands/:ban
 AS INSERT INTO decisions BY NAME
 WITH new_batch AS (SELECT uuid()::VARCHAR AS batch_id)
 SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor,
-       CASE WHEN $reason IS NULL OR $reason = '' THEN 'bulk band ' || $band ELSE $reason END AS reason,
+       CASE WHEN nullif($reason, '') IS NULL THEN 'bulk band ' || $band ELSE $reason END AS reason,
        now() AS ts, tgt.document_id, tgt.case_id, tgt.text, (SELECT batch_id FROM new_batch) AS batch_id,
-       $status || ' band ' || $band AS batch_label, NULL::VARCHAR AS undoes_batch_id
+       $status || ' band ' || $band AS batch_label, NULL::VARCHAR AS undoes_batch_id,
+       tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
+       tgt.source, 'band' AS scope
 FROM v_decide_targets tgt
 WHERE tgt.document_id = $id AND tgt.status = 'pending' AND tgt.band = $band AND $band <> 'flagged'
 RETURNING suggestion_id, status;
 
--- Accept HIGH case-wide
+-- Accept HIGH case-wide (skips flagged)
 CREATE OR REPLACE ROUTE case_accept_high POST '/api/cases/:id/accept-high'
   STATUS 201
   PARAM threshold INTEGER DEFAULT 90 GE 0 LE 100
@@ -180,11 +196,59 @@ WITH new_batch AS (SELECT uuid()::VARCHAR AS batch_id)
 SELECT 'decision' AS kind, tgt.suggestion_id, 'accepted' AS status, $actor AS actor,
        'accept high ≥' || $threshold::VARCHAR AS reason,
        now() AS ts, tgt.document_id, tgt.case_id, tgt.text, (SELECT batch_id FROM new_batch) AS batch_id,
-       'Accepted high' AS batch_label, NULL::VARCHAR AS undoes_batch_id
+       'Accepted high' AS batch_label, NULL::VARCHAR AS undoes_batch_id,
+       tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
+       tgt.source, 'case_high' AS scope
 FROM v_decide_targets tgt
 WHERE tgt.case_id = $id AND tgt.status = 'pending' AND tgt.confidence >= $threshold
   AND tgt.band <> 'flagged'
   AND (tgt.flag_tag IS NULL OR tgt.flag_tag <> 'false_positive')
+RETURNING suggestion_id, status;
+
+-- Flagged bulk case-wide (one batch) — FP workflow:
+--   rejected = not PII / clear as false positive
+--   accepted = redact anyway
+CREATE OR REPLACE ROUTE case_flagged_decide POST '/api/cases/:id/flagged/decision'
+  STATUS 201
+  PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
+AS INSERT INTO decisions BY NAME
+WITH new_batch AS (SELECT uuid()::VARCHAR AS batch_id)
+SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor,
+       CASE
+           WHEN nullif($reason, '') IS NOT NULL THEN $reason
+           WHEN $status = 'rejected' THEN 'bulk false positive'
+           ELSE 'bulk redact flagged'
+       END AS reason,
+       now() AS ts, tgt.document_id, tgt.case_id, tgt.text, (SELECT batch_id FROM new_batch) AS batch_id,
+       CASE WHEN $status = 'rejected' THEN 'Flagged → FP (reject all)'
+            ELSE 'Flagged → redact all' END AS batch_label,
+       NULL::VARCHAR AS undoes_batch_id,
+       tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
+       tgt.source, 'case_flagged' AS scope
+FROM v_decide_targets tgt
+WHERE tgt.case_id = $id AND tgt.status = 'pending' AND tgt.band = 'flagged'
+RETURNING suggestion_id, status;
+
+-- Flagged bulk one document
+CREATE OR REPLACE ROUTE document_flagged_decide POST '/api/documents/:id/flagged/decision'
+  STATUS 201
+  PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
+AS INSERT INTO decisions BY NAME
+WITH new_batch AS (SELECT uuid()::VARCHAR AS batch_id)
+SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor,
+       CASE
+           WHEN nullif($reason, '') IS NOT NULL THEN $reason
+           WHEN $status = 'rejected' THEN 'doc bulk false positive'
+           ELSE 'doc bulk redact flagged'
+       END AS reason,
+       now() AS ts, tgt.document_id, tgt.case_id, tgt.text, (SELECT batch_id FROM new_batch) AS batch_id,
+       CASE WHEN $status = 'rejected' THEN 'Doc flagged → FP'
+            ELSE 'Doc flagged → redact' END AS batch_label,
+       NULL::VARCHAR AS undoes_batch_id,
+       tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
+       tgt.source, 'doc_flagged' AS scope
+FROM v_decide_targets tgt
+WHERE tgt.document_id = $id AND tgt.status = 'pending' AND tgt.band = 'flagged'
 RETURNING suggestion_id, status;
 
 -- Manual mark (add missed)

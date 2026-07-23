@@ -228,53 +228,50 @@ FROM v_src_watchlist;
 -- so it could never match. Phonetic keys are per token on both sides.
 
 CREATE OR REPLACE TABLE watchlist_tokens AS
-SELECT term, kind, case_no, is_not_pii, tok AS term_token,
-       double_metaphone(tok)[1] AS term_dm
+SELECT term, kind, case_no, is_not_pii, tok AS term_token
 FROM watchlist, unnest(term_tokens) AS token_rows(tok)
 WHERE length(tok) >= 3;
 
+-- Each scorer is a function of one uniform shape: score(token, term) -> 0..100.
+-- rapidfuzz/jaro index spelling; phonetic returns 100 when the primary
+-- double_metaphone codes agree (Smith/Smyth), 0 otherwise.
+CREATE OR REPLACE MACRO score_edit(a, b)     AS rapidfuzz_ratio(a, b)::DOUBLE;
+CREATE OR REPLACE MACRO score_jaro(a, b)     AS (100.0 * jaro_winkler_similarity(a, b))::DOUBLE;
+CREATE OR REPLACE MACRO score_phonetic(a, b) AS
+    (100.0 * (double_metaphone(a)[1] = double_metaphone(b)[1])::INT)::DOUBLE;
+
+-- A scorer is a ROW that names its function, not a hardcoded WHERE clause or a
+-- bespoke UNION arm. scorer_fn is applied by name (func_apply). Add a scorer =
+-- add a macro + insert a row; the scan below and every downstream table follow.
 CREATE OR REPLACE TABLE name_scorers AS
 SELECT * FROM (VALUES
-    ('edit',     88.0, 1),
-    ('jaro',     92.0, 2),
-    ('phonetic', 70.0, 3)
-) AS t(scorer, min_score, priority);
+    ('edit',     'score_edit',     88.0, 1),
+    ('jaro',     'score_jaro',     92.0, 2),
+    ('phonetic', 'score_phonetic', 70.0, 3)
+) AS t(scorer, scorer_fn, min_score, priority);
 
+-- One scan, not three UNION arms: every (document token × watchlist token ×
+-- scorer) is scored by apply()ing the scorer's function; a row survives when it
+-- clears that scorer's threshold. This IS the trace table — every scorer that
+-- fired, before name_token_match picks one primary.
 CREATE OR REPLACE TABLE name_rule_hits AS
 WITH tokens_from_documents AS (
-    SELECT DISTINCT token_norm, double_metaphone(token_norm)[1] AS token_dm
-    FROM words WHERE length(token_norm) >= 3
+    SELECT DISTINCT token_norm FROM words WHERE length(token_norm) >= 3
 ),
-scores_token_to_watchlist AS (
-    SELECT tok.token_norm, wt.term, wt.term_token, wt.term_dm, wt.kind,
-           wt.case_no, wt.is_not_pii,
-           rapidfuzz_ratio(tok.token_norm, wt.term_token) AS edit_score,
-           100.0 * jaro_winkler_similarity(tok.token_norm, wt.term_token) AS jaro_score,
-           tok.token_dm = wt.term_dm AS same_sound
+scored AS (
+    SELECT tok.token_norm, wt.term, wt.term_token, wt.kind, wt.case_no, wt.is_not_pii,
+           scr.scorer, scr.scorer_fn, scr.priority, scr.min_score,
+           apply(scr.scorer_fn, tok.token_norm, wt.term_token)::DOUBLE AS score
     FROM tokens_from_documents tok
     CROSS JOIN watchlist_tokens wt
+    CROSS JOIN name_scorers scr
 )
 SELECT token_norm, term, term_token, kind, case_no, is_not_pii,
-       'edit' AS scorer, scr.priority, edit_score AS score,
-       format('rapidfuzz_ratio({}, {}) = {}', token_norm, term_token,
-              round(edit_score, 1)) AS evidence
-FROM scores_token_to_watchlist
-JOIN name_scorers scr ON scr.scorer = 'edit' AND edit_score >= scr.min_score
-UNION ALL BY NAME
-SELECT token_norm, term, term_token, kind, case_no, is_not_pii,
-       'jaro' AS scorer, scr.priority, jaro_score AS score,
-       format('jaro_winkler({}, {}) = {}', token_norm, term_token,
-              round(jaro_score, 1)) AS evidence
-FROM scores_token_to_watchlist
-JOIN name_scorers scr ON scr.scorer = 'jaro' AND jaro_score >= scr.min_score
-UNION ALL BY NAME
-SELECT token_norm, term, term_token, kind, case_no, is_not_pii,
-       'phonetic' AS scorer, scr.priority, jaro_score AS score,
-       format('double_metaphone({}) = {} = double_metaphone({})',
-              token_norm, term_dm, term_token) AS evidence
-FROM scores_token_to_watchlist
-JOIN name_scorers scr
-  ON scr.scorer = 'phonetic' AND same_sound AND jaro_score >= scr.min_score;
+       scorer, priority, score,
+       format('{}({}, {}) = {}', scorer_fn, token_norm, term_token,
+              round(score, 1)) AS evidence
+FROM scored
+WHERE score >= min_score;
 
 -- One primary scorer per (document token, watchlist term) — not a coalesce.
 CREATE OR REPLACE TABLE name_token_match AS
@@ -654,8 +651,28 @@ FROM token_types
 WHERE nullif(hostname, '') IS NOT NULL
 GROUP BY hostname;
 
+-- Decision write source — enough grain for append-only audit reconstructability.
 CREATE OR REPLACE VIEW v_decide_targets AS
-SELECT sug.id AS suggestion_id, sug.document_id, doc.case_id, sug.text, sug.entity_id, sug.entity_text,
-       sug.band, sug.status, sug.group_key, sug.confidence, sug.flag_tag
+SELECT sug.id AS suggestion_id,
+       sug.document_id,
+       doc.case_id,
+       doc.filename,
+       sug.page_no,
+       sug.bbox,
+       sug.text,
+       sug.context,
+       sug.entity_id,
+       sug.entity_text,
+       sug.band,
+       sug.status,
+       sug.group_key,
+       sug.confidence,
+       sug.flag_tag,
+       sug.source,
+       sug.judge_panel,
+       sug.judge_reason,
+       sug.vote_pattern,
+       sug.vote_context,
+       sug.vote_prior
 FROM v_suggestions sug
 JOIN documents doc ON doc.id = sug.document_id;

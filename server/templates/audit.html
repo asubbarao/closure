@@ -18,14 +18,16 @@
   <div class="card">
     <h3 style="margin-bottom:8px">Batches</h3>
     <table>
-      <thead><tr><th>When</th><th>Label</th><th>Actor</th><th>Members</th><th></th></tr></thead>
+      <thead><tr><th>When</th><th>Label</th><th>Actor</th><th>n</th><th>Members</th><th></th></tr></thead>
       <tbody>
       {% for b in batches %}
         <tr>
           <td class="mono">{{ b.ts_short }}</td>
           <td>{{ b.label }}</td>
           <td>{{ b.actor }}</td>
-          <td class="mono" style="font-size:11px;max-width:28ch;overflow:hidden;text-overflow:ellipsis">
+          <td class="mono">{{ b.n_members }}</td>
+          <td class="mono" style="font-size:11px;max-width:32ch;overflow:hidden;text-overflow:ellipsis"
+              title="{{ b.members }}">
             {{ b.members or "—" }}
           </td>
           <td class="mono" style="color:var(--ink2)">

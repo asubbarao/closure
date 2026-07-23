@@ -36,6 +36,7 @@ INSTALL read_lines FROM community; LOAD read_lines;
 INSTALL webbed FROM community; LOAD webbed;
 INSTALL yaml FROM community; LOAD yaml;
 INSTALL rapidfuzz FROM community; LOAD rapidfuzz;
+INSTALL func_apply FROM community; LOAD func_apply;
 INSTALL finetype FROM community; LOAD finetype;
 INSTALL hashfuncs FROM community; LOAD hashfuncs;
 INSTALL splink_udfs FROM community; LOAD splink_udfs;

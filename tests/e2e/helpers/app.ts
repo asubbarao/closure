@@ -185,6 +185,10 @@ export const api = {
     `/api/cases/${encodeURIComponent(caseId)}/undo?actor=${actor}`,
   export: (caseId: string) =>
     `/api/cases/${encodeURIComponent(caseId)}/export`,
+  flaggedBulk: (caseId: string, status: string, actor = "e2e") =>
+    `/api/cases/${encodeURIComponent(caseId)}/flagged/decision?status=${status}&actor=${actor}`,
+  batches: (caseId: string) =>
+    `/api/cases/${encodeURIComponent(caseId)}/batches`,
   mark: (
     docId: string,
     q: {

@@ -7,10 +7,16 @@
   <span class="mono" style="color:var(--ink2)">{{ case.case_no }} — {{ case.title }}</span>
   <span class="sp"></span>
   <a class="btn" href="/cases/{{ case.id }}/stream">Entity stream</a>
+  <a class="btn" href="/cases/{{ case.id }}/flagged">Flagged triage</a>
   <a class="btn" href="/cases/{{ case.id }}/audit">Audit</a>
   {% include "fragments/case_actions.html" %}
 </header>
 <div class="wrap">
+  {% if n_flagged_pending and n_flagged_pending > 0 %}
+  <p class="mono" style="color:var(--rej);margin-bottom:12px">
+    ⚑ {{ n_flagged_pending }} flagged pending — open triage or bulk FP to unlock export
+  </p>
+  {% endif %}
   <table>
     <thead><tr><th>Document</th><th>Pages</th><th></th></tr></thead>
     <tbody>

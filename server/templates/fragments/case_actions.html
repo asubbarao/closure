@@ -1,5 +1,15 @@
-{# Shared case workflow controls — data-action only; app.js handles POST+reload #}
+{# Shared case workflow — data-action only; app.js POSTs + reload #}
 <button type="button" class="btn" data-action="undo" data-case-id="{{ case.id }}">Undo</button>
 <button type="button" class="btn" data-action="accept-high" data-case-id="{{ case.id }}" title="H">Accept HIGH</button>
+{% if n_flagged_pending and n_flagged_pending > 0 %}
+<a class="btn" href="/cases/{{ case.id }}/flagged" style="color:var(--rej)"
+   title="{{ n_flagged_pending }} flagged need human dispose">
+  Flagged · {{ n_flagged_pending }}
+</a>
+<button type="button" class="btn danger" data-action="flagged-bulk" data-case-id="{{ case.id }}"
+        data-status="rejected" title="Bulk mark all flagged as false positives">
+  All flagged → FP
+</button>
+{% endif %}
 <button type="button" class="btn primary" data-action="export" data-case-id="{{ case.id }}" id="export-btn"
   {% if export_blocked %}disabled title="Resolve flagged first"{% endif %}>Export</button>

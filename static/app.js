@@ -66,6 +66,14 @@
     mark: function (docId, q) {
       return "/api/documents/" + encodeURIComponent(docId) + "/marks?" + qs(q);
     },
+    flaggedBulk: function (caseId, status) {
+      return "/api/cases/" + encodeURIComponent(caseId) + "/flagged/decision?" +
+        qs({ status: status, actor: actor });
+    },
+    docFlaggedBulk: function (docId, status) {
+      return "/api/documents/" + encodeURIComponent(docId) + "/flagged/decision?" +
+        qs({ status: status, actor: actor });
+    },
   };
 
   function runAction(el) {
@@ -87,6 +95,10 @@
         go(api.band(docId, band, el.getAttribute("data-status") || "accepted"));
     } else if (a === "accept-high") {
       go(api.acceptHigh(caseId));
+    } else if (a === "flagged-bulk") {
+      go(api.flaggedBulk(caseId, el.getAttribute("data-status") || "rejected"));
+    } else if (a === "doc-flagged-bulk") {
+      go(api.docFlaggedBulk(docId, el.getAttribute("data-status") || "rejected"));
     } else if (a === "undo") {
       go(api.undo(caseId));
     } else if (a === "export") {
@@ -183,7 +195,8 @@
     bootAdd(body.dataset.docId || "");
   }
 
-  if (body && (body.dataset.surface === "case" || body.dataset.surface === "stream")) {
+  if (body && (body.dataset.surface === "case" || body.dataset.surface === "stream" ||
+               body.dataset.surface === "flagged")) {
     document.addEventListener("keydown", function (e) {
       if (typing(e.target)) return;
       var caseId = body.dataset.caseId || "";
@@ -193,6 +206,9 @@
       } else if (e.key === "u" && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         go(api.undo(caseId));
+      } else if (e.key === "F" || (e.key === "f" && e.shiftKey)) {
+        e.preventDefault();
+        if (caseId) location.href = "/cases/" + encodeURIComponent(caseId) + "/flagged";
       }
     });
   }

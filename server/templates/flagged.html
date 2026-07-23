@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Flagged triage · {{ case.case_no }}{% endblock %}
+{% block body_attrs %} data-surface="flagged" data-case-id="{{ case.id }}" data-actor="reviewer"{% endblock %}
+{% block body %}
+<header class="appbar">
+  <a class="btn" href="/cases/{{ case.id }}">← Library</a>
+  <strong>Flagged triage</strong>
+  <span class="mono" style="color:var(--ink2)">
+    {{ case.case_no }} · {{ n_flagged_pending }} pending FP-risk marks · multi-doc
+  </span>
+  <span class="sp"></span>
+  <a class="btn" href="/cases/{{ case.id }}/audit">Audit</a>
+  {% include "fragments/case_actions.html" %}
+</header>
+<div class="wrap">
+  <p style="color:var(--ink2);margin-bottom:12px;max-width:72ch">
+    Judges flag conflict / keep / weak confidence so a human can clear hundreds of marks without
+    re-reading every page. <strong>Reject</strong> = not PII (leave visible).
+    <strong>Accept</strong> = redact anyway. Bulk actions write one audit batch.
+  </p>
+
+  <div class="card" style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <button type="button" class="btn danger" data-action="flagged-bulk" data-case-id="{{ case.id }}"
+            data-status="rejected" title="Mark all flagged as false positives">
+      All flagged → FP (reject)
+    </button>
+    <button type="button" class="btn" data-action="flagged-bulk" data-case-id="{{ case.id }}"
+            data-status="accepted" title="Redact all flagged">
+      All flagged → redact
+    </button>
+    <span class="mono" style="font-size:12px;color:var(--ink2)">
+      Export stays blocked until no flagged pending remain
+    </span>
+  </div>
+
+  {% for f in flagged %}
+  <div class="card flagged-row" id="f-{{ f.id }}" style="margin-bottom:10px"
+       data-id="{{ f.id }}" data-document-id="{{ f.document_id }}" data-page-no="{{ f.page_no }}">
+    <div style="display:flex;gap:12px;align-items:flex-start">
+      <div style="flex:1">
+        <div style="font-weight:600">{{ f.text }}</div>
+        <div class="mono" style="font-size:11px;color:var(--ink2);margin-top:4px">
+          <a href="/documents/{{ f.document_id }}{% if f.page_no > 1 %}/pages/{{ f.page_no }}{% endif %}">
+            {{ f.filename }}.pdf · p.{{ f.page_no }}
+          </a>
+          · {{ f.kind }} · conf {{ f.confidence }}
+          {% if f.entity_text %} · entity {{ f.entity_text }}{% endif %}
+        </div>
+        <div class="mono" style="font-size:11px;margin-top:8px;padding:8px;background:var(--surface-2, #f4f4f5);border-radius:6px">
+          <div style="margin-bottom:4px">
+            <strong>Panel:</strong> {{ f.judge_panel or "—" }}
+            <span style="opacity:.7"> · pattern {{ f.vote_pattern }} · context {{ f.vote_context }} · prior {{ f.vote_prior }}</span>
+          </div>
+          <div style="color:var(--rej)">
+            {{ f.judge_reason or f.reason or "flagged for human dispose" }}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button type="button" class="btn danger" data-action="decide" data-id="{{ f.id }}"
+                data-status="rejected" data-reason="false positive"
+                title="Not PII — keep visible">Reject FP</button>
+        <button type="button" class="btn" data-action="decide" data-id="{{ f.id }}"
+                data-status="accepted" title="Redact anyway">Accept redact</button>
+        {% if f.document_id %}
+        <a class="btn" href="/documents/{{ f.document_id }}{% if f.page_no > 1 %}/pages/{{ f.page_no }}{% endif %}">Open page</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="card" style="color:var(--ink2)">
+    No flagged pending — export can proceed if redactions are accepted.
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
