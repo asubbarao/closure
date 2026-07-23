@@ -7,7 +7,7 @@
       {% if e.n_pending %} · {{ e.n_pending }} pending{% if e.n_docs and e.n_docs > 1 %} across {{ e.n_docs }} docs{% endif %}{% endif %}
       {% if e.n_flagged %} · {{ e.n_flagged }} flagged (use FP triage){% endif %}
     </div>
-    {% if e.pending_filenames and e.pending_filenames | length > 0 %}
+    {% if e.n_docs and e.n_docs > 0 and e.pending_filenames %}
     <div class="mono" style="font-size:11px;color:var(--ink2);margin-top:2px">
       {% for fn in e.pending_filenames %}{{ fn }}{% if not loop.last %}, {% endif %}{% endfor %}
     </div>

@@ -172,6 +172,7 @@ FROM documents doc
 GROUP BY case_id;
 
 -- Entity work grain: pending non-flagged ids/docs (multi-doc bulk); flagged separate.
+-- Lists via GROUP BY join (not correlated subselects); n_* = len(list) free on pack.
 CREATE OR REPLACE VIEW v_entity_work AS
 WITH pending_work AS (
     SELECT sug.entity_id, sug.id, sug.document_id, sug.page_no, doc.filename
@@ -185,6 +186,19 @@ flagged_work AS (
     FROM v_suggestions sug
     WHERE sug.entity_id IS NOT NULL
       AND sug.status = 'pending' AND sug.band = 'flagged'
+),
+pending_agg AS (
+    SELECT entity_id,
+           list(id ORDER BY document_id, page_no) AS pending_ids,
+           list(DISTINCT document_id ORDER BY document_id) AS pending_doc_ids,
+           list(DISTINCT filename ORDER BY filename) AS pending_filenames
+    FROM pending_work
+    GROUP BY entity_id
+),
+flagged_agg AS (
+    SELECT entity_id, list(id ORDER BY id) AS flagged_ids
+    FROM flagged_work
+    GROUP BY entity_id
 )
 SELECT ent.id AS entity_id,
        ent.case_id,
@@ -192,23 +206,13 @@ SELECT ent.id AS entity_id,
        ent.kind,
        ent.kind_label,
        ent.mono,
-       coalesce((
-           SELECT list(p.id ORDER BY p.document_id, p.page_no)
-           FROM pending_work p WHERE p.entity_id = ent.id
-       ), []) AS pending_ids,
-       coalesce((
-           SELECT list(DISTINCT p.document_id ORDER BY p.document_id)
-           FROM pending_work p WHERE p.entity_id = ent.id
-       ), []) AS pending_doc_ids,
-       coalesce((
-           SELECT list(DISTINCT p.filename ORDER BY p.filename)
-           FROM pending_work p WHERE p.entity_id = ent.id
-       ), []) AS pending_filenames,
-       coalesce((
-           SELECT list(f.id ORDER BY f.id)
-           FROM flagged_work f WHERE f.entity_id = ent.id
-       ), []) AS flagged_ids
-FROM entities ent;
+       coalesce(pa.pending_ids, []) AS pending_ids,
+       coalesce(pa.pending_doc_ids, []) AS pending_doc_ids,
+       coalesce(pa.pending_filenames, []) AS pending_filenames,
+       coalesce(fa.flagged_ids, []) AS flagged_ids
+FROM entities ent
+LEFT JOIN pending_agg pa ON pa.entity_id = ent.id
+LEFT JOIN flagged_agg fa ON fa.entity_id = ent.id;
 
 CREATE OR REPLACE VIEW v_case_entities AS
 SELECT case_id,
@@ -361,6 +365,17 @@ SELECT case_id,
 FROM v_remainder_pending
 GROUP BY case_id;
 
+-- Doc-scoped id lists for review header (len free; no correlated re-scan).
+CREATE OR REPLACE VIEW v_document_flagged_ids AS
+SELECT document_id, list(id ORDER BY id) AS flagged_pending_ids
+FROM v_flagged_pending
+GROUP BY document_id;
+
+CREATE OR REPLACE VIEW v_document_remainder_ids AS
+SELECT document_id, list(id ORDER BY id) AS remainder_ids
+FROM v_remainder_pending
+GROUP BY document_id;
+
 CREATE OR REPLACE VIEW v_document_page_surface AS
 SELECT doc.id AS document_id,
        doc.case_id,
@@ -471,21 +486,12 @@ SELECT sfc.document_id, sfc.page_no,
            'page', sfc.page_row,
            'marks', sfc.marks,
            'suggestions', sfc.suggestions,
-           'n_doc_flagged', (
-               SELECT len(list(sug.id))
-               FROM v_suggestions sug
-               WHERE sug.document_id = sfc.document_id
-                 AND sug.band = 'flagged' AND sug.status = 'pending'
-           ),
-           'n_doc_remainder', (
-               SELECT len(list(sug.id))
-               FROM v_suggestions sug
-               WHERE sug.document_id = sfc.document_id
-                 AND sug.status = 'pending'
-                 AND sug.detector_key = 'detector:remainder'
-           )
+           'n_doc_flagged', len(coalesce(flg.flagged_pending_ids, [])),
+           'n_doc_remainder', len(coalesce(rem.remainder_ids, []))
        ) AS ctx
-FROM v_document_page_surface sfc;
+FROM v_document_page_surface sfc
+LEFT JOIN v_document_flagged_ids flg ON flg.document_id = sfc.document_id
+LEFT JOIN v_document_remainder_ids rem ON rem.document_id = sfc.document_id;
 
 CREATE OR REPLACE VIEW v_case_html AS
 SELECT case_id,

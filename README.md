@@ -29,11 +29,11 @@ Full route table: [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md). Data: [`docs/D
 | Process | DuckDB ≥ **1.5.4** (`DUCKDB_BIN` if PATH is older) |
 | HTTP | **quackapi** — `v_route_get` GETs + nested POSTs |
 | Outbound | **curl_httpfs** + **cache_httpfs** (`.tmp/cache_httpfs`) |
-| PDF | **pdf** — words, pages, `pdf_redact`, setup `pdf_to_png` |
+| PDF | **pdf** — words, pages, export `pdf_redact_lateral`, setup `pdf_write_page_images` |
 | HTML | **tera** pages + `fragments/*` · **static/app.css** · **static/app.js** |
 | Host / pins | **hostfs** · **scalarfs** · **zipfs** · **shellfs** |
 | Schema graph | **semantic_views** (`closure_semantic.yaml`) |
-| Checks | `smoke.sql` · Playwright e2e |
+| Checks | `tests/check.sql` (dqtest) · Playwright e2e |
 
 ## Quick start
 
@@ -57,17 +57,19 @@ make test      # fresh DB + Playwright
 
 ```
 server/
-  app.sql            boot + serve
+  app.sql            build + serve (reads build.sql, then routes)
+  build.sql          construct the model, no HTTP (app + tests share it)
   extensions.sql     earned pack
   routes.sql         v_route_get + POST product writes
   views.sql          live views · ctx · page html
-  core.sql · store.sql · hostfs · shellfs · http_cache · smoke
+  core.sql · store.sql · hostfs · shellfs · http_cache
   templates/         pages + fragments/
   config/
 static/              app.css · app.js
 samples/ pages/ exports/
+tests/check.sql · dq_tests.json   SQL invariants (dqtest) → make check
 tests/e2e/           Playwright (smoke · FOIA loop · bulk/keyboard)
-docs/                PLATFORM · HOW_IT_WORKS · DATA_MODEL · rationale
+docs/                PLATFORM · HOW_IT_WORKS · DATA_MODEL · DETECTION · rationale
                      archive/ = history only
 design/              UI mocks (not runtime)
 ```
