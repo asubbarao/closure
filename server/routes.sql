@@ -177,7 +177,7 @@ CREATE OR REPLACE ROUTE document_band_decide POST '/api/documents/:id/bands/:ban
 AS INSERT INTO decisions BY NAME
 WITH new_batch AS (SELECT uuid()::VARCHAR AS batch_id)
 SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor,
-       CASE WHEN nullif($reason, '') IS NULL THEN 'bulk band ' || $band ELSE $reason END AS reason,
+       coalesce(nullif($reason, ''), 'bulk band ' || $band) AS reason,
        now() AS ts, tgt.document_id, tgt.case_id, tgt.text, (SELECT batch_id FROM new_batch) AS batch_id,
        $status || ' band ' || $band AS batch_label, NULL::VARCHAR AS undoes_batch_id,
        tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
@@ -205,23 +205,20 @@ WHERE tgt.case_id = $id AND tgt.status = 'pending' AND tgt.confidence >= $thresh
   AND (tgt.flag_tag IS NULL OR tgt.flag_tag <> 'false_positive')
 RETURNING suggestion_id, status;
 
--- Flagged bulk case-wide (one batch) — FP workflow:
---   rejected = not PII / clear as false positive
---   accepted = redact anyway
+-- Flagged bulk — reject = FP (not PII); accept = redact anyway.
+-- reason: optional override; else status picks the default (coalesce + nullif).
 CREATE OR REPLACE ROUTE case_flagged_decide POST '/api/cases/:id/flagged/decision'
   STATUS 201
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
 AS INSERT INTO decisions BY NAME
 WITH new_batch AS (SELECT uuid()::VARCHAR AS batch_id)
 SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor,
-       CASE
-           WHEN nullif($reason, '') IS NOT NULL THEN $reason
-           WHEN $status = 'rejected' THEN 'bulk false positive'
-           ELSE 'bulk redact flagged'
-       END AS reason,
+       coalesce(nullif($reason, ''),
+                CASE $status WHEN 'rejected' THEN 'bulk false positive'
+                             ELSE 'bulk redact flagged' END) AS reason,
        now() AS ts, tgt.document_id, tgt.case_id, tgt.text, (SELECT batch_id FROM new_batch) AS batch_id,
-       CASE WHEN $status = 'rejected' THEN 'Flagged → FP (reject all)'
-            ELSE 'Flagged → redact all' END AS batch_label,
+       CASE $status WHEN 'rejected' THEN 'Flagged → FP (reject all)'
+                    ELSE 'Flagged → redact all' END AS batch_label,
        NULL::VARCHAR AS undoes_batch_id,
        tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
        tgt.source, 'case_flagged' AS scope
@@ -229,21 +226,18 @@ FROM v_decide_targets tgt
 WHERE tgt.case_id = $id AND tgt.status = 'pending' AND tgt.band = 'flagged'
 RETURNING suggestion_id, status;
 
--- Flagged bulk one document
 CREATE OR REPLACE ROUTE document_flagged_decide POST '/api/documents/:id/flagged/decision'
   STATUS 201
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
 AS INSERT INTO decisions BY NAME
 WITH new_batch AS (SELECT uuid()::VARCHAR AS batch_id)
 SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor,
-       CASE
-           WHEN nullif($reason, '') IS NOT NULL THEN $reason
-           WHEN $status = 'rejected' THEN 'doc bulk false positive'
-           ELSE 'doc bulk redact flagged'
-       END AS reason,
+       coalesce(nullif($reason, ''),
+                CASE $status WHEN 'rejected' THEN 'doc bulk false positive'
+                             ELSE 'doc bulk redact flagged' END) AS reason,
        now() AS ts, tgt.document_id, tgt.case_id, tgt.text, (SELECT batch_id FROM new_batch) AS batch_id,
-       CASE WHEN $status = 'rejected' THEN 'Doc flagged → FP'
-            ELSE 'Doc flagged → redact' END AS batch_label,
+       CASE $status WHEN 'rejected' THEN 'Doc flagged → FP'
+                    ELSE 'Doc flagged → redact' END AS batch_label,
        NULL::VARCHAR AS undoes_batch_id,
        tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
        tgt.source, 'doc_flagged' AS scope
@@ -262,7 +256,7 @@ WITH new_mark AS (SELECT uuid()::VARCHAR AS batch_id, uuid()::VARCHAR AS suggest
 SELECT 'added' AS kind, new_mark.suggestion_id, $id AS document_id, $page::INTEGER AS page_no,
        ($x0, $y0, $x1, $y1)::bbox AS bbox, $text AS text, $text AS context,
        99 AS confidence, $kind AS flag_tag,
-       CASE WHEN $reason IS NULL OR $reason = '' THEN 'manual add' ELSE $reason END AS reason,
+       coalesce(nullif($reason, ''), 'manual add') AS reason,
        NULL::VARCHAR AS entity_id, 'manual' AS source, 'accepted' AS status,
        $actor AS actor, now() AS ts,
        (SELECT case_id FROM documents WHERE id = $id) AS case_id,
