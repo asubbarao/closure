@@ -1,64 +1,60 @@
-# One rule: if `make setup` can build it or fetch it, it is not tracked.
-# Everything below is an output. The inputs are server/**, static/**, samples/gen/**,
-# tests/**, design/**, docs/**.
 
-# ── database ──────────────────────────────────────────────────────────────
-# closure.db holds the decision log (real reviewer state) alongside the corpus
-# tables rebuilt from samples/ on every boot.
+!samples/messy/.gitkeep
+.deps/
+.playwright-mcp/
+.tmp/
 *.db
 *.db.wal
-
+*.log
+**/.DS_Store
+# ── database ──────────────────────────────────────────────────────────────
+# ── fetched public court documents (scripts/fetch-public.sh) ─────────────
 # ── generated corpus (samples/gen/corpus.sql, run by scripts/setup.sh) ────
+# ── local scratch (never vendor binaries) ────────────────────────────────
+# ── OS / private ──────────────────────────────────────────────────────────
+# ── page rasters (scripts/setup.sh via pdf_to_png) ───────────────────────
+# ── redaction outputs + PDF lifecycle runtime (dir tree kept via .gitkeep) ─
+# ── stress fixtures (tests/stress/01c_generate_folder.sql, 05_failure_modes.sql) ─
+# ── test + tooling artifacts ──────────────────────────────────────────────
+# closure.db holds the decision log (real reviewer state) alongside the corpus
+# Everything below is an output. The inputs are server/**, static/**, samples/gen/**,
+# One rule: if `make setup` can build it or fetch it, it is not tracked.
+# Only stray rendered HTML is ignored; static/*.js is hand-authored and tracked.
+# tables rebuilt from samples/ on every boot.
+# tests/**, design/**, docs/**.
+Alok_FDE*
+data/**/_store_meta.json
+data/export/*_redacted.pdf
+data/source/*.pdf
+data/working/*.pdf
+data/working/registry/*.json
+exports/*.pdf
+exports/audit_sidecar.jsonl
+exports/audit.db
+exports/decisions/
+exports/export_map.csv
+node_modules/
+nohup.out
+pages/**/*.png
 samples/*.pdf
 samples/identities.json
 samples/manifest.json
-samples/watchlist.json
 samples/messy/**
-!samples/messy/.gitkeep
-
-# ── fetched public court documents (scripts/fetch-public.sh) ─────────────
-samples/public/*.pdf
 samples/public/_renders/
-
-# ── stress fixtures (tests/stress/01c_generate_folder.sql, 05_failure_modes.sql) ─
+samples/public/*.pdf
+samples/stress/*.err
 samples/stress/*.pdf
 samples/stress/fail/
 samples/stress/glob/
-samples/stress/glob5/
 samples/stress/glob20/
-samples/stress/*.err
-
-# ── page rasters (scripts/setup.sh via pdf_to_png) ───────────────────────
-pages/**/*.png
-
-# ── redaction outputs + PDF lifecycle runtime (dir tree kept via .gitkeep) ─
-exports/*.pdf
-exports/audit.db
-exports/audit_sidecar.jsonl
-exports/export_map.csv
-exports/decisions/
-data/working/*.pdf
-data/working/registry/*.json
-data/export/*_redacted.pdf
-data/source/*.pdf
-data/**/_store_meta.json
-
-# ── local scratch (never vendor binaries) ────────────────────────────────
-.deps/
-
-# ── test + tooling artifacts ──────────────────────────────────────────────
-node_modules/
-test-results/
-tests/e2e/test-results/
-tests/e2e/playwright-report/
-.playwright-mcp/
-.tmp/
-*.log
-nohup.out
-
-# Only stray rendered HTML is ignored; static/*.js is hand-authored and tracked.
+samples/stress/glob5/
+samples/watchlist.json
 static/*.html
+test-results/
+tests/e2e/playwright-report/
+tests/e2e/test-results/
 
-# ── OS / private ──────────────────────────────────────────────────────────
-**/.DS_Store
-Alok_FDE*
+# DuckDB runtime
+closure.db
+closure.db.wal
+closure.db.tmp/
