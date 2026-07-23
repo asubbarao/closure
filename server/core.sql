@@ -1,5 +1,7 @@
 -- core.sql — app data model.
 --
+-- Naming: verbose CTEs/tables (words_from_pdf_tokens, hits_from_type_rules);
+--   relation aliases 2–3 letters (doc, wrd, sug); 1-letter only in lambdas.
 -- Path IO (who does what):
 --   hostfs     discover on the machine: ls/lsr + is_file/file_extension/… (typed path cols)
 --   scalarfs   pin those paths as variables; pathvariable:/variable:/to_scalarfs_uri
@@ -23,7 +25,7 @@ FROM read_pdf('pathvariable:sample_pdfs');
 
 CREATE OR REPLACE VIEW v_src_pdf_words AS
 SELECT filename, parse_filename(filename, true) AS doc_filename,
-       page AS page_no, word, bbox_of(x0, y0, x1, y1) AS bbox, font_size
+       page AS page_no, word, (x0, y0, x1, y1)::bbox AS bbox, font_size
 FROM read_pdf_words('pathvariable:sample_pdfs');
 
 -- PDF-native lines (pdf extension). Geometry still comes from words → document_lines.
@@ -33,9 +35,12 @@ SELECT parse_filename(filename, true) AS doc_filename,
 FROM read_pdf_lines('pathvariable:sample_pdfs');
 
 CREATE OR REPLACE VIEW v_src_manifest AS
-SELECT parse_filename(f.filename, true) AS filename, f.case_no
-FROM (SELECT unnest(files) AS f FROM read_json_auto('pathvariable:manifest_path'))
-WHERE f.filename IS NOT NULL;
+SELECT parse_filename(file_entry.filename, true) AS filename, file_entry.case_no
+FROM (
+    SELECT unnest(files) AS file_entry
+    FROM read_json_auto('pathvariable:manifest_path')
+)
+WHERE file_entry.filename IS NOT NULL;
 
 CREATE OR REPLACE VIEW v_src_watchlist AS
 SELECT term, kind, case_no FROM read_json_auto('pathvariable:watchlist_path')
@@ -55,8 +60,9 @@ FROM read_html_objects(
 
 -- Template hrefs as rows (webbed extract — not a second product nav model)
 CREATE OR REPLACE VIEW v_src_template_links AS
-SELECT t.name AS template, lnk.text AS link_text, lnk.href, lnk.line_number
-FROM v_src_templates t, unnest(html_extract_links(t.body)) AS u(lnk);
+SELECT tpl.name AS template, lnk.text AS link_text, lnk.href, lnk.line_number
+FROM v_src_templates tpl,
+     unnest(html_extract_links(tpl.body)) AS link_rows(lnk);
 
 -- YAML config as columns (same file semantic_views loads as CREATE SEMANTIC VIEW).
 CREATE OR REPLACE VIEW v_src_semantic_yaml AS
@@ -74,21 +80,23 @@ SELECT DISTINCT case_no AS id, case_no,
 FROM v_src_manifest;
 
 CREATE OR REPLACE TABLE documents AS
-SELECT format('{:x}', rapidhash(m.case_no || chr(31) || p.filename)) AS id,
-       m.case_no AS case_id, p.filename, p.source_path,
-       p.page_count, p.width_pt, p.height_pt, p.file_size,
+SELECT format('{:x}', rapidhash(man.case_no || chr(31) || pdf.filename)) AS id,
+       man.case_no AS case_id, pdf.filename, pdf.source_path,
+       pdf.page_count, pdf.width_pt, pdf.height_pt, pdf.file_size,
        -- display pins (UI uses these; views do not recompute)
-       inflector_to_title_case(replace(p.filename, '_', ' ')) AS display_name,
-       hsize(p.file_size) AS size_label
-FROM v_src_pdf_info p JOIN v_src_manifest m ON m.filename = p.filename;
+       inflector_to_title_case(replace(pdf.filename, '_', ' ')) AS display_name,
+       hsize(pdf.file_size) AS size_label
+FROM v_src_pdf_info pdf
+JOIN v_src_manifest man ON man.filename = pdf.filename;
 
 -- Geometry + fixed review scale (680px wide). Downstream: SELECT scale, not recompute.
 CREATE OR REPLACE TABLE pages AS
-SELECT d.id AS document_id, p.page_no, p.width_pt, p.height_pt,
-       680.0 / p.width_pt AS scale,
+SELECT doc.id AS document_id, pdf.page_no, pdf.width_pt, pdf.height_pt,
+       680.0 / pdf.width_pt AS scale,
        680.0 AS display_w,
-       round(p.height_pt * 680.0 / p.width_pt, 1) AS display_h
-FROM v_src_pdf_pages p JOIN documents d ON d.filename = p.doc_filename;
+       round(pdf.height_pt * 680.0 / pdf.width_pt, 1) AS display_h
+FROM v_src_pdf_pages pdf
+JOIN documents doc ON doc.filename = pdf.doc_filename;
 
 -- Corpus = barcode-sanitizer shape: full intermediate tables, no lossy coalesce.
 --   word_raw          occurrence grain (all surface forms kept)
@@ -99,25 +107,25 @@ FROM v_src_pdf_pages p JOIN documents d ON d.filename = p.doc_filename;
 --   words             cheap app table: occurrence ⨝ types ⨝ primary kind
 
 CREATE OR REPLACE TABLE word_raw AS
-WITH base AS (
-    SELECT d.id AS document_id, d.case_id, w.page_no, w.word, w.bbox, w.font_size,
-           trim(w.word, '.,;:()"''[]') AS token,
-           round(w.bbox.y0, 0) AS y_key
-    FROM v_src_pdf_words w
-    JOIN documents d ON d.filename = w.doc_filename
-    WHERE length(trim(w.word, '.,;:()"''[]')) > 0
+WITH words_from_pdf AS (
+    SELECT doc.id AS document_id, doc.case_id, wrd.page_no, wrd.word, wrd.bbox, wrd.font_size,
+           trim(wrd.word, '.,;:()"''[]') AS token,
+           round(wrd.bbox.y0, 0) AS y_key
+    FROM v_src_pdf_words wrd
+    JOIN documents doc ON doc.filename = wrd.doc_filename
+    WHERE length(trim(wrd.word, '.,;:()"''[]')) > 0
 ),
-compacted AS (
+tokens_compacted AS (
     SELECT *,
            replace(replace(replace(replace(token, '-', ''), '(', ''), ')', ''), '.', '') AS token_compact
-    FROM base
+    FROM words_from_pdf
 )
 SELECT document_id, case_id, page_no, word, bbox, font_size, token, y_key,
        lower(unaccent(token)) AS token_norm,
        token_compact,
        length(token_compact) AS compact_len,
        try_cast(token_compact AS BIGINT) IS NOT NULL AS compact_is_int
-FROM compacted;
+FROM tokens_compacted;
 
 CREATE OR REPLACE TABLE token_types AS
 SELECT token, token_compact, compact_len, compact_is_int,
@@ -175,15 +183,15 @@ QUALIFY row_number() OVER (
 
 -- App table: everything useful precomputed for cheap filters/joins.
 CREATE OR REPLACE TABLE words AS
-SELECT r.document_id, r.case_id, r.page_no, r.word, r.bbox, r.font_size,
-       r.token, r.token_norm, r.token_compact, r.compact_len, r.compact_is_int, r.y_key,
-       length(r.token) AS token_len,
-       tt.type_label, tt.type_label_compact, tt.is_url, tt.hostname, tt.url_parts,
-       tk.pii_kind, tk.pii_confidence, tk.pii_rule, tk.evidence AS pii_evidence,
-       (tk.pii_kind IS NOT NULL) AS is_pii
-FROM word_raw r
-JOIN token_types tt ON tt.token = r.token
-LEFT JOIN token_kind tk ON tk.token = r.token;
+SELECT raw.document_id, raw.case_id, raw.page_no, raw.word, raw.bbox, raw.font_size,
+       raw.token, raw.token_norm, raw.token_compact, raw.compact_len, raw.compact_is_int, raw.y_key,
+       length(raw.token) AS token_len,
+       typ.type_label, typ.type_label_compact, typ.is_url, typ.hostname, typ.url_parts,
+       kind.pii_kind, kind.pii_confidence, kind.pii_rule, kind.evidence AS pii_evidence,
+       (kind.pii_kind IS NOT NULL) AS is_pii
+FROM word_raw raw
+JOIN token_types typ ON typ.token = raw.token
+LEFT JOIN token_kind kind ON kind.token = raw.token;
 
 CREATE OR REPLACE TABLE watchlist AS
 SELECT term, kind, case_no,
@@ -194,6 +202,83 @@ SELECT term, kind, case_no,
 FROM v_src_watchlist
 WHERE nullif(trim(term), '') IS NOT NULL;
 
+-- ── name matching: the same trace shape the token side already has ────────
+--   watchlist_tokens  prepared watchlist side (norm + splink phonetic key)
+--   name_scorers      thresholds as DATA — edit a row, not a WHERE clause
+--   name_rule_hits    EVERY scorer that fired, with its score (trace table)
+--   name_token_match  one primary scorer per (document token, watchlist term)
+--
+-- Why phonetic alongside edit distance: rapidfuzz catches a typo that keeps
+-- the spelling close (Zielinski→Zielinsky); double_metaphone catches the same
+-- name heard and respelled (Zielinski→Zelinsky), which edit distance scores
+-- too low to pass. A redaction miss is unredacted PII; a false positive is one
+-- reviewer click, and lands in the flagged band anyway. Recall earns its keep.
+--
+-- Note the prior phonetic attempt compared double_metaphone of the WHOLE term
+-- ('kaleb johnson' → KLPJNS) against a single document token ('kaleb' → KLP),
+-- so it could never match. Phonetic keys are per token on both sides.
+
+CREATE OR REPLACE TABLE watchlist_tokens AS
+SELECT term, kind, case_no, is_not_pii, tok AS term_token,
+       double_metaphone(tok)[1] AS term_dm
+FROM watchlist, unnest(term_tokens) AS token_rows(tok)
+WHERE length(tok) >= 3;
+
+CREATE OR REPLACE TABLE name_scorers AS
+SELECT * FROM (VALUES
+    ('edit',     88.0, 1),
+    ('jaro',     92.0, 2),
+    ('phonetic', 70.0, 3)
+) AS t(scorer, min_score, priority);
+
+CREATE OR REPLACE TABLE name_rule_hits AS
+WITH doc_tokens AS (
+    SELECT DISTINCT token_norm, double_metaphone(token_norm)[1] AS token_dm
+    FROM words WHERE length(token_norm) >= 3
+),
+scored AS (
+    SELECT d.token_norm, wt.term, wt.term_token, wt.term_dm, wt.kind,
+           wt.case_no, wt.is_not_pii,
+           rapidfuzz_ratio(d.token_norm, wt.term_token) AS edit_score,
+           100.0 * jaro_winkler_similarity(d.token_norm, wt.term_token) AS jaro_score,
+           d.token_dm = wt.term_dm AS same_sound
+    FROM doc_tokens d CROSS JOIN watchlist_tokens wt
+)
+SELECT token_norm, term, term_token, kind, case_no, is_not_pii,
+       'edit' AS scorer, s.priority, edit_score AS score,
+       format('rapidfuzz_ratio({}, {}) = {}', token_norm, term_token,
+              round(edit_score, 1)) AS evidence
+FROM scored, name_scorers s
+WHERE s.scorer = 'edit' AND edit_score >= s.min_score
+UNION ALL BY NAME
+SELECT token_norm, term, term_token, kind, case_no, is_not_pii,
+       'jaro' AS scorer, s.priority, jaro_score AS score,
+       format('jaro_winkler({}, {}) = {}', token_norm, term_token,
+              round(jaro_score, 1)) AS evidence
+FROM scored, name_scorers s
+WHERE s.scorer = 'jaro' AND jaro_score >= s.min_score
+UNION ALL BY NAME
+SELECT token_norm, term, term_token, kind, case_no, is_not_pii,
+       'phonetic' AS scorer, s.priority, jaro_score AS score,
+       format('double_metaphone({}) = {} = double_metaphone({})',
+              token_norm, term_dm, term_token) AS evidence
+FROM scored, name_scorers s
+WHERE s.scorer = 'phonetic' AND same_sound AND jaro_score >= s.min_score;
+
+-- One primary scorer per (document token, watchlist term) — not a coalesce.
+CREATE OR REPLACE TABLE name_token_match AS
+SELECT token_norm, term, term_token, kind, case_no, is_not_pii,
+       scorer, score, evidence
+FROM name_rule_hits
+QUALIFY row_number() OVER (
+    PARTITION BY token_norm, term ORDER BY score DESC, priority
+) = 1;
+
+-- Per-term candidate token set: the detector asks this, never re-scores inline.
+CREATE OR REPLACE TABLE name_term_tokens AS
+SELECT term, list(DISTINCT token_norm) AS matching_tokens
+FROM name_token_match GROUP BY term;
+
 -- Bloom over prepared watchlist tokens (v1.5.1 = bitfilters hash-compat pin).
 SET VARIABLE watchlist_bloom = (
     SELECT bitfilters_duckdb_bloom_filter_create('v1.5.1', 64, hv)
@@ -201,76 +286,86 @@ SET VARIABLE watchlist_bloom = (
         SELECT bitfilters_duckdb_hash('v1.5.1', term_norm) AS hv
         FROM watchlist WHERE NOT is_not_pii
         UNION ALL
-        SELECT bitfilters_duckdb_hash('v1.5.1', t) AS hv
-        FROM watchlist, unnest(term_tokens) AS u(t)
-        WHERE NOT is_not_pii AND length(t) >= 3
+        SELECT bitfilters_duckdb_hash('v1.5.1', tok) AS hv
+        FROM watchlist, unnest(term_tokens) AS token_rows(tok)
+        WHERE NOT is_not_pii AND length(tok) >= 3
     )
 );
 
 CREATE OR REPLACE TABLE document_lines AS
-SELECT w.document_id, w.page_no, w.case_id, w.y_key,
+SELECT wrd.document_id, wrd.page_no, wrd.case_id, wrd.y_key,
        dense_rank() OVER (
-           PARTITION BY w.document_id, w.page_no ORDER BY w.y_key
+           PARTITION BY wrd.document_id, wrd.page_no ORDER BY wrd.y_key
        )::INTEGER AS line_no,
-       string_agg(w.word, ' ' ORDER BY w.bbox.x0) AS line_text,
-       string_agg(w.token_norm, ' ' ORDER BY w.bbox.x0) AS line_norm,
-       list(w.token_norm ORDER BY w.bbox.x0) AS token_norms,
-       list(struct_pack(token_norm := w.token_norm, bbox := w.bbox)
-            ORDER BY w.bbox.x0) AS word_meta,
-       bbox_of(min(w.bbox.x0), min(w.bbox.y0), max(w.bbox.x1), max(w.bbox.y1)) AS bbox
-FROM words w
-GROUP BY w.document_id, w.page_no, w.case_id, w.y_key;
+       string_agg(wrd.word, ' ' ORDER BY wrd.bbox.x0) AS line_text,
+       string_agg(wrd.token_norm, ' ' ORDER BY wrd.bbox.x0) AS line_norm,
+       list(wrd.token_norm ORDER BY wrd.bbox.x0) AS token_norms,
+       list(struct_pack(token_norm := wrd.token_norm, bbox := wrd.bbox)
+            ORDER BY wrd.bbox.x0) AS word_meta,
+       (min(wrd.bbox.x0), min(wrd.bbox.y0), max(wrd.bbox.x1), max(wrd.bbox.y1))::bbox AS bbox
+FROM words wrd
+GROUP BY wrd.document_id, wrd.page_no, wrd.case_id, wrd.y_key;
 
 -- detect: join prepared columns only
 SET VARIABLE detect_run_id = (SELECT uuid()::VARCHAR);
 
-CREATE OR REPLACE TABLE _detect_hits AS
-WITH type_hits AS (
-    SELECT w.document_id, w.page_no, w.case_id,
-           w.token AS text, w.token AS context, w.bbox,
-           w.pii_kind AS kind,
-           w.pii_confidence AS confidence,
-           w.pii_rule || ': ' || w.pii_evidence AS reason,
+CREATE OR REPLACE TABLE detect_hits AS
+WITH hits_from_type_rules AS (
+    SELECT wrd.document_id, wrd.page_no, wrd.case_id,
+           wrd.token AS text, wrd.token AS context, wrd.bbox,
+           wrd.pii_kind AS kind,
+           wrd.pii_confidence AS confidence,
+           wrd.pii_rule || ': ' || wrd.pii_evidence AS reason,
            NULL::VARCHAR AS flag_tag,
            'detector:corpus' AS detector_key
-    FROM words w
-    WHERE w.is_pii
+    FROM words wrd
+    WHERE wrd.is_pii
 ),
-name_hits AS (
-    -- No CROSS JOIN / LATERAL: score in an inner SELECT, filter outer.
+-- Bloom admits lines holding an exact watchlist token (cheap, no join).
+-- Phonetic matches are spelled differently by definition, so they cannot pass
+-- a bloom — those lines come from name_token_match, which already knows them.
+lines_passing_watchlist_bloom AS (
+    SELECT document_id, page_no, y_key
+    FROM words
+    WHERE bitfilters_duckdb_bloom_filter_probe(
+        'v1.5.1', getvariable('watchlist_bloom'), token_norm)
+    GROUP BY document_id, page_no, y_key
+    UNION
+    SELECT wrd.document_id, wrd.page_no, wrd.y_key
+    FROM words wrd
+    JOIN name_token_match nm ON nm.token_norm = wrd.token_norm
+    GROUP BY wrd.document_id, wrd.page_no, wrd.y_key
+),
+scores_from_rapidfuzz_watchlist AS (
+    SELECT lin.document_id, lin.page_no, lin.case_id,
+           wl.term AS text, lin.line_text AS context, wl.kind, wl.is_not_pii,
+           greatest(
+               rapidfuzz_token_sort_ratio(lin.line_norm, wl.term_norm),
+               rapidfuzz_partial_ratio(lin.line_norm, wl.term_norm),
+               100.0 * jaro_winkler_similarity(lin.line_norm, wl.term_norm)
+           ) AS score,
+           list_filter(lin.word_meta,
+                       m -> list_contains(ntt.matching_tokens, m.token_norm)) AS matched_words
+    FROM document_lines lin
+    JOIN lines_passing_watchlist_bloom bloom
+      ON bloom.document_id = lin.document_id
+     AND bloom.page_no = lin.page_no
+     AND bloom.y_key = lin.y_key
+    JOIN watchlist wl ON wl.case_no = lin.case_id
+    JOIN name_term_tokens ntt ON ntt.term = wl.term
+),
+hits_from_name_match AS (
     SELECT document_id, page_no, case_id, text, context,
-           bbox_hull(list_transform(mw, m -> m.bbox)) AS bbox,
-           kind, greatest(1, least(99, round(sc)::INTEGER)) AS confidence,
+           bbox_hull(list_transform(matched_words, m -> m.bbox)) AS bbox,
+           kind, greatest(1, least(99, round(score)::INTEGER)) AS confidence,
            'rapidfuzz: ' || text AS reason,
            CASE WHEN is_not_pii THEN 'false_positive' END AS flag_tag,
            'detector:rapidfuzz-watchlist' AS detector_key
-    FROM (
-        SELECT l.document_id, l.page_no, l.case_id,
-               wl.term AS text, l.line_text AS context, wl.kind, wl.is_not_pii,
-               greatest(
-                   rapidfuzz_token_sort_ratio(l.line_norm, wl.term_norm),
-                   rapidfuzz_partial_ratio(l.line_norm, wl.term_norm),
-                   100.0 * jaro_winkler_similarity(l.line_norm, wl.term_norm)
-               ) AS sc,
-               list_filter(l.word_meta, m ->
-                   list_bool_or(list_transform(wl.term_tokens, t ->
-                       rapidfuzz_ratio(m.token_norm, t) >= 88
-                   ))) AS mw
-        FROM document_lines l
-        JOIN (
-            SELECT document_id, page_no, y_key
-            FROM words
-            WHERE bitfilters_duckdb_bloom_filter_probe(
-                'v1.5.1', getvariable('watchlist_bloom'), token_norm)
-            GROUP BY 1, 2, 3
-        ) cand ON cand.document_id = l.document_id AND cand.page_no = l.page_no
-             AND cand.y_key = l.y_key
-        JOIN watchlist wl ON wl.case_no = l.case_id
-    ) scored
-    WHERE sc >= 90 AND len(mw) > 0
+    FROM scores_from_rapidfuzz_watchlist
+    WHERE score >= 90 AND len(matched_words) > 0
 )
-SELECT * FROM type_hits
-UNION ALL BY NAME SELECT * FROM name_hits;
+SELECT * FROM hits_from_type_rules
+UNION ALL BY NAME SELECT * FROM hits_from_name_match;
 
 CREATE OR REPLACE TABLE entities AS
 SELECT format('{:x}', rapidhash(case_id || chr(31) || kind || chr(31) || canonical_text)) AS id,
@@ -279,79 +374,96 @@ SELECT format('{:x}', rapidhash(case_id || chr(31) || kind || chr(31) || canonic
        (kind IN ('SSN', 'DATE OF BIRTH') OR starts_with(kind, 'PHONE')) AS mono
 FROM (
     SELECT case_no AS case_id, term AS canonical_text, kind FROM watchlist
-    UNION SELECT case_id, text, kind FROM _detect_hits WHERE kind IS NOT NULL AND text IS NOT NULL
-) u GROUP BY case_id, canonical_text, kind;
+    UNION
+    SELECT case_id, text, kind FROM detect_hits
+    WHERE kind IS NOT NULL AND text IS NOT NULL
+) entity_seeds
+GROUP BY case_id, canonical_text, kind;
 
+-- Suggestions = mark grain (interactor state in a real app).
+--   bbox    PDF page space (source of truth)
+--   screen  canvas pin (screen_box) — scale applied once at write
 CREATE OR REPLACE TABLE suggestions AS
 SELECT format('{:x}', rapidhash(concat_ws(chr(31),
-           h.document_id, h.page_no, bbox_key(h.bbox), h.text, h.kind, 'ai'))) AS id,
-       h.document_id, h.page_no, h.bbox, h.text, coalesce(h.context, h.text) AS context,
-       h.confidence, h.flag_tag, h.reason, e.id AS entity_id, h.kind,
-       'ai' AS source, TIMESTAMP '1970-01-01' AS created_at, dl.line_no,
-       getvariable('detect_run_id') AS source_run_id, h.detector_key
-FROM _detect_hits h
-LEFT JOIN entities e ON e.case_id = h.case_id AND e.kind = h.kind
- AND (e.canonical_text = h.text OR starts_with(e.canonical_text, h.text) OR starts_with(h.text, e.canonical_text))
-LEFT JOIN document_lines dl ON dl.document_id = h.document_id AND dl.page_no = h.page_no
- AND dl.y_key = round(h.bbox.y0, 0);
+           hit.document_id, hit.page_no, bbox_key(hit.bbox), hit.text, hit.kind, 'ai'))) AS id,
+       hit.document_id, hit.page_no, hit.bbox,
+       bbox_to_screen(hit.bbox, pag.scale, 0) AS screen,
+       hit.text, coalesce(hit.context, hit.text) AS context,
+       hit.confidence, hit.flag_tag, hit.reason, ent.id AS entity_id, hit.kind,
+       'ai' AS source, TIMESTAMP '1970-01-01' AS created_at, lin.line_no,
+       getvariable('detect_run_id') AS source_run_id, hit.detector_key
+FROM detect_hits hit
+LEFT JOIN entities ent
+  ON ent.case_id = hit.case_id AND ent.kind = hit.kind
+ AND (ent.canonical_text = hit.text
+      OR starts_with(ent.canonical_text, hit.text)
+      OR starts_with(hit.text, ent.canonical_text))
+LEFT JOIN document_lines lin
+  ON lin.document_id = hit.document_id AND lin.page_no = hit.page_no
+ AND lin.y_key = round(hit.bbox.y0, 0)
+JOIN pages pag
+  ON pag.document_id = hit.document_id AND pag.page_no = hit.page_no;
 
-DROP TABLE IF EXISTS _detect_hits;
+DROP TABLE IF EXISTS detect_hits;
 
 -- ── FN remainder: PII-shaped tokens not already covered by a suggestion ────
--- Candidates only (still human-accepted). Catches misses type/name detectors left.
 INSERT INTO suggestions BY NAME
 SELECT format('{:x}', rapidhash(concat_ws(chr(31),
-           w.document_id, w.page_no, bbox_key(w.bbox), w.token, 'remainder'))) AS id,
-       w.document_id, w.page_no, w.bbox, w.token AS text, w.token AS context,
+           wrd.document_id, wrd.page_no, bbox_key(wrd.bbox), wrd.token, 'remainder'))) AS id,
+       wrd.document_id, wrd.page_no, wrd.bbox,
+       bbox_to_screen(wrd.bbox, pag.scale, 0) AS screen,
+       wrd.token AS text, wrd.token AS context,
        55 AS confidence, NULL::VARCHAR AS flag_tag,
        'remainder: residual PII-shaped token not in prior hits' AS reason,
-       NULL::VARCHAR AS entity_id, coalesce(w.pii_kind, 'UNKNOWN') AS kind,
+       NULL::VARCHAR AS entity_id, coalesce(wrd.pii_kind, 'UNKNOWN') AS kind,
        'ai' AS source, now() AS created_at, NULL::INTEGER AS line_no,
        getvariable('detect_run_id') AS source_run_id,
        'detector:remainder' AS detector_key
-FROM words w
-WHERE w.is_pii
+FROM words wrd
+JOIN pages pag
+  ON pag.document_id = wrd.document_id AND pag.page_no = wrd.page_no
+WHERE wrd.is_pii
   AND NOT exists (
-      SELECT 1 FROM suggestions s
-      WHERE s.document_id = w.document_id AND s.page_no = w.page_no
-        AND (lower(s.text) = lower(w.token)
-             OR contains(lower(s.context), lower(w.token)))
+      SELECT 1 FROM suggestions sug
+      WHERE sug.document_id = wrd.document_id AND sug.page_no = wrd.page_no
+        AND (lower(sug.text) = lower(wrd.token)
+             OR contains(lower(sug.context), lower(wrd.token)))
   );
 
 -- ── Judge panel (deterministic): pattern · context · prior ─────────────────
 -- FP path: keep / conflict → band flagged (human must dispose). No silent redact.
 CREATE OR REPLACE TABLE suggestion_judges AS
-WITH v AS (
-    SELECT s.id AS suggestion_id, s.text, s.context, s.kind, s.confidence,
-           s.flag_tag, s.detector_key,
+WITH votes_from_pattern_context_prior AS (
+    SELECT sug.id AS suggestion_id, sug.text, sug.context, sug.kind, sug.confidence,
+           sug.flag_tag, sug.detector_key,
            CASE
-               WHEN s.confidence >= 90 THEN 'redact'
-               WHEN s.confidence < 60 THEN 'keep'
+               WHEN sug.confidence >= 90 THEN 'redact'
+               WHEN sug.confidence < 60 THEN 'keep'
                ELSE 'review'
            END AS vote_pattern,
            CASE
-               WHEN s.flag_tag = 'false_positive' THEN 'keep'
-               WHEN ends_with(lower(trim(s.text)), ' street')
-                 OR contains(lower(s.context), ' street') THEN 'keep'
-               WHEN starts_with(lower(trim(s.text)), 'det.')
-                 OR starts_with(lower(trim(s.text)), 'ofc.')
-                 OR contains(lower(s.context), ' officer') THEN 'keep'
-               WHEN contains(lower(s.text), ' v. ')
-                 OR contains(lower(coalesce(s.kind, '')), 'citation') THEN 'keep'
-               WHEN s.confidence >= 70 THEN 'redact'
+               WHEN sug.flag_tag = 'false_positive' THEN 'keep'
+               WHEN ends_with(lower(trim(sug.text)), ' street')
+                 OR contains(lower(sug.context), ' street') THEN 'keep'
+               WHEN starts_with(lower(trim(sug.text)), 'det.')
+                 OR starts_with(lower(trim(sug.text)), 'ofc.')
+                 OR contains(lower(sug.context), ' officer') THEN 'keep'
+               WHEN contains(lower(sug.text), ' v. ')
+                 OR contains(lower(coalesce(sug.kind, '')), 'citation') THEN 'keep'
+               WHEN sug.confidence >= 70 THEN 'redact'
                ELSE 'review'
            END AS vote_context,
            CASE
-               WHEN s.flag_tag = 'false_positive' THEN 'keep'
-               WHEN s.kind IN ('SSN', 'DATE OF BIRTH')
-                 OR starts_with(coalesce(s.kind, ''), 'PHONE') THEN 'redact'
-               WHEN contains(lower(coalesce(s.kind, '')), 'not pii')
-                 OR contains(lower(coalesce(s.kind, '')), 'officer')
-                 OR contains(lower(coalesce(s.kind, '')), 'street')
-                 OR contains(lower(coalesce(s.kind, '')), 'citation') THEN 'keep'
+               WHEN sug.flag_tag = 'false_positive' THEN 'keep'
+               WHEN sug.kind IN ('SSN', 'DATE OF BIRTH')
+                 OR starts_with(coalesce(sug.kind, ''), 'PHONE') THEN 'redact'
+               WHEN contains(lower(coalesce(sug.kind, '')), 'not pii')
+                 OR contains(lower(coalesce(sug.kind, '')), 'officer')
+                 OR contains(lower(coalesce(sug.kind, '')), 'street')
+                 OR contains(lower(coalesce(sug.kind, '')), 'citation') THEN 'keep'
                ELSE 'review'
            END AS vote_prior
-    FROM suggestions s
+    FROM suggestions sug
 )
 SELECT suggestion_id, vote_pattern, vote_context, vote_prior,
        CASE
@@ -363,7 +475,7 @@ SELECT suggestion_id, vote_pattern, vote_context, vote_prior,
        END AS panel,
        'pattern=' || vote_pattern || ' context=' || vote_context ||
            ' prior=' || vote_prior AS judge_reason
-FROM v;
+FROM votes_from_pattern_context_prior;
 
 INSERT INTO pipeline_runs BY NAME
 SELECT getvariable('detect_run_id') AS run_id,
@@ -390,10 +502,11 @@ WHERE kind = 'decision' AND suggestion_id IS NOT NULL
 GROUP BY suggestion_id;
 
 CREATE OR REPLACE VIEW v_manual_suggestions AS
-SELECT d.suggestion_id AS id, d.document_id, d.page_no, d.bbox,
-       d.text, coalesce(d.context, d.text) AS context,
-       coalesce(d.confidence, 99) AS confidence, d.flag_tag, d.reason, d.entity_id,
-       NULL::VARCHAR AS kind, 'manual' AS source, d.ts AS created_at, dl.line_no,
+SELECT add.suggestion_id AS id, add.document_id, add.page_no, add.bbox,
+       bbox_to_screen(add.bbox, pag.scale, 0) AS screen,
+       add.text, coalesce(add.context, add.text) AS context,
+       coalesce(add.confidence, 99) AS confidence, add.flag_tag, add.reason, add.entity_id,
+       NULL::VARCHAR AS kind, 'manual' AS source, add.ts AS created_at, lin.line_no,
        NULL::VARCHAR AS source_run_id, 'manual' AS detector_key
 FROM (
     SELECT suggestion_id,
@@ -410,47 +523,49 @@ FROM (
     FROM v_src_decisions
     WHERE kind = 'added' AND suggestion_id IS NOT NULL
     GROUP BY suggestion_id
-) d
-LEFT JOIN document_lines dl
-  ON dl.document_id = d.document_id
- AND dl.page_no = d.page_no
- AND dl.y_key = round(d.bbox.y0, 0);
+) add
+LEFT JOIN document_lines lin
+  ON lin.document_id = add.document_id
+ AND lin.page_no = add.page_no
+ AND lin.y_key = round(add.bbox.y0, 0)
+JOIN pages pag
+  ON pag.document_id = add.document_id AND pag.page_no = add.page_no;
 
--- FP/FN product fold: judge panel drives band; humans still dispose.
+-- FP/FN product fold: status/band only. Geometry is already first-class on the row.
 CREATE OR REPLACE VIEW v_suggestions AS
-WITH base AS (
-    SELECT id, document_id, page_no, bbox, text, context, confidence, flag_tag, reason,
+WITH suggestions_ai_and_manual AS (
+    SELECT id, document_id, page_no, bbox, screen, text, context, confidence, flag_tag, reason,
            entity_id, source, created_at, kind AS kind_stored, line_no, source_run_id, detector_key
     FROM suggestions
     UNION ALL BY NAME
-    SELECT id, document_id, page_no, bbox, text, context, confidence, flag_tag, reason,
+    SELECT id, document_id, page_no, bbox, screen, text, context, confidence, flag_tag, reason,
            entity_id, source, created_at, kind, line_no, source_run_id, detector_key
     FROM v_manual_suggestions
 )
-SELECT b.id, b.document_id, b.page_no, b.line_no, b.bbox,
-       b.text, b.context, b.confidence, b.flag_tag, b.reason, b.entity_id, b.source, b.created_at,
-       b.source_run_id, b.detector_key,
-       coalesce(e.kind, b.kind_stored) AS kind, e.canonical_text AS entity_text,
-       coalesce(ld.status, CASE b.source WHEN 'manual' THEN 'accepted' ELSE 'pending' END) AS status,
+SELECT row.id, row.document_id, row.page_no, row.line_no, row.bbox, row.screen,
+       row.text, row.context, row.confidence, row.flag_tag, row.reason, row.entity_id, row.source, row.created_at,
+       row.source_run_id, row.detector_key,
+       coalesce(ent.kind, row.kind_stored) AS kind, ent.canonical_text AS entity_text,
+       coalesce(dec.status, CASE row.source WHEN 'manual' THEN 'accepted' ELSE 'pending' END) AS status,
        -- FLAGGED = likely FP or judge conflict — never bulk-accepted
        CASE
-           WHEN b.flag_tag = 'false_positive' THEN 'flagged'
-           WHEN j.panel IN ('keep', 'conflict') THEN 'flagged'
-           WHEN b.confidence >= 90 AND coalesce(j.panel, 'redact') = 'redact' THEN 'high'
-           WHEN b.confidence >= 60 THEN 'review'
+           WHEN row.flag_tag = 'false_positive' THEN 'flagged'
+           WHEN jdg.panel IN ('keep', 'conflict') THEN 'flagged'
+           WHEN row.confidence >= 90 AND coalesce(jdg.panel, 'redact') = 'redact' THEN 'high'
+           WHEN row.confidence >= 60 THEN 'review'
            ELSE 'flagged'
        END AS band,
-       coalesce(j.panel, 'none') AS judge_panel,
-       coalesce(j.vote_pattern, '') AS vote_pattern,
-       coalesce(j.vote_context, '') AS vote_context,
-       coalesce(j.vote_prior, '') AS vote_prior,
-       coalesce(j.judge_reason, b.reason) AS judge_reason,
-       CASE WHEN b.entity_id IS NOT NULL THEN 'e:' || b.entity_id
-            ELSE 't:' || lower(b.text) || '|' || coalesce(e.kind, b.kind_stored) END AS group_key
-FROM base b
-LEFT JOIN entities e ON e.id = b.entity_id
-LEFT JOIN v_latest_decision ld ON ld.suggestion_id = b.id
-LEFT JOIN suggestion_judges j ON j.suggestion_id = b.id;
+       coalesce(jdg.panel, 'none') AS judge_panel,
+       coalesce(jdg.vote_pattern, '') AS vote_pattern,
+       coalesce(jdg.vote_context, '') AS vote_context,
+       coalesce(jdg.vote_prior, '') AS vote_prior,
+       coalesce(jdg.judge_reason, row.reason) AS judge_reason,
+       CASE WHEN row.entity_id IS NOT NULL THEN 'e:' || row.entity_id
+            ELSE 't:' || lower(row.text) || '|' || coalesce(ent.kind, row.kind_stored) END AS group_key
+FROM suggestions_ai_and_manual row
+LEFT JOIN entities ent ON ent.id = row.entity_id
+LEFT JOIN v_latest_decision dec ON dec.suggestion_id = row.id
+LEFT JOIN suggestion_judges jdg ON jdg.suggestion_id = row.id;
 
 -- After v_suggestions exists (SUMMARIZE cannot precede CREATE VIEW).
 COPY (FROM (SUMMARIZE v_suggestions)) TO 'variable:profile_suggestions' (FORMAT variable, LIST rows);
@@ -472,17 +587,17 @@ GROUP BY document_id, page_no, case_id;
 
 -- read_lines earned: ±3 lines around each suggestion via scalarfs page_uri.
 CREATE OR REPLACE VIEW v_suggestion_line_context AS
-SELECT s.id AS suggestion_id, s.document_id, s.page_no, s.line_no AS hit_line,
-       u.line_number, u.content AS line_text,
-       abs(u.line_number - s.line_no)::INTEGER AS dist
-FROM v_suggestions s
-JOIN v_page_text p
-  ON p.document_id = s.document_id AND p.page_no = s.page_no
+SELECT sug.id AS suggestion_id, sug.document_id, sug.page_no, sug.line_no AS hit_line,
+       ln.line_number, ln.content AS line_text,
+       abs(ln.line_number - sug.line_no)::INTEGER AS dist
+FROM v_suggestions sug
+JOIN v_page_text ptx
+  ON ptx.document_id = sug.document_id AND ptx.page_no = sug.page_no
 CROSS JOIN LATERAL (
-    SELECT line_number, content FROM read_lines_lateral(p.page_uri)
-) u
-WHERE s.line_no IS NOT NULL
-  AND abs(u.line_number - s.line_no) <= 3;
+    SELECT line_number, content FROM read_lines_lateral(ptx.page_uri)
+) ln
+WHERE sug.line_no IS NOT NULL
+  AND abs(ln.line_number - sug.line_no) <= 3;
 
 -- dns earned: resolve hostnames extracted from document tokens (lazy — network on read).
 -- GROUP BY hostname collapses the grain (no DISTINCT subquery, no token_n count).
@@ -495,6 +610,7 @@ WHERE hostname IS NOT NULL AND nullif(hostname, '') IS NOT NULL
 GROUP BY hostname;
 
 CREATE OR REPLACE VIEW v_decide_targets AS
-SELECT s.id AS suggestion_id, s.document_id, d.case_id, s.text, s.entity_id, s.entity_text,
-       s.band, s.status, s.group_key, s.confidence, coalesce(s.flag_tag, '') AS flag_tag
-FROM v_suggestions s JOIN documents d ON d.id = s.document_id;
+SELECT sug.id AS suggestion_id, sug.document_id, doc.case_id, sug.text, sug.entity_id, sug.entity_text,
+       sug.band, sug.status, sug.group_key, sug.confidence, coalesce(sug.flag_tag, '') AS flag_tag
+FROM v_suggestions sug
+JOIN documents doc ON doc.id = sug.document_id;

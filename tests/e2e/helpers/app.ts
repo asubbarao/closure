@@ -2,6 +2,22 @@ import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 /** Paths match server/routes.sql product + catalog surface. */
 
+/** PDF page space — first-class bbox type on the mark grain. */
+export type Bbox = {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+};
+
+/** Canvas screen_box (x,y,w,h) → CSS left/top/width/height. */
+export type ScreenBox = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
 export type Suggestion = {
   id: string;
   status: string;
@@ -10,7 +26,43 @@ export type Suggestion = {
   page_no?: number;
   text: string;
   entity_id: string | null;
+  bbox?: Bbox;
+  screen?: ScreenBox;
+  confidence?: number;
 };
+
+export function assertValidBbox(b: Bbox, label = "bbox") {
+  for (const k of ["x0", "y0", "x1", "y1"] as const) {
+    expect(typeof b[k], `${label}.${k} number`).toBe("number");
+    expect(Number.isFinite(b[k]), `${label}.${k} finite`).toBeTruthy();
+  }
+  expect(b.x1, `${label} x1 >= x0`).toBeGreaterThanOrEqual(b.x0);
+  expect(b.y1, `${label} y1 >= y0`).toBeGreaterThanOrEqual(b.y0);
+}
+
+export function assertValidScreen(s: ScreenBox, label = "screen") {
+  for (const k of ["x", "y", "w", "h"] as const) {
+    expect(typeof s[k], `${label}.${k} number`).toBe("number");
+    expect(Number.isFinite(s[k]), `${label}.${k} finite`).toBeTruthy();
+  }
+  expect(s.w, `${label}.w > 0`).toBeGreaterThan(0);
+  expect(s.h, `${label}.h > 0`).toBeGreaterThan(0);
+  expect(s.x, `${label}.x >= 0`).toBeGreaterThanOrEqual(0);
+  expect(s.y, `${label}.y >= 0`).toBeGreaterThanOrEqual(0);
+}
+
+/** screen should be bbox × scale (top-left, no y-flip). */
+export function assertScreenMatchesBbox(
+  b: Bbox,
+  s: ScreenBox,
+  scale: number,
+  tol = 1.5
+) {
+  expect(Math.abs(s.x - b.x0 * scale)).toBeLessThanOrEqual(tol);
+  expect(Math.abs(s.y - b.y0 * scale)).toBeLessThanOrEqual(tol);
+  expect(Math.abs(s.w - (b.x1 - b.x0) * scale)).toBeLessThanOrEqual(tol);
+  expect(Math.abs(s.h - (b.y1 - b.y0) * scale)).toBeLessThanOrEqual(tol);
+}
 
 export async function openLibrary(page: Page) {
   await page.goto("/");
@@ -133,4 +185,27 @@ export const api = {
     `/api/cases/${encodeURIComponent(caseId)}/undo?actor=${actor}`,
   export: (caseId: string) =>
     `/api/cases/${encodeURIComponent(caseId)}/export`,
+  mark: (
+    docId: string,
+    q: {
+      page: number;
+      x0: number;
+      y0: number;
+      x1: number;
+      y1: number;
+      text: string;
+      actor?: string;
+    }
+  ) => {
+    const p = new URLSearchParams({
+      page: String(q.page),
+      x0: String(q.x0),
+      y0: String(q.y0),
+      x1: String(q.x1),
+      y1: String(q.y1),
+      text: q.text,
+      actor: q.actor ?? "e2e",
+    });
+    return `/api/documents/${encodeURIComponent(docId)}/marks?${p}`;
+  },
 };

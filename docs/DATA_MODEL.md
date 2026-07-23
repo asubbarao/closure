@@ -10,6 +10,31 @@
 | **No lossy count boards** | Product surfaces are grains (rows). Profiles use `SUMMARIZE` / catalog. Filter dimensions; don’t invent `pending_count`. |
 | **Join, don’t nest** | Prefer `JOIN` of named relations over correlated scalar subqueries / `FROM (SELECT DISTINCT…)`. |
 | **Semantic YAML** | First-class schema graph (`closure_semantic.yaml`): tables, joins, dimensions. Not a KPI laundry. |
+| **SQL is verbose** | CTEs / tables / views read as English: `words_from_pdf`, `batches_from_user_events`, `hits_from_type_rules`. |
+| **Surface, not mega-table** | If many handlers re-spell the same multi-join, name it once as an unmat **surface** view (`v_case_surface`). Do **not** materialize a denormalized “page DTO” table — live folds (status, export_blocked) would go stale. |
+| **Geometry is first-class** | `bbox` (PDF) + `screen` (`screen_box`) on the mark grain — STRUCT types, not four flat columns or parse soup. Status/band stay live folds. UNNEST ok at a SQL edge if needed. |
+| **Tera is the JSON edge only** | `tera_render(template, JSON)` — surfaces hold typed columns; `v_*_ctx` only maps column → template key. No geometry math in the tera bag. |
+
+### When the multi-join / tera bag makes you ask “is the model wrong?”
+
+| Symptom | Wrong fix | Right fix |
+|---------|-----------|-----------|
+| Library / stream / audit each re-join packs | Wide `case_ui` **table** | One `v_case_surface` unmat view |
+| Review re-joins case + doc + page + marks | Snapshot page table | `v_document_page_surface` |
+| Canvas re-runs screen math every request | Flat left/top/width/height laundry | Pin **`screen screen_box`** on `suggestions` at write |
+| Fat `json_object` with `greatest` / path math | Bigger template logic | Pins + surface columns; ctx is a pure map |
+| Export gate everywhere | Cache on `cases` without refresh | `v_export_blocked` live fold on the case surface |
+
+Grain tables stay pure (`cases`, `documents`, `entities`, `suggestions`, `decisions`). Surfaces are **named joins of those grains**, not a second truth.
+
+### Naming
+
+| Kind | Style |
+|------|--------|
+| Tables, views, CTEs | Verbose snake_case — clarity over brevity |
+| View prefix | `v_*` is fine (`v_suggestions`, `v_page_marks`) |
+| Relation aliases | **2–3 letters** (`sug`, `doc`, `pag`, `cas`, `ent`, `jdg`) |
+| Lambdas only | 1-letter ok: `list_transform(col, x -> x.bbox)` |
 
 | What | How |
 |------|-----|
@@ -17,7 +42,7 @@
 | **Host tree** | `v_hostfs` — path scalars every query |
 | **Tables** | Facts + display pins; durable: `decisions`, … |
 | **Live views** | Decision fold, mark px, export gate |
-| **Page pipeline** | named packs → `JOIN` → `v_*_ctx` → `v_*_html`/`v_*_page` |
+| **Page pipeline** | grain → **surface** (`v_case_surface`, `v_document_page_surface`) → `v_*_ctx` → html |
 | **HTTP** | `v_route_get` installs GETs; POSTs nest under resources |
 | **Checks** | `smoke.sql` + e2e against catalog/product APIs |
 
@@ -27,7 +52,7 @@ Page HTML is **VARCHAR** from `tera_render` only — never `parse_html` on pages
 
 - **`decisions`** — append-only; never UPDATE status in place  
 - **`pipeline_runs`**, **`llm_calls`**, **`run_artifacts`** — optional telemetry  
-- **`bbox` TYPE + macros** — pack once at the edge; unpack once per destination (`bbox_px` / `bbox_pdf` / `bbox_key`)
+- **Geometry types** — `bbox` (PDF), `screen_box` (canvas), `redact_box` (export). Conversions: `bbox_to_screen` / `bbox_to_redact` / `bbox_key` / `bbox_hull` only.
 
 ## Boot corpus (`core.sql`)
 
@@ -36,6 +61,7 @@ Page HTML is **VARCHAR** from `tera_render` only — never `parse_html` on pages
 | `cases` / `documents` / `pages` | Multi-route grain; display pins (`display_name`, `scale`, …) kill recompute |
 | `words` / token spine | Detect + remainder + bloom re-run; expensive if re-extracted |
 | `entities` / `suggestions` | Product grain; bulk decide, marks, export, audit all join here |
+| `suggestions.bbox` / `.screen` | First-class geometry (`bbox`, `screen_box` types); mark interactor grain |
 | `suggestion_judges` | FP panel; fold into `v_suggestions.band` for every consumer |
 | `decisions` | Append-only legal log |
 
@@ -67,8 +93,10 @@ FROM (SUMMARIZE v_suggestions);
 | `v_suggestions` | Fold → `status` / `band` |
 | `v_page_marks` | Canvas px (bbox_px once) |
 | `v_export_blocked` / `v_export_plans` | Export gate + redact plan |
-| `v_case_*` packs | Multi-consumer list grains → JOIN in ctx |
-| `v_*_ctx` / `v_*_html` | tera bags + `path` + `html` |
+| **`v_case_surface`** | Case spine: case + documents[] + entities[] + export_blocked |
+| **`v_document_page_surface`** | Review spine: doc + case + page pins + marks |
+| `v_case_*` packs | List grains feeding the case surface |
+| `v_*_ctx` / `v_*_html` | tera bags from surface (+ page-only packs) |
 | `v_decide_targets` | POST decision source |
 | `v_route_get` | GET path catalog |
 

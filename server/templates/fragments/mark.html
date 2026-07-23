@@ -1,5 +1,6 @@
+{# m.screen is screen_box STRUCT (x,y,w,h) — canvas CSS left/top/width/height #}
 <div class="mark {{ m.status }}{% if m.band == 'flagged' and m.status == 'pending' %} flagged{% endif %}"
      data-id="{{ m.id }}" data-status="{{ m.status }}" data-band="{{ m.band }}"
      {% if m.entity_id %}data-entity-id="{{ m.entity_id }}"{% endif %}
-     style="left:{{ m.left_px }}px;top:{{ m.top_px }}px;width:{{ m.width }}px;height:{{ m.height }}px"
+     style="left:{{ m.screen.x }}px;top:{{ m.screen.y }}px;width:{{ m.screen.w }}px;height:{{ m.screen.h }}px"
      title="{{ m.text }} · {{ m.band }} · {{ m.confidence }}"></div>
