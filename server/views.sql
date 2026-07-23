@@ -1,22 +1,17 @@
--- views.sql — thin projections over a robust table model + live folds.
+-- views.sql — live folds + page edge over a table model.
 --
--- Layer rule (extend by layer, not by stuffing page bags):
---   1. TABLES (core.sql)  stable facts + display pins (display_name, scale, kind_label, …)
---   2. LIVE VIEWS         decision fold, marks px, export gate (change every POST)
---   3. PAGE VIEWS         tera → parse_html only (list-pack at the edge)
+-- Table rule (adversarial): create a TABLE only when many consumers re-run the
+-- same work, and "it makes everything downstream simpler/robust" is true.
+-- Prefer JOINs of named relations over correlated scalar subqueries.
 --
--- Prefer: add a column to a table/grain → join it.
--- Avoid: re-deriving labels/geometry in every page view.
---
--- Catalog:  SELECT * FROM v_cols
--- Rollups: FROM … SELECT … GROUP BY ALL (Friendly SQL). SUMMARIZE for profiles.
--- Open:    GET /api/catalog/:relation/rows|summary
+-- Lossy count* boards are not product. Grain rows + SUMMARIZE/semantic dims.
+-- Semantic graph: server/config/closure_semantic.yaml (joins + dimensions).
+-- Catalog:  SELECT * FROM v_cols · GET /api/catalog/:relation/rows|summary
 
 DROP SEMANTIC VIEW IF EXISTS suggestion_metrics;
 DROP SEMANTIC VIEW IF EXISTS closure;
 CREATE SEMANTIC VIEW closure FROM YAML FILE 'server/config/closure_semantic.yaml';
 
--- Allowlist for GET /api/catalog/:relation/rows|summary (not every internal table).
 CREATE OR REPLACE VIEW v_cols AS
 SELECT table_name AS relation,
        array_agg([column_name, data_type] ORDER BY ordinal_position) AS cols
@@ -24,7 +19,7 @@ FROM information_schema.columns
 WHERE table_schema = 'main'
   AND table_name IN (
       'cases', 'documents', 'pages', 'words', 'entities', 'suggestions', 'decisions',
-      'v_suggestions', 'v_decide_targets', 'v_entity_stream', 'v_nav',
+      'suggestion_judges', 'v_suggestions', 'v_decide_targets', 'v_nav',
       'v_export_blocked', 'v_export_plans', 'v_audit', 'v_decision_batches',
       'v_history_events', 'v_hostfs', 'v_zips', 'v_shell_patterns',
       'v_url_hosts', 'v_suggestion_line_context', 'v_cols', 'v_page_marks',
@@ -34,12 +29,7 @@ WHERE table_schema = 'main'
   )
 GROUP BY table_name;
 
--- ── live grains (thin; join tables, do not re-pin display) ─────────────────
-
-CREATE OR REPLACE VIEW v_doc_ui AS
-SELECT id, case_id, filename, page_count, width_pt, height_pt,
-       file_size, source_path, display_name, size_label
-FROM documents;
+-- ── live folds (change every decision POST) ────────────────────────────────
 
 CREATE OR REPLACE VIEW v_page_marks AS
 SELECT s.id, s.document_id, s.page_no, s.line_no, s.bbox,
@@ -48,14 +38,6 @@ SELECT s.id, s.document_id, s.page_no, s.line_no, s.bbox,
 FROM v_suggestions s
 JOIN pages p ON p.document_id = s.document_id AND p.page_no = s.page_no;
 
-CREATE OR REPLACE VIEW v_page_words AS
-SELECT w.document_id, w.page_no, w.word, w.bbox, w.font_size,
-       UNNEST(bbox_px(w.bbox, p.scale, 4)),
-       round(coalesce(w.font_size, 9) * p.scale * 0.95, 1) AS font_px
-FROM words w
-JOIN pages p ON p.document_id = w.document_id AND p.page_no = w.page_no;
-
--- Append-only decision log (legal reconstructability). Never rewrites history.
 CREATE OR REPLACE VIEW v_audit AS
 SELECT l.ts,
        coalesce(l.actor, 'reviewer') AS actor,
@@ -83,19 +65,7 @@ FROM documents d
 LEFT JOIN v_suggestions s ON s.document_id = d.id
 GROUP BY d.case_id;
 
--- Friendly SQL: GROUP BY ALL over suggestions — no semantic metric "n".
-CREATE OR REPLACE VIEW v_entity_stream AS
-FROM entities e
-LEFT JOIN (
-    FROM v_suggestions
-    SELECT entity_id, count() AS hit_count
-    GROUP BY ALL
-) m ON m.entity_id = e.id
-SELECT e.case_id, e.id AS entity_id, e.canonical_text, e.kind,
-       e.kind_label, e.mono, m.hit_count;
-
 CREATE OR REPLACE VIEW v_nav AS
--- AS case_id/href/text on every arm — UNION ALL BY NAME matches names.
 SELECT case_id,
        '/documents/' || id AS href,
        filename AS text
@@ -112,14 +82,26 @@ SELECT kind, suggestion_id, status, actor, reason, ts AS event_ts,
        document_id, case_id, text, batch_id, batch_label, undoes_batch_id
 FROM v_src_decisions WHERE nullif(batch_id, '') IS NOT NULL;
 
+CREATE OR REPLACE VIEW v_undone_batches AS
+SELECT undoes_batch_id AS batch_id
+FROM v_history_events
+WHERE undoes_batch_id IS NOT NULL
+GROUP BY undoes_batch_id;
+
 CREATE OR REPLACE VIEW v_decision_batches AS
-SELECT e.batch_id, min(e.event_ts) AS ts, max(e.event_ts) AS ts_end,
-       any_value(e.actor) AS actor, any_value(e.batch_label) AS label,
-       count()::INTEGER AS decision_count,
-       bool_or(e.undoes_batch_id IS NOT NULL) AS is_undo,
-       max(e.undoes_batch_id) AS undoes_batch_id, max(e.case_id) AS case_id,
-       exists (SELECT 1 FROM v_history_events u WHERE u.undoes_batch_id = e.batch_id) AS undone
-FROM v_history_events e GROUP BY e.batch_id;
+SELECT e.batch_id, e.ts, e.ts_end, e.actor, e.label, e.suggestion_ids,
+       e.is_undo, e.undoes_batch_id, e.case_id,
+       u.batch_id IS NOT NULL AS undone
+FROM (
+    SELECT batch_id, min(event_ts) AS ts, max(event_ts) AS ts_end,
+           any_value(actor) AS actor, any_value(batch_label) AS label,
+           list(suggestion_id ORDER BY event_ts) AS suggestion_ids,
+           bool_or(undoes_batch_id IS NOT NULL) AS is_undo,
+           max(undoes_batch_id) AS undoes_batch_id, max(case_id) AS case_id
+    FROM v_history_events
+    GROUP BY batch_id
+) e
+LEFT JOIN v_undone_batches u ON u.batch_id = e.batch_id;
 
 CREATE OR REPLACE VIEW v_export_plans AS
 WITH boxes AS (
@@ -138,122 +120,107 @@ FROM v_export_blocked b
 JOIN documents d ON d.case_id = b.case_id
 LEFT JOIN boxes x ON x.document_id = d.id;
 
--- ── page HTML ──────────────────────────────────────────────────────────────
--- Separation: SQL builds ctx (bags) · tera pages/fragments render · static CSS/JS.
--- VARCHAR html only — never parse_html on pages (voids <script src> → app.js dead).
--- template_path glob loads fragments/ for {% include %}.
+-- ── case-grain packs (multi-consumer: case / stream / audit ctx) ────────────
+-- Earned as named views so page edges JOIN instead of correlated SELECTs.
 
-CREATE OR REPLACE VIEW v_tpl_entities AS
-SELECT case_id,
-       list(struct_pack(
-           id := entity_id, canonical_text := canonical_text, kind := kind,
-           kind_label := kind_label, n := hit_count, mono := mono
-       ) ORDER BY hit_count DESC NULLS LAST, kind, canonical_text) AS entities
-FROM v_entity_stream
+CREATE OR REPLACE VIEW v_case_documents AS
+SELECT case_id, list(d ORDER BY filename) AS documents
+FROM documents d
 GROUP BY case_id;
 
-CREATE OR REPLACE VIEW v_tpl_case AS
-SELECT c.id AS case_id,
-       struct_pack(id := c.id, case_no := c.case_no, title := c.title) AS case_row,
-       coalesce(e.entities, []) AS entities,
-       coalesce(b.export_blocked, false) AS export_blocked
-FROM cases c
-LEFT JOIN v_tpl_entities e ON e.case_id = c.id
-LEFT JOIN v_export_blocked b ON b.case_id = c.id;
+CREATE OR REPLACE VIEW v_case_entities AS
+SELECT case_id,
+       list(struct_pack(
+           id := id, canonical_text := canonical_text, kind := kind,
+           kind_label := kind_label, mono := mono
+       ) ORDER BY kind, canonical_text) AS entities
+FROM entities
+GROUP BY case_id;
 
--- Context views (JSON) then thin tera_render.
+CREATE OR REPLACE VIEW v_case_audit_recent AS
+SELECT case_id,
+       list(struct_pack(
+           ts_short := strftime(ts, '%H:%M'), action := action, actor := actor,
+           target := coalesce(target, ''), reason := coalesce(reason, '')
+       ) ORDER BY ts DESC) AS audit
+FROM v_audit
+GROUP BY case_id;
+
+CREATE OR REPLACE VIEW v_case_batches AS
+SELECT case_id,
+       list(struct_pack(
+           batch_id := batch_id,
+           ts_short := strftime(ts, '%Y-%m-%d %H:%M'),
+           actor := actor,
+           label := label,
+           members := array_to_string(suggestion_ids, ', '),
+           is_undo := is_undo,
+           undone := undone
+       ) ORDER BY ts DESC) AS batches
+FROM v_decision_batches
+GROUP BY case_id;
+
+CREATE OR REPLACE VIEW v_case_events AS
+SELECT case_id,
+       list(struct_pack(
+           ts_short := strftime(ts, '%Y-%m-%d %H:%M:%S'),
+           action := action,
+           status := coalesce(status, ''),
+           actor := actor,
+           target := coalesce(target, ''),
+           reason := coalesce(reason, ''),
+           band := coalesce(band, ''),
+           batch_label := coalesce(batch_label, ''),
+           is_undo := undoes_batch_id IS NOT NULL
+       ) ORDER BY ts DESC) AS events
+FROM v_audit
+GROUP BY case_id;
+
+CREATE OR REPLACE VIEW v_page_mark_lists AS
+SELECT document_id, page_no, list(m) AS marks
+FROM v_page_marks m
+GROUP BY document_id, page_no;
+
+-- ── page edge: JOIN packs → json_object → tera ─────────────────────────────
 
 CREATE OR REPLACE VIEW v_case_ctx AS
-SELECT t.case_id,
+SELECT c.id AS case_id,
        json_object(
-           'case', t.case_row,
-           'documents', coalesce((
-               SELECT list(u ORDER BY u.filename) FROM v_doc_ui u WHERE u.case_id = t.case_id
-           ), []),
-           -- Tall grains: GROUP BY ALL (friendly SQL), not semantic metric laundry
-           'by_status', coalesce((
-               SELECT list(struct_pack(status := status, n := c) ORDER BY status)
-               FROM (
-                   FROM v_suggestions s
-                   JOIN documents d ON d.id = s.document_id
-                   WHERE d.case_id = t.case_id
-                   SELECT status, count() AS c
-                   GROUP BY ALL
-               )
-           ), []),
-           'by_band', coalesce((
-               SELECT list(struct_pack(band := band, n := c) ORDER BY band)
-               FROM (
-                   FROM v_suggestions s
-                   JOIN documents d ON d.id = s.document_id
-                   WHERE d.case_id = t.case_id
-                   SELECT band, count() AS c
-                   GROUP BY ALL
-               )
-           ), []),
-           'entities', t.entities,
-           'audit', coalesce((
-               SELECT list(struct_pack(
-                   ts_short := strftime(a.ts, '%H:%M'), action := a.action, actor := a.actor,
-                   target := coalesce(a.target, ''), reason := coalesce(a.reason, '')
-               ) ORDER BY a.ts DESC)
-               FROM v_audit a WHERE a.case_id = t.case_id
-           ), []),
-           'export_blocked', t.export_blocked
+           'case', struct_pack(id := c.id, case_no := c.case_no, title := c.title),
+           'documents', coalesce(docs.documents, []),
+           'entities', coalesce(ents.entities, []),
+           'audit', coalesce(aud.audit, []),
+           'export_blocked', coalesce(blk.export_blocked, false)
        ) AS ctx
-FROM v_tpl_case t;
+FROM cases c
+LEFT JOIN v_case_documents docs ON docs.case_id = c.id
+LEFT JOIN v_case_entities ents ON ents.case_id = c.id
+LEFT JOIN v_case_audit_recent aud ON aud.case_id = c.id
+LEFT JOIN v_export_blocked blk ON blk.case_id = c.id;
 
 CREATE OR REPLACE VIEW v_stream_ctx AS
-SELECT case_id,
+SELECT c.id AS case_id,
        json_object(
-           'case', case_row,
-           'entities', entities,
-           'export_blocked', export_blocked
+           'case', struct_pack(id := c.id, case_no := c.case_no, title := c.title),
+           'entities', coalesce(ents.entities, []),
+           'export_blocked', coalesce(blk.export_blocked, false)
        ) AS ctx
-FROM v_tpl_case;
+FROM cases c
+LEFT JOIN v_case_entities ents ON ents.case_id = c.id
+LEFT JOIN v_export_blocked blk ON blk.case_id = c.id;
 
 CREATE OR REPLACE VIEW v_audit_ctx AS
 SELECT c.id AS case_id,
        json_object(
            'case', struct_pack(id := c.id, case_no := c.case_no, title := c.title),
-           'export_blocked', coalesce((
-               SELECT export_blocked FROM v_export_blocked b WHERE b.case_id = c.id
-           ), false),
-           'batches', coalesce((
-               SELECT list(struct_pack(
-                   batch_id := batch_id,
-                   ts_short := strftime(ts, '%Y-%m-%d %H:%M'),
-                   actor := actor,
-                   label := label,
-                   decision_count := decision_count,
-                   is_undo := is_undo,
-                   undone := undone
-               ) ORDER BY ts DESC)
-               FROM v_decision_batches
-               WHERE case_id = c.id
-           ), []),
-           'events', coalesce((
-               SELECT list(struct_pack(
-                   ts_short := strftime(a.ts, '%Y-%m-%d %H:%M:%S'),
-                   action := a.action,
-                   status := coalesce(a.status, ''),
-                   actor := a.actor,
-                   target := coalesce(a.target, ''),
-                   reason := coalesce(a.reason, ''),
-                   band := coalesce(a.band, ''),
-                   batch_label := coalesce(a.batch_label, ''),
-                   is_undo := a.undoes_batch_id IS NOT NULL
-               ) ORDER BY a.ts DESC)
-               FROM v_audit a WHERE a.case_id = c.id
-           ), []),
-           'flagged_pending', coalesce((
-               FROM v_suggestions s
-               JOIN documents d ON d.id = s.document_id
-               WHERE d.case_id = c.id AND s.band = 'flagged' AND s.status = 'pending'
-               SELECT count()::INTEGER
-           ), 0)
+           'export_blocked', coalesce(blk.export_blocked, false),
+           'batches', coalesce(bat.batches, []),
+           'events', coalesce(ev.events, [])
        ) AS ctx
-FROM cases c;
+FROM cases c
+LEFT JOIN v_export_blocked blk ON blk.case_id = c.id
+LEFT JOIN v_case_batches bat ON bat.case_id = c.id
+LEFT JOIN v_case_events ev ON ev.case_id = c.id;
 
 CREATE OR REPLACE VIEW v_review_ctx AS
 SELECT d.id AS document_id, p.page_no,
@@ -269,32 +236,21 @@ SELECT d.id AS document_id, p.page_no,
                display_w := p.display_w, display_h := p.display_h,
                png_href := '/pages/' || d.filename || '/p' || p.page_no || '.png'
            ),
-           'marks', coalesce((
-               SELECT list(m) FROM v_page_marks m
-               WHERE m.document_id = d.id AND m.page_no = p.page_no
-           ), []),
-           'by_status', coalesce((
-               SELECT list(struct_pack(status := status, n := c) ORDER BY status)
-               FROM (
-                   FROM v_suggestions s
-                   WHERE s.document_id = d.id
-                   SELECT status, count() AS c
-                   GROUP BY ALL
-               )
-           ), []),
-           'suggestions', coalesce((
-               SELECT list(s ORDER BY (page_no = p.page_no) DESC,
-                                   (status = 'pending') DESC, page_no, id)
-               FROM v_suggestions s
-               WHERE s.document_id = d.id
-                 AND (s.page_no = p.page_no OR s.status = 'pending')
-           ), [])
+           'marks', coalesce(ml.marks, []),
+           'suggestions', coalesce(sl.suggestions, [])
        ) AS ctx
 FROM documents d
 JOIN cases c ON c.id = d.case_id
-JOIN pages p ON p.document_id = d.id;
+JOIN pages p ON p.document_id = d.id
+LEFT JOIN v_page_mark_lists ml ON ml.document_id = d.id AND ml.page_no = p.page_no
+LEFT JOIN LATERAL (
+    SELECT list(s ORDER BY (s.page_no = p.page_no) DESC,
+                        (s.status = 'pending') DESC, s.page_no, s.id) AS suggestions
+    FROM v_suggestions s
+    WHERE s.document_id = d.id
+      AND (s.page_no = p.page_no OR s.status = 'pending')
+) sl ON true;
 
--- Page views: html + path (path is product URL; GET routes bind it via v_route_get).
 CREATE OR REPLACE VIEW v_case_html AS
 SELECT case_id,
        '/cases/' || case_id AS path,

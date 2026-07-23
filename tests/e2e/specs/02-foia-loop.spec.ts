@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import {
   api,
+  entityWithPendingWork,
   firstDocHref,
   openLibrary,
   postDecision,
@@ -23,7 +24,7 @@ test.describe("FOIA loop (mutate + verify)", () => {
     request,
   }) => {
     caseId = await openLibrary(page);
-    const rows = await suggestionsViaApi(request);
+    const rows = await suggestionsViaApi(request, caseId);
     const pending = rows.find(
       (r) => r.status === "pending" && r.band !== "flagged"
     );
@@ -41,7 +42,7 @@ test.describe("FOIA loop (mutate + verify)", () => {
   }) => {
     await postDecision(request, api.decide(suggestionId, "accepted"));
 
-    const rows = await suggestionsViaApi(request);
+    const rows = await suggestionsViaApi(request, caseId);
     const row = rows.find((r) => r.id === suggestionId);
     expect(row?.status).toBe("accepted");
 
@@ -60,7 +61,7 @@ test.describe("FOIA loop (mutate + verify)", () => {
   }) => {
     await postDecision(request, api.undo(caseId));
 
-    const rows = await suggestionsViaApi(request);
+    const rows = await suggestionsViaApi(request, caseId);
     const row = rows.find((r) => r.id === suggestionId);
     expect(row?.status).toBe("pending");
 
@@ -73,26 +74,18 @@ test.describe("FOIA loop (mutate + verify)", () => {
     page,
     request,
   }) => {
-    await openLibrary(page);
-    await page.goto(`/cases/${caseId}/stream`);
-
-    const rejectBtn = page
-      .locator("[data-action='entity'][data-status='rejected']")
-      .first();
-    await expect(rejectBtn).toBeVisible();
-    const entityId = await rejectBtn.getAttribute("data-entity-id");
-    expect(entityId).toBeTruthy();
+    // Grain pick — UI order is kind/text, not "has bulk work".
+    const entityId = await entityWithPendingWork(request, caseId);
+    expect(entityId, "need entity with pending non-flagged work").toBeTruthy();
 
     await postDecision(request, api.entity(entityId!, "rejected"));
 
     await page.goto(`/cases/${caseId}/stream`);
     await expect(
-      page.locator(
-        `[data-action='entity'][data-entity-id="${entityId}"][data-status='rejected']`
-      )
+      page.locator(`#e-${entityId}`)
     ).toBeVisible();
 
-    const rows = await suggestionsViaApi(request);
+    const rows = await suggestionsViaApi(request, caseId);
     const entityRows = rows.filter(
       (r) => r.entity_id === entityId && r.band !== "flagged"
     );
@@ -106,15 +99,6 @@ test.describe("FOIA loop (mutate + verify)", () => {
       stillPending.length,
       "entity reject should clear pending non-flagged for entity"
     ).toBe(0);
-    // Flagged for same entity may remain pending (export gate still wants them)
-    const flaggedPending = rows.filter(
-      (r) =>
-        r.entity_id === entityId &&
-        r.band === "flagged" &&
-        r.status === "pending"
-    );
-    // Soft check only documents the exclusion rule — no force on corpus mix
-    void flaggedPending;
   });
 
   test("export button reflects blocked vs open", async ({ page }) => {

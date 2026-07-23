@@ -10,7 +10,6 @@
   <a class="btn" href="/cases/{{ case.id }}">← Library</a>
   <span class="mono">{{ doc.filename }}.pdf · p.{{ page.page_no }}/{{ doc.page_count }}</span>
   <span class="sp"></span>
-  {% include "fragments/status_tally.html" %}
   {% if page.page_no > 1 %}<a class="btn" href="/documents/{{ doc.id }}/pages/{{ page.prev }}">Prev</a>{% endif %}
   {% if page.page_no < doc.page_count %}<a class="btn" href="/documents/{{ doc.id }}/pages/{{ page.next }}">Next</a>{% endif %}
   <button type="button" class="btn" data-action="undo" data-case-id="{{ case.id }}">Undo</button>

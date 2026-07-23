@@ -380,20 +380,41 @@ COPY (FROM (SUMMARIZE words)) TO 'variable:profile_words' (FORMAT variable, LIST
 -- ── projections (unmat views only) ─────────────────────────────────────────
 
 CREATE OR REPLACE VIEW v_latest_decision AS
-SELECT suggestion_id, r.status, r.actor, r.reason, r.ts
-FROM (SELECT suggestion_id, max_by(d, d.ts) AS r FROM v_src_decisions d
-      WHERE kind = 'decision' AND suggestion_id IS NOT NULL GROUP BY suggestion_id);
+SELECT suggestion_id,
+       max_by(status, ts) AS status,
+       max_by(actor, ts) AS actor,
+       max_by(reason, ts) AS reason,
+       max(ts) AS ts
+FROM v_src_decisions
+WHERE kind = 'decision' AND suggestion_id IS NOT NULL
+GROUP BY suggestion_id;
 
 CREATE OR REPLACE VIEW v_manual_suggestions AS
-SELECT m.suggestion_id AS id, m.r.document_id, m.r.page_no, m.r.bbox,
-       m.r.text, coalesce(m.r.context, m.r.text) AS context,
-       coalesce(m.r.confidence, 99) AS confidence, m.r.flag_tag, m.r.reason, m.r.entity_id,
-       NULL::VARCHAR AS kind, 'manual' AS source, m.r.ts AS created_at, dl.line_no,
+SELECT d.suggestion_id AS id, d.document_id, d.page_no, d.bbox,
+       d.text, coalesce(d.context, d.text) AS context,
+       coalesce(d.confidence, 99) AS confidence, d.flag_tag, d.reason, d.entity_id,
+       NULL::VARCHAR AS kind, 'manual' AS source, d.ts AS created_at, dl.line_no,
        NULL::VARCHAR AS source_run_id, 'manual' AS detector_key
-FROM (SELECT suggestion_id, max_by(d, d.ts) AS r FROM v_src_decisions d
-      WHERE kind = 'added' AND suggestion_id IS NOT NULL GROUP BY suggestion_id) m
-LEFT JOIN document_lines dl ON dl.document_id = m.r.document_id AND dl.page_no = m.r.page_no
- AND dl.y_key = round(m.r.bbox.y0, 0);
+FROM (
+    SELECT suggestion_id,
+           max_by(document_id, ts) AS document_id,
+           max_by(page_no, ts) AS page_no,
+           max_by(bbox, ts) AS bbox,
+           max_by(text, ts) AS text,
+           max_by(context, ts) AS context,
+           max_by(confidence, ts) AS confidence,
+           max_by(flag_tag, ts) AS flag_tag,
+           max_by(reason, ts) AS reason,
+           max_by(entity_id, ts) AS entity_id,
+           max(ts) AS ts
+    FROM v_src_decisions
+    WHERE kind = 'added' AND suggestion_id IS NOT NULL
+    GROUP BY suggestion_id
+) d
+LEFT JOIN document_lines dl
+  ON dl.document_id = d.document_id
+ AND dl.page_no = d.page_no
+ AND dl.y_key = round(d.bbox.y0, 0);
 
 -- FP/FN product fold: judge panel drives band; humans still dispose.
 CREATE OR REPLACE VIEW v_suggestions AS
@@ -464,9 +485,9 @@ WHERE s.line_no IS NOT NULL
   AND abs(u.line_number - s.line_no) <= 3;
 
 -- dns earned: resolve hostnames extracted from document tokens (lazy — network on read).
+-- GROUP BY hostname collapses the grain (no DISTINCT subquery, no token_n count).
 CREATE OR REPLACE VIEW v_url_hosts AS
 SELECT hostname,
-       count() AS token_n,
        dns_lookup(hostname) AS a_record,
        dns_lookup_all(hostname) AS a_records
 FROM token_types

@@ -32,7 +32,7 @@ Full route table: [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md). Data: [`docs/D
 | PDF | **pdf** — words, pages, `pdf_redact`, setup `pdf_to_png` |
 | HTML | **tera** pages + `fragments/*` · **static/app.css** · **static/app.js** |
 | Host / pins | **hostfs** · **scalarfs** · **zipfs** · **shellfs** |
-| Metrics | **semantic_views** |
+| Schema graph | **semantic_views** (`closure_semantic.yaml`) |
 | Checks | `smoke.sql` · Playwright e2e |
 
 ## Quick start

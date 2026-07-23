@@ -6,17 +6,11 @@
   <strong>Closure</strong>
   <span class="mono" style="color:var(--ink2)">{{ case.case_no }} — {{ case.title }}</span>
   <span class="sp"></span>
-  {% include "fragments/status_tally.html" %}
   <a class="btn" href="/cases/{{ case.id }}/stream">Entity stream</a>
   <a class="btn" href="/cases/{{ case.id }}/audit">Audit</a>
   {% include "fragments/case_actions.html" %}
 </header>
 <div class="wrap">
-  <p style="color:var(--ink2);margin-bottom:12px">
-    {{ documents | length }} docs
-    {% if by_band %} · {% for r in by_band %}{{ r.band }} {{ r.n }}{% if not loop.last %} · {% endif %}{% endfor %}{% endif %}
-    · {{ entities | length }} entities
-  </p>
   <table>
     <thead><tr><th>Document</th><th>Pages</th><th></th></tr></thead>
     <tbody>

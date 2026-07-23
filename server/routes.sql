@@ -36,15 +36,18 @@ SELECT * FROM (VALUES
     -- ── product reads ────────────────────────────────────────────────────
     ('case_nav',      'GET', '/api/cases/:id/nav',
      $$SELECT href, text FROM v_nav WHERE case_id = $id ORDER BY href$$),
-    -- Case rollup: GROUP BY ALL on dims; measures are count()/avg on the group
-    -- (not a metrics catalog). Prefer /api/catalog/v_suggestions/summary for profiles.
-    ('case_metrics',  'GET', '/api/cases/:id/metrics',
-     $$FROM v_suggestions s
+    -- Grain rows for the case (product). Profiles: /api/catalog/…/summary.
+    -- Semantic slice (dims only): FROM semantic_view('closure', dimensions := […]).
+    ('case_suggestions', 'GET', '/api/cases/:id/suggestions',
+     $$SELECT s.*
+       FROM v_suggestions s
        JOIN documents d ON d.id = s.document_id
        WHERE d.case_id = $id
-       SELECT status, band, count(), avg(confidence)
-       GROUP BY ALL
-       ORDER BY ALL$$),
+       ORDER BY s.document_id, s.page_no, s.id$$),
+    ('case_entities', 'GET', '/api/cases/:id/entities',
+     $$SELECT id, case_id, canonical_text, kind, kind_label, mono
+       FROM entities WHERE case_id = $id
+       ORDER BY kind, canonical_text$$),
     ('suggestion_context', 'GET', '/api/suggestions/:id/context',
      $$SELECT suggestion_id, document_id, page_no, hit_line, line_number, line_text, dist
        FROM v_suggestion_line_context
@@ -70,12 +73,16 @@ SELECT * FROM (VALUES
      $$SELECT * FROM v_cols ORDER BY relation$$),
     ('catalog_one',   'GET', '/api/catalog/:relation',
      $$SELECT * FROM v_cols WHERE relation = $relation$$),
+    -- $relation is the route literal (query TVF rejects lateral column args).
+    -- JOIN v_cols is the allowlist (empty join → no rows if unknown relation).
     ('catalog_rows',  'GET', '/api/catalog/:relation/rows',
-     $$SELECT * FROM query(format('SELECT * FROM {}', $relation))
-       WHERE $relation IN (SELECT relation FROM v_cols)$$),
+     $$SELECT q.*
+       FROM query(format('SELECT * FROM {}', $relation)) q
+       JOIN v_cols c ON c.relation = $relation$$),
     ('catalog_summary','GET', '/api/catalog/:relation/summary',
-     $$SELECT * FROM query(format('FROM (SUMMARIZE {})', $relation))
-       WHERE $relation IN (SELECT relation FROM v_cols)$$),
+     $$SELECT q.*
+       FROM query(format('FROM (SUMMARIZE {})', $relation)) q
+       JOIN v_cols c ON c.relation = $relation$$),
 
     -- ── ops (debug / machine; not the FOIA product loop) ─────────────────
     ('ops_hostfs',    'GET', '/api/ops/hostfs',
@@ -91,7 +98,7 @@ SELECT * FROM (VALUES
     ('ops_cache_access','GET', '/api/ops/cache/access',
      $$SELECT * FROM v_http_cache_access$$),
     ('ops_hosts',     'GET', '/api/ops/hosts',
-     $$SELECT * FROM v_url_hosts ORDER BY token_n DESC, hostname$$),
+     $$SELECT * FROM v_url_hosts ORDER BY hostname$$),
     ('ops_templates', 'GET', '/api/ops/templates',
      $$SELECT * FROM v_src_template_links ORDER BY template, line_number$$),
     ('ops_semantic',  'GET', '/api/ops/semantic',
@@ -214,10 +221,9 @@ JOIN target t ON h.batch_id = t.batch_id
 WHERE h.kind = 'decision'
 RETURNING suggestion_id, status;
 
--- Export redacted PDFs (blocked while flagged pending)
+-- Export redacted PDFs (blocked while flagged pending). Side-effect TVF; return plan grain.
 CREATE OR REPLACE ROUTE case_export POST '/api/cases/:id/export' AS
-SELECT p.document_id, p.out_path,
-       (SELECT count(*)::INTEGER
-        FROM pdf_redact(p.source_path, p.out_path, p.boxes)) AS pages
+SELECT p.document_id, p.out_path, p.boxes,
+       (SELECT bool_or(true) FROM pdf_redact(p.source_path, p.out_path, p.boxes)) AS redacted
 FROM v_export_plans p
 WHERE p.case_id = $id AND NOT p.blocked AND len(p.boxes) > 0;

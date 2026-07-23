@@ -1,10 +1,8 @@
-{# e: { id, canonical_text, kind_label, n|hit_count, mono } #}
+{# e: { id, canonical_text, kind_label, mono } #}
 <div class="entity-row" id="e-{{ e.id }}">
   <div style="flex:1">
     <div class="{% if e.mono %}mono{% endif %}" style="font-weight:600">{{ e.canonical_text }}</div>
-    <div class="mono" style="font-size:11px;color:var(--ink2)">
-      {{ e.kind_label }}{% if e.n %} · {{ e.n }} hits{% elif e.hit_count %} · {{ e.hit_count }} hits{% endif %}
-    </div>
+    <div class="mono" style="font-size:11px;color:var(--ink2)">{{ e.kind_label }}</div>
   </div>
   <button type="button" class="btn" data-action="entity" data-entity-id="{{ e.id }}" data-status="accepted">Accept all</button>
   <button type="button" class="btn danger" data-action="entity" data-entity-id="{{ e.id }}" data-status="rejected">Reject all</button>

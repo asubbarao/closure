@@ -79,13 +79,15 @@ CREATE TABLE IF NOT EXISTS run_artifacts (
 );
 
 INSERT INTO llm_models BY NAME
-SELECT * FROM (VALUES
+SELECT t.*
+FROM (VALUES
     ('detector:corpus', '{"provider":"deterministic","surface":"token_kind+kind_rules"}'::JSON, now(), now()),
     ('detector:rapidfuzz-watchlist', '{"provider":"deterministic","ext":"rapidfuzz"}'::JSON, now(), now()),
     ('detector:remainder', '{"provider":"deterministic","surface":"residual_pii_tokens"}'::JSON, now(), now()),
     ('judge:pattern-context-prior', '{"provider":"deterministic","panel":"majority|conflict→flagged"}'::JSON, now(), now())
 ) AS t(model_key, raw, first_seen_at, last_seen_at)
-WHERE model_key NOT IN (SELECT model_key FROM llm_models);
+LEFT JOIN llm_models m ON m.model_key = t.model_key
+WHERE m.model_key IS NULL;
 
 UPDATE llm_models SET last_seen_at = now()
 WHERE starts_with(model_key, 'detector:');

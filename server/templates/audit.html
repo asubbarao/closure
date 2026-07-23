@@ -6,7 +6,6 @@
   <a class="btn" href="/cases/{{ case.id }}">← Library</a>
   <strong>Audit · {{ case.case_no }}</strong>
   <span class="sp"></span>
-  {% if flagged_pending %}<span class="mono" style="color:var(--rej)">⚑ {{ flagged_pending }} flagged pending</span>{% endif %}
   {% if export_blocked %}<span class="mono" style="color:var(--rej)">export blocked</span>{% endif %}
   {% include "fragments/case_actions.html" %}
 </header>
@@ -19,14 +18,16 @@
   <div class="card">
     <h3 style="margin-bottom:8px">Batches</h3>
     <table>
-      <thead><tr><th>When</th><th>Label</th><th>Actor</th><th>n</th><th></th></tr></thead>
+      <thead><tr><th>When</th><th>Label</th><th>Actor</th><th>Members</th><th></th></tr></thead>
       <tbody>
       {% for b in batches %}
         <tr>
           <td class="mono">{{ b.ts_short }}</td>
           <td>{{ b.label }}</td>
           <td>{{ b.actor }}</td>
-          <td class="mono">{{ b.decision_count }}</td>
+          <td class="mono" style="font-size:11px;max-width:28ch;overflow:hidden;text-overflow:ellipsis">
+            {{ b.members or "—" }}
+          </td>
           <td class="mono" style="color:var(--ink2)">
             {% if b.is_undo %}undo{% elif b.undone %}undone{% else %}—{% endif %}
           </td>

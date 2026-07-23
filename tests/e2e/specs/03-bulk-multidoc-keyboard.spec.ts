@@ -30,20 +30,20 @@ test.describe("bulk · multi-doc · keyboard", () => {
   test("accept-HIGH case-wide: high→0, flagged unchanged", async ({
     request,
   }) => {
-    const before = await suggestionsViaApi(request);
+    const before = await suggestionsViaApi(request, caseId);
     const inCase = (r: { document_id: string }) => docSet.has(r.document_id);
     const high0 = nPending(before, (r) => inCase(r) && r.band === "high");
     const flag0 = nPending(before, (r) => inCase(r) && r.band === "flagged");
     expect(high0, "need pending HIGH").toBeGreaterThan(0);
 
     await postDecision(request, api.acceptHigh(caseId));
-    const after = await suggestionsViaApi(request);
+    const after = await suggestionsViaApi(request, caseId);
     expect(nPending(after, (r) => inCase(r) && r.band === "high")).toBe(0);
     expect(nPending(after, (r) => inCase(r) && r.band === "flagged")).toBe(flag0);
   });
 
   test("band bulk REVIEW reject on one doc", async ({ request }) => {
-    const before = await suggestionsViaApi(request);
+    const before = await suggestionsViaApi(request, caseId);
     const docId = [...docSet].find((id) =>
       before.some(
         (r) =>
@@ -61,7 +61,7 @@ test.describe("bulk · multi-doc · keyboard", () => {
     );
 
     await postDecision(request, api.band(docId!, "review", "rejected"));
-    const after = await suggestionsViaApi(request);
+    const after = await suggestionsViaApi(request, caseId);
     expect(
       nPending(after, (r) => r.document_id === docId && r.band === "review")
     ).toBe(0);
@@ -76,7 +76,7 @@ test.describe("bulk · multi-doc · keyboard", () => {
   test("entity bulk clears non-flagged (multi-doc when present)", async ({
     request,
   }) => {
-    const before = await suggestionsViaApi(request);
+    const before = await suggestionsViaApi(request, caseId);
     const cand = before.filter(
       (r) =>
         r.status === "pending" &&
@@ -105,7 +105,7 @@ test.describe("bulk · multi-doc · keyboard", () => {
     );
 
     await postDecision(request, api.entity(entityId, "accepted"));
-    const after = await suggestionsViaApi(request);
+    const after = await suggestionsViaApi(request, caseId);
     expect(
       nPending(
         after,
@@ -127,7 +127,7 @@ test.describe("bulk · multi-doc · keyboard", () => {
   });
 
   test("flagged band API cannot bulk-accept", async ({ request }) => {
-    const before = await suggestionsViaApi(request);
+    const before = await suggestionsViaApi(request, caseId);
     const docId = [...docSet].find((id) =>
       before.some(
         (r) =>
@@ -146,20 +146,31 @@ test.describe("bulk · multi-doc · keyboard", () => {
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       data: {},
     });
-    const after = await suggestionsViaApi(request);
+    const after = await suggestionsViaApi(request, caseId);
     expect(
       nPending(after, (r) => r.document_id === docId && r.band === "flagged")
     ).toBe(flag0);
   });
 
   test("keyboard a reduces pending on focused doc", async ({ page, request }) => {
-    const before = await suggestionsViaApi(request);
-    const hit = before.find(
+    // After prior bulks, pick remaining grain; undo once if suite exhausted non-flagged.
+    let before = await suggestionsViaApi(request, caseId);
+    let hit = before.find(
       (r) =>
         r.status === "pending" &&
         r.band !== "flagged" &&
         docSet.has(r.document_id)
     );
+    if (!hit) {
+      await postDecision(request, api.undo(caseId));
+      before = await suggestionsViaApi(request, caseId);
+      hit = before.find(
+        (r) =>
+          r.status === "pending" &&
+          r.band !== "flagged" &&
+          docSet.has(r.document_id)
+      );
+    }
     expect(hit, "need a pending mark for keyboard").toBeTruthy();
     const docId = hit!.document_id;
     const pageNo = hit!.page_no ?? 1;
@@ -180,7 +191,7 @@ test.describe("bulk · multi-doc · keyboard", () => {
     await page.keyboard.press("a");
     await page.waitForLoadState("networkidle");
 
-    const after = await suggestionsViaApi(request);
+    const after = await suggestionsViaApi(request, caseId);
     const row = after.find((r) => r.id === id);
     expect(row?.status, "keyboard a must fold that suggestion").not.toBe(
       "pending"

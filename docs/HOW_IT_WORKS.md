@@ -47,7 +47,7 @@ make setup && make run    # http://127.0.0.1:8117/  and  /docs
 | **GET routes** | `v_route_get` only → generated `CREATE ROUTE` |
 | **POST routes** | Resource-nested decisions / export (explicit PARAM) |
 | **Client** | `data-action` + keyboard; no SPA state |
-| **Rollups** | Friendly SQL: `FROM … SELECT … GROUP BY ALL` / `SUMMARIZE` — not metric laundry |
+| **Schema graph** | `closure_semantic.yaml` (joins + dims) · `SUMMARIZE` / catalog for profiles · grain handlers |
 
 ## HTTP surface (current)
 
@@ -63,7 +63,8 @@ make setup && make run    # http://127.0.0.1:8117/  and  /docs
 | Method | Path | Role |
 |--------|------|------|
 | GET | `/api/cases/:id/nav` | Nav links |
-| GET | `/api/cases/:id/metrics` | Semantic status × band |
+| GET | `/api/cases/:id/suggestions` | Grain rows for case |
+| GET | `/api/cases/:id/entities` | Entity grain |
 | GET | `/api/suggestions/:id/context` | ±3 lines (read_lines) |
 | POST | `/api/suggestions/:id/decision` | Decide one · **201** |
 | POST | `/api/entities/:id/decision` | Entity bulk (skip flagged) · **201** |
@@ -97,7 +98,7 @@ Lock routes: `REQUIRE closure_api` after `CLOSURE_API_KEY`.
 ```
 server/templates/
   base.html · case.html · stream.html · review.html · audit.html
-  fragments/   case_actions · entity_row · mark · sugg_row · status_tally
+  fragments/   case_actions · entity_row · mark · sugg_row
 static/
   app.css · app.js     # style + data-action / keyboard only
 ```

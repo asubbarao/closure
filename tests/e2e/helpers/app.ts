@@ -65,8 +65,31 @@ export async function catalogRows(request: APIRequestContext, relation: string) 
   return res.json();
 }
 
-export async function suggestionsViaApi(request: APIRequestContext) {
+export async function suggestionsViaApi(
+  request: APIRequestContext,
+  caseId?: string
+) {
+  if (caseId) {
+    const res = await request.get(`/api/cases/${caseId}/suggestions`);
+    expect(res.ok(), `case suggestions → ${res.status()}`).toBeTruthy();
+    return res.json() as Promise<Suggestion[]>;
+  }
   return catalogRows(request, "v_suggestions") as Promise<Suggestion[]>;
+}
+
+/** First entity with pending non-flagged suggestions (grain, not UI order). */
+export async function entityWithPendingWork(
+  request: APIRequestContext,
+  caseId: string
+) {
+  const rows = await suggestionsViaApi(request, caseId);
+  const hit = rows.find(
+    (r) =>
+      r.status === "pending" &&
+      r.band !== "flagged" &&
+      r.entity_id
+  );
+  return hit?.entity_id ?? null;
 }
 
 export async function documentsViaApi(request: APIRequestContext) {

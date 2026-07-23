@@ -26,7 +26,7 @@ Closure is a **full application runtime** in one process: HTTP, auth, OpenAPI, f
 | Case packs | **zipfs** | `zip://` + `archive_contents` (`v_zips`) |
 | Host effects | **shellfs** | `cmd \|` — stream CSV/JSON vs batch `read_text` |
 | Read cache | **cache_httpfs** | Remote https/s3/hf after curl transport |
-| Metrics | **semantic_views** | `closure_semantic.yaml` |
+| Schema graph | **semantic_views** | `closure_semantic.yaml` (joins + dims; not count KPIs) |
 | Charts (optional) | **ggsql** | Not required for review |
 
 ## Boot order
