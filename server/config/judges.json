@@ -1,0 +1,9 @@
+{
+  "api_url": "http://localhost:11434/v1/chat/completions",
+  "api_token": "ollama",
+  "judges": [
+    {"judge": "llama", "model_name": "llama3.2:3b"},
+    {"judge": "qwen",  "model_name": "qwen2.5:7b"},
+    {"judge": "gemma", "model_name": "gemma4:26b"}
+  ]
+}

@@ -24,6 +24,8 @@ SET VARIABLE pages_dir   = 'pages';
 SET VARIABLE templates_dir = 'server/templates';
 SET VARIABLE detector_rules_path = 'server/config/detector_rules.json';
 SET VARIABLE semantic_yaml_path  = 'server/config/closure_semantic.yaml';
+-- Judge panel: the endpoint, token and models. core.sql runs server/judge.sql live.
+SET VARIABLE judges_path = 'server/config/judges.json';
 
 .read server/hostfs.sql
 

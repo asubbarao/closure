@@ -56,7 +56,8 @@
           </div>
           <div class="mono" style="font-size:11px;margin-top:6px;padding:6px 8px;background:#f7f9fb;border-radius:6px">
             <strong>Panel {{ f.judge_panel or "—" }}</strong>
-            · p={{ f.vote_pattern }} c={{ f.vote_context }} pr={{ f.vote_prior }}
+            {% if f.judge_agreement %} · {{ f.judge_agreement }}/3 agree{% endif %}
+            {% if f.judge_votes %} · {{ f.judge_votes }}{% endif %}
             <div style="color:var(--rej);margin-top:4px">{{ f.judge_reason or f.reason }}</div>
           </div>
         </div>

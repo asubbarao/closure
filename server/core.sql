@@ -103,12 +103,12 @@ SELECT doc.id AS document_id, pdf.page_no, pdf.width_pt, pdf.height_pt,
 FROM v_src_pdf_pages pdf
 JOIN documents doc ON doc.filename = pdf.doc_filename;
 
--- Corpus = barcode-sanitizer shape: full intermediate tables, no lossy coalesce.
+-- Corpus pipeline, no lossy coalesce:
 --   word_raw          occurrence grain (all surface forms kept)
 --   token_types       DISTINCT token evidence (finetype + url) — debugable
 --   kind_rules        enhanceable JSON (INSERT row = new format)
---   token_rule_hits   EVERY rule that matched (trace table; not collapsed)
---   token_kind        one primary kind per token (priority pick)
+--   token_kind        primary kind per token; the match trace (every rule that
+--                     fired) is its inner `hits` CTE — picked, not materialized
 --   words             cheap app table: occurrence ⨝ types ⨝ primary kind
 
 -- token pinned once (punctuation stripped). Downstream uses token / token_norm only.
@@ -152,40 +152,42 @@ FROM (
 CREATE OR REPLACE TABLE kind_rules AS
 SELECT * FROM read_json_auto('pathvariable:detector_rules_path');
 
--- Full match trace (like barcode classification rows — keep every hit).
-CREATE OR REPLACE TABLE token_rule_hits AS
-SELECT tt.token, r.rule, r.kind, r.confidence, r.priority,
-       'type_label=' || tt.type_label AS evidence
-FROM token_types tt
-JOIN kind_rules r ON r.rule = 'finetype_prefix'
- AND starts_with(tt.type_label, r.type_prefix)
-UNION ALL BY NAME
-SELECT tt.token, r.rule, r.kind, r.confidence, r.priority,
-       'type_label_compact=' || tt.type_label_compact
-FROM token_types tt
-JOIN kind_rules r ON r.rule = 'finetype_prefix'
- AND starts_with(tt.type_label_compact, r.type_prefix)
-UNION ALL BY NAME
-SELECT tt.token, r.rule, r.kind, r.confidence, r.priority,
-       'compact_len=' || tt.compact_len::VARCHAR
-FROM token_types tt
-JOIN kind_rules r ON r.rule = 'shape'
- AND tt.compact_len = r.compact_len AND tt.compact_is_int
-UNION ALL BY NAME
-SELECT tt.token, r.rule, r.kind, r.confidence, r.priority, 'url_valid'
-FROM token_types tt
-JOIN kind_rules r ON r.rule = 'url_valid' AND tt.is_url
-UNION ALL BY NAME
-SELECT tt.token, r.rule, r.kind, r.confidence, r.priority,
-       'urlpattern=' || r.url_pattern
-FROM token_types tt
-JOIN kind_rules r ON r.rule = 'urlpattern' AND r.url_pattern IS NOT NULL
- AND urlpattern_test(r.url_pattern, tt.token);
-
 -- One primary kind per token (priority, then confidence) — not coalesce of NULLs.
+-- `hits` is the full match trace (every kind_rule that fired, heterogeneous rule
+-- types as UNION arms); token_kind is the priority pick over it. One table, not a
+-- separate materialized trace — the trace had exactly one consumer (this pick).
 CREATE OR REPLACE TABLE token_kind AS
+WITH hits AS (
+    SELECT tt.token, r.rule, r.kind, r.confidence, r.priority,
+           'type_label=' || tt.type_label AS evidence
+    FROM token_types tt
+    JOIN kind_rules r ON r.rule = 'finetype_prefix'
+     AND starts_with(tt.type_label, r.type_prefix)
+    UNION ALL BY NAME
+    SELECT tt.token, r.rule, r.kind, r.confidence, r.priority,
+           'type_label_compact=' || tt.type_label_compact
+    FROM token_types tt
+    JOIN kind_rules r ON r.rule = 'finetype_prefix'
+     AND starts_with(tt.type_label_compact, r.type_prefix)
+    UNION ALL BY NAME
+    SELECT tt.token, r.rule, r.kind, r.confidence, r.priority,
+           'compact_len=' || tt.compact_len::VARCHAR
+    FROM token_types tt
+    JOIN kind_rules r ON r.rule = 'shape'
+     AND tt.compact_len = r.compact_len AND tt.compact_is_int
+    UNION ALL BY NAME
+    SELECT tt.token, r.rule, r.kind, r.confidence, r.priority, 'url_valid'
+    FROM token_types tt
+    JOIN kind_rules r ON r.rule = 'url_valid' AND tt.is_url
+    UNION ALL BY NAME
+    SELECT tt.token, r.rule, r.kind, r.confidence, r.priority,
+           'urlpattern=' || r.url_pattern
+    FROM token_types tt
+    JOIN kind_rules r ON r.rule = 'urlpattern' AND r.url_pattern IS NOT NULL
+     AND urlpattern_test(r.url_pattern, tt.token)
+)
 SELECT token, kind AS pii_kind, confidence AS pii_confidence, rule AS pii_rule, evidence
-FROM token_rule_hits
+FROM hits
 QUALIFY row_number() OVER (
     PARTITION BY token ORDER BY priority ASC, confidence DESC, rule
 ) = 1;
@@ -211,7 +213,7 @@ SELECT term, kind, case_no,
        (kind IS NOT NULL AND position('NOT PII' IN kind) > 0) AS is_not_pii
 FROM v_src_watchlist;
 
--- ── name matching: the same trace shape the token side already has ────────
+-- ── name matching: the same trace shape the token side has ────────
 --   watchlist_tokens  prepared watchlist side (norm + splink phonetic key)
 --   name_scorers      thresholds as DATA — edit a row, not a WHERE clause
 --   name_rule_hits    EVERY scorer that fired, with its score (trace table)
@@ -252,8 +254,9 @@ SELECT * FROM (VALUES
 
 -- One scan, not three UNION arms: every (document token × watchlist token ×
 -- scorer) is scored by apply()ing the scorer's function; a row survives when it
--- clears that scorer's threshold. This IS the trace table — every scorer that
--- fired, before name_token_match picks one primary.
+-- clears that scorer's threshold. Kept as its own table (not folded into the
+-- pick): the name_scorer_never_fires invariant needs the pre-pick trace — a
+-- scorer that fires but never WINS the pick still has to prove it fired.
 CREATE OR REPLACE TABLE name_rule_hits AS
 WITH tokens_from_documents AS (
     SELECT DISTINCT token_norm FROM words WHERE length(token_norm) >= 3
@@ -435,8 +438,8 @@ SELECT format('{:x}', rapidhash(concat_ws(chr(31),
        55 AS confidence, NULL::VARCHAR AS flag_tag,
        'remainder: residual PII-shaped token not in prior hits' AS reason,
        NULL::VARCHAR AS entity_id,
-       CASE WHEN wrd.pii_kind IS NULL THEN 'UNKNOWN' ELSE wrd.pii_kind END AS kind,
-       lower(CASE WHEN wrd.pii_kind IS NULL THEN 'UNKNOWN' ELSE wrd.pii_kind END) AS kind_lower,
+       coalesce(wrd.pii_kind, 'UNKNOWN') AS kind,
+       lower(coalesce(wrd.pii_kind, 'UNKNOWN')) AS kind_lower,
        'ai' AS source, now() AS created_at, NULL::INTEGER AS line_no,
        (SELECT run_id FROM detect_run) AS source_run_id,
        'detector:remainder' AS detector_key
@@ -451,57 +454,38 @@ WHERE wrd.is_pii
              OR (sug.context IS NOT NULL AND contains(sug.context, wrd.token)))
   );
 
--- ── Judge panel: uses text_lower / kind_lower pins (raw text still on row).
-CREATE OR REPLACE TABLE suggestion_judges AS
-WITH votes_from_pattern_context_prior AS (
-    SELECT sug.id AS suggestion_id, sug.text, sug.context, sug.kind, sug.confidence,
-           sug.flag_tag, sug.detector_key,
-           CASE
-               WHEN sug.confidence >= 90 THEN 'redact'
-               WHEN sug.confidence < 60 THEN 'keep'
-               ELSE 'review'
-           END AS vote_pattern,
-           CASE
-               WHEN sug.flag_tag = 'false_positive' THEN 'keep'
-               WHEN sug.text_lower IS NOT NULL AND (
-                    ends_with(sug.text_lower, ' street')
-                 OR starts_with(sug.text_lower, 'det.')
-                 OR starts_with(sug.text_lower, 'ofc.')
-                 OR contains(sug.text_lower, ' v. ')
-               ) THEN 'keep'
-               WHEN sug.context_lower IS NOT NULL AND (
-                    contains(sug.context_lower, ' street')
-                 OR contains(sug.context_lower, ' officer')
-               ) THEN 'keep'
-               WHEN sug.kind_lower IS NOT NULL AND contains(sug.kind_lower, 'citation') THEN 'keep'
-               WHEN sug.confidence >= 70 THEN 'redact'
-               ELSE 'review'
-           END AS vote_context,
-           CASE
-               WHEN sug.flag_tag = 'false_positive' THEN 'keep'
-               WHEN sug.kind IN ('SSN', 'DATE OF BIRTH') THEN 'redact'
-               WHEN sug.kind IS NOT NULL AND starts_with(sug.kind, 'PHONE') THEN 'redact'
-               WHEN sug.kind_lower IS NOT NULL AND (
-                    contains(sug.kind_lower, 'not pii')
-                 OR contains(sug.kind_lower, 'officer')
-                 OR contains(sug.kind_lower, 'street')
-                 OR contains(sug.kind_lower, 'citation')
-               ) THEN 'keep'
-               ELSE 'review'
-           END AS vote_prior
-    FROM suggestions sug
+-- ── Judge panel: three LLM judges (the models in judges.json) each read every
+-- DISTINCT span in context and vote redact/keep/review. Agreement is confidence:
+-- 3/3 = high, 2/3 = lower, all-different = conflict. server/judge.sql runs the
+-- live panel here, against the models named in judges.json, and each span's
+-- verdict fans back out to all its occurrences by (kind, text).
+.read server/judge.sql
+
+CREATE OR REPLACE TABLE span_panel AS
+WITH tally AS (
+    SELECT kind, text, verdict, count(*) AS n_votes
+    FROM judge_verdicts GROUP BY kind, text, verdict
 )
-SELECT suggestion_id, vote_pattern, vote_context, vote_prior,
-       CASE
-           WHEN vote_pattern = vote_context AND vote_context = vote_prior THEN vote_pattern
-           WHEN vote_pattern = vote_context THEN vote_pattern
-           WHEN vote_pattern = vote_prior THEN vote_pattern
-           WHEN vote_context = vote_prior THEN vote_context
-           ELSE 'conflict'
-       END AS panel,
-       'pattern=' || vote_pattern || ' context=' || vote_context ||
-           ' prior=' || vote_prior AS judge_reason
-FROM votes_from_pattern_context_prior;
+SELECT kind, text,
+       arg_max(verdict, n_votes) AS majority_verdict,
+       max(n_votes) AS agreement,
+       sum(n_votes) AS n_judges,
+       if(max(n_votes) >= 2, arg_max(verdict, n_votes), 'conflict') AS panel,
+       array_to_string(list(verdict || '×' || n_votes::VARCHAR ORDER BY n_votes DESC), ', ') AS votes
+FROM tally GROUP BY kind, text;
+
+-- Per-judge vote joined to marks (kind, text grain).
+CREATE OR REPLACE VIEW v_suggestion_judge_votes AS
+SELECT sug.id AS suggestion_id, sug.kind, sug.text,
+       ver.judge, ver.model_name, ver.verdict, ver.reason, ver.reply
+FROM suggestions sug
+JOIN judge_verdicts ver ON ver.kind = sug.kind AND ver.text = sug.text;
+
+CREATE OR REPLACE TABLE suggestion_judges AS
+SELECT sug.id AS suggestion_id, pan.panel, pan.agreement, pan.votes,
+       printf('%d of %d judges → %s', pan.agreement, pan.n_judges, pan.panel) AS judge_reason
+FROM suggestions sug
+JOIN span_panel pan ON pan.kind = sug.kind AND pan.text = sug.text;
 
 INSERT INTO pipeline_runs BY NAME
 SELECT (SELECT run_id FROM detect_run) AS run_id,
@@ -517,38 +501,25 @@ COPY (FROM (SUMMARIZE words)) TO 'variable:profile_words' (FORMAT variable, LIST
 
 -- ── projections (unmat views only) ─────────────────────────────────────────
 
+-- Latest event per suggestion = whole-row pick (not per-column max_by, which can
+-- splice columns from different events). QUALIFY keeps one coherent row.
 CREATE OR REPLACE VIEW v_latest_decision AS
-SELECT suggestion_id,
-       max_by(status, ts) AS status,
-       max_by(actor, ts) AS actor,
-       max_by(reason, ts) AS reason,
-       max(ts) AS ts
+SELECT suggestion_id, status, actor, reason, ts
 FROM v_src_decisions
 WHERE kind = 'decision' AND suggestion_id IS NOT NULL
-GROUP BY suggestion_id;
+QUALIFY row_number() OVER (PARTITION BY suggestion_id ORDER BY ts DESC) = 1;
 
 CREATE OR REPLACE VIEW v_manual_suggestions AS
 WITH latest_added_from_decisions AS (
-    SELECT suggestion_id,
-           max_by(document_id, ts) AS document_id,
-           max_by(page_no, ts) AS page_no,
-           max_by(bbox, ts) AS bbox,
-           max_by(text, ts) AS text,
-           max_by(context, ts) AS context,
-           max_by(confidence, ts) AS confidence,
-           max_by(flag_tag, ts) AS flag_tag,
-           max_by(reason, ts) AS reason,
-           max_by(entity_id, ts) AS entity_id,
-           max(ts) AS ts
-    FROM v_src_decisions
+    SELECT * FROM v_src_decisions
     WHERE kind = 'added' AND suggestion_id IS NOT NULL
-    GROUP BY suggestion_id
+    QUALIFY row_number() OVER (PARTITION BY suggestion_id ORDER BY ts DESC) = 1
 )
 SELECT add.suggestion_id AS id, add.document_id, add.page_no, add.bbox,
        bbox_to_screen(add.bbox, pag.scale, 0) AS screen,
        add.text, lower(add.text) AS text_lower,
        add.context, lower(add.context) AS context_lower,
-       CASE WHEN add.confidence IS NULL THEN 99 ELSE add.confidence END AS confidence,
+       coalesce(add.confidence, 99) AS confidence,
        add.flag_tag, add.reason, add.entity_id,
        NULL::VARCHAR AS kind, NULL::VARCHAR AS kind_lower,
        'manual' AS source, add.ts AS created_at, lin.line_no,
@@ -563,46 +534,44 @@ JOIN pages pag
 
 -- FP/FN product fold: status/band only. Leave NULLs as NULL (3-value).
 CREATE OR REPLACE VIEW v_suggestions AS
+-- suggestions (AI) and v_manual_suggestions share one column set (verified), so
+-- this is SELECT * with the one rename the fold needs (kind→kind_stored; entity
+-- kind wins below). No 20-column laundry per arm.
 WITH suggestions_ai_and_manual AS (
-    SELECT id, document_id, page_no, bbox, screen, text, text_lower, context, context_lower,
-           confidence, flag_tag, reason,
-           entity_id, source, created_at, kind AS kind_stored, kind_lower, line_no, source_run_id, detector_key
-    FROM suggestions
+    SELECT * RENAME (kind AS kind_stored) FROM suggestions
     UNION ALL BY NAME
-    SELECT id, document_id, page_no, bbox, screen, text, text_lower, context, context_lower,
-           confidence, flag_tag, reason,
-           entity_id, source, created_at, kind, kind_lower, line_no, source_run_id, detector_key
-    FROM v_manual_suggestions
+    SELECT * RENAME (kind AS kind_stored) FROM v_manual_suggestions
 )
 SELECT row.id, row.document_id, row.page_no, row.line_no, row.bbox, row.screen,
        row.text, row.text_lower, row.context, row.context_lower,
        row.confidence, row.flag_tag, row.reason, row.entity_id, row.source, row.created_at,
        row.source_run_id, row.detector_key,
-       CASE WHEN ent.kind IS NOT NULL THEN ent.kind ELSE row.kind_stored END AS kind,
-       CASE WHEN ent.kind IS NOT NULL THEN lower(ent.kind) ELSE row.kind_lower END AS kind_lower,
+       coalesce(ent.kind, row.kind_stored) AS kind,
+       coalesce(lower(ent.kind), row.kind_lower) AS kind_lower,
        ent.canonical_text AS entity_text,
-       CASE
-           WHEN dec.status IS NOT NULL THEN dec.status
-           WHEN row.source = 'manual' THEN 'accepted'
-           ELSE 'pending'
-       END AS status,
-       -- FLAGGED = likely FP or judge conflict — never bulk-accepted
+       coalesce(dec.status, if(row.source = 'manual', 'accepted', 'pending')) AS status,
+       -- Band from judge agreement (agreement IS confidence). FLAGGED = judges say
+       -- not-PII, judges split, or a marked FP — the cases a human must verify.
+       -- No cache entry (jdg.panel NULL, e.g. a span added since last refresh) →
+       -- fall back to the detector's stored confidence.
        CASE
            WHEN row.flag_tag = 'false_positive' THEN 'flagged'
-           WHEN jdg.panel IN ('keep', 'conflict') THEN 'flagged'
-           WHEN row.confidence >= 90 AND (jdg.panel IS NULL OR jdg.panel = 'redact') THEN 'high'
+           WHEN jdg.panel = 'keep' THEN 'flagged'
+           WHEN jdg.panel = 'conflict' THEN 'flagged'
+           WHEN jdg.panel = 'redact' AND jdg.agreement = 3 THEN 'high'
+           WHEN jdg.panel = 'redact' THEN 'review'
+           WHEN jdg.panel = 'review' THEN 'review'
+           WHEN row.confidence >= 90 THEN 'high'
            WHEN row.confidence >= 60 THEN 'review'
            ELSE 'flagged'
        END AS band,
        jdg.panel AS judge_panel,
-       jdg.vote_pattern,
-       jdg.vote_context,
-       jdg.vote_prior,
-       CASE WHEN jdg.judge_reason IS NOT NULL THEN jdg.judge_reason ELSE row.reason END AS judge_reason,
+       jdg.agreement AS judge_agreement,
+       jdg.votes AS judge_votes,
+       coalesce(jdg.judge_reason, row.reason) AS judge_reason,
        CASE WHEN row.entity_id IS NOT NULL THEN 'e:' || row.entity_id
             WHEN row.text_lower IS NOT NULL THEN
-                 't:' || row.text_lower || '|' ||
-                 CASE WHEN ent.kind IS NOT NULL THEN ent.kind ELSE row.kind_stored END
+                 't:' || row.text_lower || '|' || coalesce(ent.kind, row.kind_stored)
             ELSE NULL
        END AS group_key
 FROM suggestions_ai_and_manual row
@@ -653,28 +622,9 @@ WHERE nullif(hostname, '') IS NOT NULL
 GROUP BY hostname;
 
 -- Decision write source — enough grain for append-only audit reconstructability.
+-- id→suggestion_id is the only rename; case_id/filename join in. Routes pick the
+-- columns they insert, so exposing all of v_suggestions here costs nothing.
 CREATE OR REPLACE VIEW v_decide_targets AS
-SELECT sug.id AS suggestion_id,
-       sug.document_id,
-       doc.case_id,
-       doc.filename,
-       sug.page_no,
-       sug.bbox,
-       sug.text,
-       sug.context,
-       sug.entity_id,
-       sug.entity_text,
-       sug.band,
-       sug.status,
-       sug.group_key,
-       sug.confidence,
-       sug.flag_tag,
-       sug.source,
-       sug.detector_key,
-       sug.judge_panel,
-       sug.judge_reason,
-       sug.vote_pattern,
-       sug.vote_context,
-       sug.vote_prior
+SELECT sug.* RENAME (id AS suggestion_id), doc.case_id, doc.filename
 FROM v_suggestions sug
 JOIN documents doc ON doc.id = sug.document_id;

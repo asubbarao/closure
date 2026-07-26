@@ -9,7 +9,7 @@
     {% if s.band == 'flagged' and s.status == 'pending' %}
     <div class="why mono" style="font-size:11px;margin-top:4px;color:var(--rej)">
       FP risk · panel {{ s.judge_panel }}
-      (p={{ s.vote_pattern }} c={{ s.vote_context }} pr={{ s.vote_prior }})
+      {% if s.judge_votes %}({{ s.judge_votes }}){% endif %}
       · {{ s.judge_reason or s.reason }}
       · R = not PII · A = redact anyway
     </div>
