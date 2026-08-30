@@ -1,18 +1,8 @@
--- build.sql — construct the model. No HTTP.
---
--- This is the product: raw files → typed views → domain tables. app.sql reads
--- this then serves it over quackapi; tests/check.sql reads this then asserts on
--- it. Someone swapping quackapi for FastAPI+Postgres reuses THIS unchanged — the
--- server is a face over the model, not the model itself.
---
--- Paths:  hostfs discovers on the machine → COPY … TO 'variable:' pins the paths
---         → core.sql reads pathvariable:/zip:// . scalarfs/zipfs stay in-process.
+-- build.sql — model only (no HTTP). Paths: hostfs → scalarfs pins → core.
 
 .read server/config.sql
-
 SET memory_limit = '4GB';
 SET max_temp_directory_size = '8GB';
-
 .read server/extensions.sql
 .read server/auth.sql
 
@@ -24,41 +14,33 @@ SET VARIABLE pages_dir   = 'pages';
 SET VARIABLE templates_dir = 'server/templates';
 SET VARIABLE detector_rules_path = 'server/config/detector_rules.json';
 SET VARIABLE semantic_yaml_path  = 'server/config/closure_semantic.yaml';
--- Judge panel: the endpoint, token and models. core.sql runs server/judge.sql live.
 SET VARIABLE judges_path = 'server/config/judges.json';
 
 .read server/hostfs.sql
 
-COPY (
-    SELECT abs_path FROM v_hostfs
-    WHERE root = 'samples' AND is_file IS TRUE AND ext = '.pdf'
-    ORDER BY path
-) TO 'variable:sample_pdfs' (FORMAT variable, LIST scalar);
-
+-- Pack pins: manifest + watchlist + every PDF named in the pack + templates.
 COPY (
     SELECT any_value(abs_path) FROM v_hostfs
     WHERE root = 'samples' AND is_file IS TRUE AND name = 'manifest.json'
 ) TO 'variable:manifest_path' (FORMAT variable);
-
 COPY (
     SELECT any_value(abs_path) FROM v_hostfs
     WHERE root = 'samples' AND is_file IS TRUE AND name = 'watchlist.json'
 ) TO 'variable:watchlist_path' (FORMAT variable);
-
+COPY (
+    SELECT h.abs_path
+    FROM v_hostfs h
+    JOIN (
+        SELECT fe.filename
+        FROM (SELECT unnest(files) AS fe FROM read_json_auto(getvariable('manifest_path')))
+        WHERE fe.filename IS NOT NULL
+    ) man ON man.filename = h.name
+    WHERE h.root = 'samples' AND h.is_file IS TRUE AND h.ext = '.pdf'
+    ORDER BY h.path
+) TO 'variable:sample_pdfs' (FORMAT variable, LIST scalar);
 COPY (
     SELECT abs_path FROM v_hostfs
-    WHERE root = 'templates' AND is_file IS TRUE AND ext = '.html'
-    ORDER BY path
+    WHERE root = 'templates' AND is_file IS TRUE AND ext = '.html' ORDER BY path
 ) TO 'variable:template_files' (FORMAT variable, LIST scalar);
-
-SET VARIABLE sample_zip_path = (
-    SELECT absolute_path(path)
-    FROM (SELECT nullif(getenv('CLOSURE_SAMPLE_ZIP'), '') AS path)
-    WHERE path IS NOT NULL
-      AND is_file(path) IS TRUE AND file_extension(path) = '.zip'
-);
-
--- Optional Postgres as peer store (same SQL app)
-.read server/postgres.sql
 
 .read server/model.sql

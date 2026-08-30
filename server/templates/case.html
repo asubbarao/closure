@@ -13,39 +13,47 @@
   {% include "fragments/case_actions.html" %}
 </header>
 <div class="wrap">
-  {% if n_flagged_pending and n_flagged_pending > 0 %}
+  {% if export_blocked %}
   <p class="mono" style="color:var(--rej);margin-bottom:12px">
-    ⚑ {{ n_flagged_pending }} flagged pending — open triage or bulk FP to unlock export
+    ⚑ Flagged pending — triage or bulk FP to unlock export
   </p>
   {% endif %}
   <table>
     <thead><tr><th>Document</th><th>Pages</th><th></th></tr></thead>
     <tbody>
+    {% if documents %}
     {% for d in documents %}
       <tr>
         <td><a href="/documents/{{ d.id }}">{{ d.display_name }}</a>
-          <div class="mono" style="font-size:11px;color:var(--ink2)">{{ d.filename }}.pdf · {{ d.size_label }}</div></td>
+          <div class="mono" style="font-size:11px;color:var(--ink2)">{{ d.filename }} · {{ d.size_label }}</div></td>
         <td class="mono">{{ d.page_count }}</td>
         <td><a class="btn" href="/documents/{{ d.id }}">Open</a></td>
       </tr>
     {% endfor %}
+    {% endif %}
     </tbody>
   </table>
   <div class="card">
     <h3 style="margin-bottom:8px">Entities — decide once (case-wide)</h3>
+    {% if entities %}
     {% for e in entities %}
       {% include "fragments/entity_row.html" %}
+    {% endfor %}
     {% else %}
     <div style="color:var(--ink2)">No entities.</div>
-    {% endfor %}
+    {% endif %}
   </div>
   <div class="card">
-    <h3 style="margin-bottom:8px">Recent audit</h3>
+    <h3 style="margin-bottom:8px">Recent audit
+      <a class="mono" href="/cases/{{ case.id }}/audit" style="font-weight:400;font-size:12px;margin-left:8px">full trail →</a>
+    </h3>
+    {% if audit %}
     {% for a in audit %}
     <div class="mono" style="font-size:12px;padding:4px 0">{{ a.ts_short }} · {{ a.action }} · {{ a.target }} · {{ a.actor }}</div>
+    {% endfor %}
     {% else %}
     <div style="color:var(--ink2)">No decisions yet.</div>
-    {% endfor %}
+    {% endif %}
   </div>
 </div>
 {% endblock %}

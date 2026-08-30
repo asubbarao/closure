@@ -5,12 +5,12 @@
 --
 -- Earned (product SELECTs):
 --   dns          v_url_hosts (dns_lookup on extracted hostnames)
---   read_lines   v_suggestion_line_context (scalarfs page_uri + lateral window)
---   splink_udfs  unaccent + double_metaphone (phonetic name scorer)
---   func_apply   apply(scorer_fn, …) — name scorers are rows, not UNION arms
+--   splink_udfs  unaccent + double_metaphone (phonetic columns on score tables)
 --   cache_httpfs v_http_cache_* status + remote https/s3 reads land on disk cache
 -- Earned (runtime):
 --   curl_httpfs  quackapi outbound HTTPUtil — LOAD before serve
+-- Lines: read_pdf_lines → document_lines; context = join ±3 (not DIY y_key lines).
+-- No func_apply — ratios are tables, not apply(macro, …).
 
 INSTALL quackapi FROM community; LOAD quackapi;
 
@@ -33,11 +33,9 @@ INSTALL tera FROM community; LOAD tera;
 INSTALL hostfs FROM community; LOAD hostfs;
 INSTALL scalarfs FROM community; LOAD scalarfs;
 INSTALL zipfs FROM community; LOAD zipfs;
-INSTALL read_lines FROM community; LOAD read_lines;
 INSTALL webbed FROM community; LOAD webbed;
 INSTALL yaml FROM community; LOAD yaml;
 INSTALL rapidfuzz FROM community; LOAD rapidfuzz;
-INSTALL func_apply FROM community; LOAD func_apply;
 INSTALL finetype FROM community; LOAD finetype;
 INSTALL hashfuncs FROM community; LOAD hashfuncs;
 INSTALL splink_udfs FROM community; LOAD splink_udfs;

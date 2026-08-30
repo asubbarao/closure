@@ -1,4 +1,4 @@
-.PHONY: install setup run test check clean
+.PHONY: install setup run test check rejudge clean
 
 PORT ?= 8117
 BASE  = http://127.0.0.1:$(PORT)
@@ -19,6 +19,13 @@ install:
 #   PDF_EXTENSION=/path/to/font-bundled/pdf.duckdb_extension  (blank-PNG fix)
 setup:
 	./scripts/setup.sh
+
+# Re-run the whole judge panel (new model in judges.json, changed prompt, a corpus
+# you want re-read). The panel is normally incremental — it judges only spans no
+# judge has voted on — so this flag is how you say "vote again". Votes are an
+# append-only file log; the next boot reads the fresh round.
+rejudge:
+	@CLOSURE_JUDGE_RERUN=1 $$(./scripts/duckdb-bin.sh) :memory: -c ".read server/build.sql"
 
 # Boot Closure ($(BASE)).
 run:

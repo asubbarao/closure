@@ -34,9 +34,6 @@ tables:
   - alias: ent
     table: entities
     pk_columns: [id]
-  - alias: jdg
-    table: suggestion_judges
-    pk_columns: [suggestion_id]
 
 joins:
   - name: suggestion_to_document
@@ -54,12 +51,6 @@ joins:
     from_alias: sug
     fk_columns: [entity_id]
     cardinality: ManyToOne
-  - name: suggestion_to_judge
-    table: jdg
-    from_alias: sug
-    fk_columns: [id]
-    # suggestion_judges.suggestion_id ← sug.id
-    cardinality: OneToOne
 
 dimensions:
   # Mark grain
@@ -119,19 +110,16 @@ dimensions:
   - name: entity_text
     expr: ent.canonical_text
     source_table: ent
-  # Judge panel (when joined)
-  - name: vote_pattern
-    expr: jdg.vote_pattern
-    source_table: jdg
-  - name: vote_context
-    expr: jdg.vote_context
-    source_table: jdg
-  - name: vote_prior
-    expr: jdg.vote_prior
-    source_table: jdg
-  - name: panel
-    expr: jdg.panel
-    source_table: jdg
+  # Judge panel — on the mark grain: the verdict the models agreed on and how many
+  - name: judge_panel
+    expr: sug.judge_panel
+    source_table: sug
+  - name: judge_agreement
+    expr: sug.judge_agreement
+    source_table: sug
+  - name: judge_votes
+    expr: sug.judge_votes
+    source_table: sug
 
 # Real measures only. Prefer filter-on-dimension over inventing KPI columns.
 metrics:

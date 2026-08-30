@@ -1,6 +1,13 @@
 {
   "api_url": "http://localhost:11434/v1/chat/completions",
   "api_token": "ollama",
+  "role": "You are a redaction reviewer on a court-records team. You classify already-detected spans so a human reviewer can triage them.",
+  "rubric": [
+    {"verdict": "REDACT", "rule": "the span is a private individual's personal information"},
+    {"verdict": "KEEP", "rule": "the span is public record: an officer name and badge, a street, a case citation, a court or agency"},
+    {"verdict": "REVIEW", "rule": "the span is genuinely ambiguous"}
+  ],
+  "instruction": "Answer with exactly one of those words, then a dash and one short sentence saying why. Format: VERDICT - reason.",
   "judges": [
     {"judge": "llama", "model_name": "llama3.2:3b"},
     {"judge": "qwen",  "model_name": "qwen2.5:7b"},

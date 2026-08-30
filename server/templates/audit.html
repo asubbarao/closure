@@ -18,15 +18,14 @@
   <div class="card">
     <h3 style="margin-bottom:8px">Batches</h3>
     <table>
-      <thead><tr><th>When</th><th>Label</th><th>Actor</th><th>n</th><th>Members</th><th></th></tr></thead>
+      <thead><tr><th>When</th><th>Label</th><th>Actor</th><th>Members</th><th></th></tr></thead>
       <tbody>
       {% for b in batches %}
         <tr>
           <td class="mono">{{ b.ts_short }}</td>
           <td>{{ b.label }}</td>
           <td>{{ b.actor }}</td>
-          <td class="mono">{{ b.n_members }}</td>
-          <td class="mono" style="font-size:11px;max-width:32ch;overflow:hidden;text-overflow:ellipsis"
+          <td class="mono" style="font-size:11px;max-width:40ch;overflow:hidden;text-overflow:ellipsis"
               title="{{ b.members }}">
             {{ b.members or "—" }}
           </td>
@@ -50,10 +49,11 @@
         </tr>
       </thead>
       <tbody>
+      {% if events %}
       {% for e in events %}
         <tr>
-          <td class="mono">{{ e.ts_short }}</td>
-          <td>{% if e.is_undo %}↩ {% endif %}{{ e.action }}</td>
+          <td class="mono">{{ e.ts_full }}</td>
+          <td>{% if e.undoes_batch_id %}↩ {% endif %}{{ e.action }}</td>
           <td class="mono">{{ e.status }}</td>
           <td class="mono">{{ e.band }}</td>
           <td>{{ e.target }}</td>
@@ -62,9 +62,10 @@
             {{ e.reason }}{% if e.batch_label %} · {{ e.batch_label }}{% endif %}
           </td>
         </tr>
+      {% endfor %}
       {% else %}
         <tr><td colspan="7" style="color:var(--ink2)">No events yet — decisions appear here as you work.</td></tr>
-      {% endfor %}
+      {% endif %}
       </tbody>
     </table>
   </div>

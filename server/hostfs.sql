@@ -2,7 +2,7 @@
 -- Dir vars required: samples_dir, exports_dir, pages_dir, templates_dir.
 --
 --   SELECT * FROM v_hostfs WHERE root = 'samples' AND is_file IS TRUE AND ext = '.pdf';
---   SELECT * FROM v_zips;   -- LE case packs (often empty)
+--   SELECT * FROM v_zips;   -- host .zip files (open members via zipfs zip://)
 
 CREATE OR REPLACE VIEW v_hostfs AS
 SELECT root, path,
@@ -30,7 +30,7 @@ FROM (
     SELECT 'templates' AS root, path FROM ls(getvariable('templates_dir'))
 );
 
--- LE packs on host; zipfs opens members. Empty is fine.
+-- Host .zip files only. Members: zip://path/to.zip/member.pdf after LOAD zipfs.
 CREATE OR REPLACE VIEW v_zips AS
 SELECT root, path AS zip_path, abs_path, name, size, bytes, modified, parts
 FROM v_hostfs

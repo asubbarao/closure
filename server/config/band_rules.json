@@ -1,0 +1,11 @@
+[
+  {"rule": "marked false positive",        "priority": 1, "flag_tag": "false_positive", "band": "flagged"},
+  {"rule": "judges say public record",     "priority": 2, "panel": "keep",              "band": "flagged"},
+  {"rule": "judges disagree three ways",   "priority": 2, "panel": "conflict",          "band": "flagged"},
+  {"rule": "judges unanimously redact",    "priority": 3, "panel": "redact", "agreement": 3, "band": "high"},
+  {"rule": "judges mostly redact",         "priority": 4, "panel": "redact",            "band": "review"},
+  {"rule": "judges say ambiguous",         "priority": 4, "panel": "review",            "band": "review"},
+  {"rule": "unjudged, detector certain",   "priority": 5, "min_confidence": 90,         "band": "high"},
+  {"rule": "unjudged, detector plausible", "priority": 6, "min_confidence": 60,         "band": "review"},
+  {"rule": "nothing vouches for it",       "priority": 9,                               "band": "flagged"}
+]

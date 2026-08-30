@@ -14,14 +14,16 @@
 </header>
 <div class="wrap">
   <p style="color:var(--ink2);margin-bottom:12px">
-    Decide once across docs · bulk skips flagged (clear those in Flagged FP) · filenames show multi-doc span
+    Decide once across docs · bulk skips flagged (clear those in Flagged FP)
   </p>
+  {% if entities %}
   {% for e in entities %}
   <div class="card" style="margin-top:8px">
     {% include "fragments/entity_row.html" %}
   </div>
+  {% endfor %}
   {% else %}
   <div class="card" style="color:var(--ink2)">No entities in this case.</div>
-  {% endfor %}
+  {% endif %}
 </div>
 {% endblock %}

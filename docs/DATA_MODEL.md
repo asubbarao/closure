@@ -110,7 +110,7 @@ FROM (SUMMARIZE v_suggestions);
 ## Load order
 
 ```
-build.sql:  config → extensions → auth → pins → [postgres] → model
+build.sql:  config → extensions → auth → pins → model
 app.sql:    build.sql → routes → serve
 make check: build.sql → dqtest invariants (out of the serve path)
 ```

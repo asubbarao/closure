@@ -191,8 +191,8 @@ export const api = {
     `/api/documents/${encodeURIComponent(docId)}/flagged/decision?status=${status}&actor=${actor}`,
   remainderBulk: (caseId: string, status: string, actor = "e2e") =>
     `/api/cases/${encodeURIComponent(caseId)}/remainder/decision?status=${status}&actor=${actor}`,
-  entityWork: (caseId: string) =>
-    `/api/cases/${encodeURIComponent(caseId)}/entity-work`,
+  entities: (caseId: string) =>
+    `/api/cases/${encodeURIComponent(caseId)}/entities`,
   batches: (caseId: string) =>
     `/api/cases/${encodeURIComponent(caseId)}/batches`,
   mark: (

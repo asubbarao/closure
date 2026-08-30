@@ -1,36 +1,25 @@
 -- setup_pages.sql — sample PDFs → pages/<stem>/pN.png
 --
--- Knobs typed at entry (setup.sh). Defaults only if .read alone:
---   samples_dir, pages_dir, png_dpi, skip_png
+-- setup creates files under pages/<stem>/ where stem = basename without .pdf.
+-- App serves /pages/<stem>/pN.png (parse_filename(filename, true) in v_page_nav).
 --
--- Paths: scalarfs pins (pathvariable:) — not string-spliced into TVFs.
--- Discover: hostfs ls + path scalars.
--- Wipe: fixed relative product dir `pages` (matches server/app.sql). Never
---   interpolate a variable into rm -rf — that is the safety model.
---
--- Page rasters: pdf_write_page_images (pdf ≥ 0.7.7 / community 0.8.0) — one
--- TVF writes out_dir/<stem>/p{N}.png with bundled base-14 fonts. No per-page
--- pdf_to_png + COPY BLOB loop, no pdftoppm.
+-- Raster: host pdftoppm (poppler) — community pdf_page_images often emits blank
+-- tiles when base-14 fonts are missing on the box. Same stem layout either way.
 
--- Typed defaults only when unset (no try_cast / cast soup).
 SET VARIABLE samples_dir = coalesce(getvariable('samples_dir'), 'samples');
 SET VARIABLE png_dpi     = coalesce(getvariable('png_dpi'), 100);
 SET VARIABLE skip_png    = coalesce(getvariable('skip_png'), 0);
--- Product pin: wipe/write target is always relative `pages` (matches app.sql).
-SET VARIABLE pages_dir = 'pages';
+SET VARIABLE pages_dir   = 'pages';
 
 INSTALL hostfs FROM community; LOAD hostfs;
 INSTALL shellfs FROM community; LOAD shellfs;
-INSTALL scalarfs FROM community; LOAD scalarfs;
-INSTALL pdf FROM community; LOAD pdf;
 
 SELECT CASE
     WHEN getvariable('skip_png') = 1 THEN 'skip PNGs (skip_png=1)'
-    ELSE format('page PNGs → {}/<stem>/pN.png (dpi={}, pdf_write_page_images)',
+    ELSE format('page PNGs → {}/<stem>/pN.png (dpi={}, pdftoppm)',
                 getvariable('pages_dir'), getvariable('png_dpi'))
 END AS step;
 
--- Typed sample PDF inventory (hostfs path scalars — never ends_with/LIKE)
 CREATE OR REPLACE TEMP TABLE sample_pdfs AS
 SELECT path,
        absolute_path(path) AS abs_path,
@@ -41,43 +30,45 @@ WHERE is_file(path) IS TRUE AND file_extension(path) = '.pdf';
 
 SELECT count(*)::BIGINT AS n_sample_pdfs FROM sample_pdfs;
 
--- scalarfs: path list is data; readers take the literal scheme pathvariable:…
+-- Wipe fixed product dir only (no variable in rm -rf).
 COPY (
-    SELECT abs_path FROM sample_pdfs ORDER BY path
-) TO 'variable:sample_pdfs' (FORMAT variable, LIST scalar);
-
--- Wipe = fixed relative path only (no variable in rm -rf).
--- pdf_write_page_images creates pages/<stem>/ itself.
-COPY (
-    SELECT line
-    FROM (
+    SELECT line FROM (
         SELECT ['rm -rf pages && mkdir -p pages'] AS cmds
-    ) c,
-    unnest(c.cmds) WITH ORDINALITY AS u(line, ord)
+    ) c, unnest(c.cmds) AS u(line)
     WHERE getvariable('skip_png') = 0
-    ORDER BY ord
 ) TO '| bash' (FORMAT CSV, HEADER false, QUOTE '', ESCAPE '');
 
--- One TVF: all samples → pages/<stem>/p{N}.png (bundled base-14 fonts).
-CREATE OR REPLACE TEMP TABLE page_png_meta AS
-SELECT parse_filename(file, true) AS stem,
-       page,
-       out_path,
-       bytes::BIGINT AS nbytes
-FROM pdf_write_page_images(
-    'pathvariable:sample_pdfs',
-    getvariable('pages_dir'),
-    dpi := getvariable('png_dpi')::INTEGER
-)
-WHERE getvariable('skip_png') = 0;
+-- One pdftoppm per sample; rename p-001.png / p-1.png → p1.png (product URL).
+COPY (
+    SELECT format(
+        'mkdir -p pages/{0} && pdftoppm -png -r {1} {2} pages/{0}/p && '
+        || 'for f in pages/{0}/p-*.png pages/{0}/p*.png; do '
+        || '[ -f "$f" ] || continue; '
+        || 'base=$(basename "$f" .png); '
+        || 'n=$(echo "$base" | sed -E "s/^p-?0*//"); '
+        || '[ -z "$n" ] && n=0; '
+        || 'mv "$f" pages/{0}/p${{n}}.png; '
+        || 'done',
+        stem, getvariable('png_dpi')::INTEGER, abs_path)
+    FROM sample_pdfs
+    WHERE getvariable('skip_png') = 0
+    ORDER BY path
+) TO '| bash' (FORMAT CSV, HEADER false, QUOTE '', ESCAPE '');
 
-SELECT * FROM (SUMMARIZE page_png_meta);
+CREATE OR REPLACE TEMP TABLE page_png_meta AS
+SELECT parse_filename(path, true) AS stem,
+       try_cast(replace(file_name(path), '.png', '') AS INTEGER) AS page,
+       path AS out_path,
+       file_size(path)::BIGINT AS nbytes
+FROM lsr('pages', 2)
+WHERE is_file(path) IS TRUE AND file_extension(path) = '.png'
+  AND getvariable('skip_png') = 0;
 
 SELECT CASE
     WHEN getvariable('skip_png') = 1 THEN 'skip_png=1'
-    WHEN count(*) = 0 THEN error('setup_pages: pdf_write_page_images returned 0 rows')
-    WHEN min(nbytes) < 100 THEN error(format(
-        'setup_pages: min PNG size {} bytes (< 100) — raster failed (fonts?)', min(nbytes)))
+    WHEN count(*) = 0 THEN error('setup_pages: no PNGs under pages/')
+    WHEN min(nbytes) < 1000 THEN error(format(
+        'setup_pages: min PNG size {} bytes — still blank (pdftoppm/fonts?)', min(nbytes)))
     ELSE format('setup_pages: {} pages / {} stems, {}–{} bytes/png',
                 count(*), count(DISTINCT stem), min(nbytes), max(nbytes))
 END AS page_png_ok

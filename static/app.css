@@ -46,11 +46,12 @@ th { font-size: 11px; color: var(--ink2); background: #f7f9fb; }
 }
 .entity-row:first-child { border-top: 0; }
 .mark { position: absolute; border-radius: 2px; cursor: pointer; }
-.mark.pending { background: rgba(253, 243, 227, 0.85); outline: 1.5px solid var(--pend); }
-.mark.flagged { background: rgba(253, 236, 234, 0.7); outline: 1.5px dashed var(--rej); }
-.mark.accepted { background: #0b0e14; }
+/* Light fills — page must stay readable; export burn is pdf_redact, not these boxes */
+.mark.pending { background: rgba(253, 243, 227, 0.35); outline: 1.5px solid var(--pend); }
+.mark.flagged { background: rgba(253, 236, 234, 0.3); outline: 1.5px dashed var(--rej); }
+.mark.accepted { background: rgba(11, 14, 20, 0.55); outline: 1.5px solid #0b0e14; }
 .mark.rejected { outline: 1.5px dashed #8a94a6; background: transparent; }
-.mark.current { outline: 2.5px solid var(--acc); outline-offset: 2px; z-index: 5; }
+.mark.current { outline: 2.5px solid var(--acc); outline-offset: 2px; z-index: 5; background: rgba(29, 78, 216, 0.2); }
 .pdf-page {
   position: relative; width: 680px; margin: 0 auto;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);

@@ -1,14 +1,10 @@
--- app.sql — DuckDB as the app runtime (better FastAPI for data products).
+-- app.sql — one process: build the FOIA model, register routes, serve.
 --
--- Build:    server/build.sql (raw files → typed views → domain tables; no HTTP)
--- HTTP:     quackapi (routes, auth, live OpenAPI /docs /openapi.json)
--- Outbound: curl_httpfs (transport) + cache_httpfs (read cache under .tmp/cache_httpfs)
--- Paths:    hostfs → scalarfs pins → pathvariable: / zip://
--- Effects:  shellfs (setup host effects; patterns in shellfs.sql)
--- Checks:   tests/check.sql (dqtest — declarative invariants, run by `make check`,
---           over the same server/build.sql model; NOT in the serve path)
--- Optional: CLOSURE_API_KEY · CLOSURE_POSTGRES · CLOSURE_SAMPLE_ZIP + zip_pin.sql
---           CLOSURE_REMOTE_PROBE (https URL) warms cache_httpfs at boot
+--   build.sql  → domain tables/views from samples/ (no HTTP)
+--   routes.sql → CREATE ROUTE (quackapi) + OpenAPI at /docs
+--   tests/check.sql reads the same build.sql (make check) — not on this path
+--
+-- Env: CLOSURE_PORT · CLOSURE_API_KEY (optional)
 
 .read server/build.sql
 .read server/routes.sql

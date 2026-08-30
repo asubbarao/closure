@@ -5,9 +5,7 @@
 <header class="appbar">
   <a class="btn" href="/cases/{{ case.id }}">← Library</a>
   <strong>Flagged triage</strong>
-  <span class="mono" style="color:var(--ink2)">
-    {{ case.case_no }} · {{ n_flagged_pending }} FP-risk · multi-doc
-  </span>
+  <span class="mono" style="color:var(--ink2)">{{ case.case_no }} · FP-risk · multi-doc</span>
   <span class="sp"></span>
   <a class="btn" href="/cases/{{ case.id }}/remainder">FN remainder</a>
   <a class="btn" href="/cases/{{ case.id }}/audit">Audit</a>
@@ -15,8 +13,8 @@
 </header>
 <div class="wrap">
   <p style="color:var(--ink2);margin-bottom:12px;max-width:72ch">
-    Clear false positives without re-reading every page. Grouped by document so multi-doc
-    cases stay navigable. <strong>Reject FP</strong> = not PII (visible).
+    Clear false positives without re-reading every page. Grouped by document.
+    <strong>Reject FP</strong> = not PII (visible).
     <strong>Accept redact</strong> = redaction stays. Bulk = one audit batch.
   </p>
 
@@ -28,11 +26,11 @@
     <span class="mono" style="font-size:12px;color:var(--ink2)">Export blocked until empty</span>
   </div>
 
+  {% if by_doc %}
   {% for d in by_doc %}
   <div class="card" style="margin-bottom:14px">
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-      <strong>{{ d.filename }}.pdf</strong>
-      <span class="mono" style="font-size:11px;color:var(--ink2)">{{ d.n }} flagged</span>
+      <strong>{{ d.filename }}</strong>
       <span class="sp"></span>
       <a class="btn" href="/documents/{{ d.document_id }}">Open doc</a>
       <button type="button" class="btn danger" data-action="doc-flagged-bulk"
@@ -40,6 +38,7 @@
       <button type="button" class="btn" data-action="doc-flagged-bulk"
               data-doc-id="{{ d.document_id }}" data-status="accepted">Doc → redact</button>
     </div>
+    {% if d.rows %}
     {% for f in d.rows %}
     <div class="flagged-row" id="f-{{ f.id }}" style="padding:10px 0;border-top:1px solid var(--line)"
          data-id="{{ f.id }}">
@@ -70,9 +69,11 @@
       </div>
     </div>
     {% endfor %}
+    {% endif %}
   </div>
+  {% endfor %}
   {% else %}
   <div class="card" style="color:var(--ink2)">No flagged pending — export can proceed when redactions are ready.</div>
-  {% endfor %}
+  {% endif %}
 </div>
 {% endblock %}

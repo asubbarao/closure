@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# boot Closure: stock DuckDB + community extensions (INSTALL quackapi FROM community).
+# Boot Closure: DuckDB process + community extensions (INSTALL quackapi FROM community).
 #   make setup && make run
-# LE case pack (optional): CLOSURE_SAMPLE_ZIP=/path/to/pack.zip make run
-#   → app.sql sets sample_zip_path; ops can .read server/zip_pin.sql in-session
-#   or: duckdb closure.db -c "SET VARIABLE sample_zip_path='…'; .read server/zip_pin.sql"
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -32,7 +29,6 @@ fi
 
 echo "==> duckdb $($DUCKDB_BIN --version 2>/dev/null | head -1)"
 echo "==> data_dir=$DATA_DIR  port=$PORT  db=$DB"
-[[ -n "${CLOSURE_SAMPLE_ZIP:-}" ]] && echo "==> CLOSURE_SAMPLE_ZIP=$CLOSURE_SAMPLE_ZIP (host path; zipfs pin via server/zip_pin.sql if you .read it)"
 
 export CLOSURE_PORT="$PORT"
 export CLOSURE_SAMPLES_DIR="$DATA_DIR"

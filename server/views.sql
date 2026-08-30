@@ -1,13 +1,49 @@
--- views.sql — live folds + product surfaces + thin tera edge.
---
--- Naming: verbose CTEs/views; aliases 2–3 letters (sug, doc, pag, cas);
---         lambdas only use 1-letter (list_transform(xs, x -> …)).
--- Surfaces name the join once. Ctx only maps typed columns → template keys.
--- Geometry is first-class on the mark grain (bbox / screen). No count boards.
+-- views.sql — product WHERE + render. Lists from children only (null = empty). No ifnull/struct_pack laundry.
 
 DROP SEMANTIC VIEW IF EXISTS suggestion_metrics;
 DROP SEMANTIC VIEW IF EXISTS closure;
 CREATE SEMANTIC VIEW closure FROM YAML FILE 'server/config/closure_semantic.yaml';
+
+-- Product projections (lived in core; exemplar keeps core as pins + detect).
+CREATE OR REPLACE VIEW v_latest_decision AS
+SELECT suggestion_id, status, actor, reason, ts
+FROM v_src_decisions
+WHERE kind = 'decision' AND suggestion_id IS NOT NULL
+QUALIFY row_number() OVER (PARTITION BY suggestion_id ORDER BY ts DESC) = 1;
+
+CREATE OR REPLACE VIEW v_suggestions AS
+SELECT mark.*,
+       CASE
+           WHEN dec.status IS NOT NULL THEN dec.status
+           WHEN mark.source = 'manual' THEN 'accepted'
+           ELSE 'pending'
+       END AS status
+FROM suggestions mark
+LEFT JOIN v_latest_decision dec ON dec.suggestion_id = mark.id;
+
+CREATE OR REPLACE VIEW v_decide_targets AS
+SELECT * RENAME (id AS suggestion_id) FROM v_suggestions;
+
+CREATE OR REPLACE VIEW v_suggestion_line_context AS
+SELECT sug.id AS suggestion_id, sug.document_id, sug.page_no, sug.line_no AS hit_line,
+       lin.line_no AS line_number, lin.line_text,
+       abs(lin.line_no - sug.line_no)::INTEGER AS dist
+FROM suggestions sug
+JOIN document_lines lin
+  ON lin.document_id = sug.document_id AND lin.page_no = sug.page_no
+ AND abs(lin.line_no - sug.line_no) <= 3
+WHERE sug.line_no IS NOT NULL;
+
+CREATE OR REPLACE VIEW v_suggestion_judge_votes AS
+SELECT sug.id AS suggestion_id, sug.kind, sug.text,
+       ver.judge, ver.model_name, ver.verdict, ver.reason, ver.reply
+FROM suggestions sug
+JOIN judge_verdicts ver ON ver.kind = sug.kind AND ver.text = sug.text;
+
+CREATE OR REPLACE VIEW v_url_hosts AS
+SELECT hostname, dns_lookup(hostname) AS a_record, dns_lookup_all(hostname) AS a_records
+FROM words WHERE nullif(hostname, '') IS NOT NULL
+GROUP BY hostname;
 
 CREATE OR REPLACE VIEW v_cols AS
 SELECT table_name AS relation,
@@ -16,392 +52,178 @@ FROM information_schema.columns
 WHERE table_schema = 'main'
   AND table_name IN (
       'cases', 'documents', 'pages', 'words', 'entities', 'suggestions', 'decisions',
-      'suggestion_judges', 'v_suggestions', 'v_decide_targets', 'v_nav',
-      'v_export_blocked', 'v_case_flagged_pending', 'v_export_plans', 'v_audit',
-      'v_decision_batches',
-      'v_history_events', 'v_hostfs', 'v_zips', 'v_shell_patterns',
-      'v_url_hosts', 'v_suggestion_line_context', 'v_cols', 'v_page_marks',
-      'v_case_surface', 'v_document_page_surface',
-      'v_http_cache', 'v_http_cache_config', 'v_http_cache_status',
-      'v_http_cache_access', 'v_http_cache_filesystems',
-      'v_route_get', 'v_pages', 'v_review_page',
-      'v_flagged_pending', 'v_remainder_pending', 'v_entity_work', 'v_decision_batches'
+      'v_suggestions', 'v_decide_targets', 'v_nav', 'v_export_plans',
+      'v_audit', 'v_decision_batches', 'v_history_events', 'v_hostfs', 'v_zips',
+      'v_shell_patterns', 'v_url_hosts', 'v_suggestion_line_context', 'v_cols',
+      'v_http_cache', 'v_http_cache_status', 'v_http_cache_access',
+      'v_route_get', 'v_pages', 'v_review_page', 'v_flagged_pending',
+      'v_remainder_pending', 'v_flagged_by_doc', 'v_case_shell', 'v_page_nav'
   )
 GROUP BY table_name;
 
--- ── live folds ─────────────────────────────────────────────────────────────
+CREATE OR REPLACE VIEW v_flagged_pending AS
+SELECT * FROM v_suggestions
+WHERE band = 'flagged' AND status = 'pending';
 
-CREATE OR REPLACE VIEW v_page_marks AS
-SELECT sug.id, sug.document_id, sug.page_no, sug.line_no,
-       sug.bbox, sug.screen,
-       sug.text, sug.confidence, sug.status, sug.band, sug.kind, sug.entity_id, sug.flag_tag
-FROM v_suggestions sug;
+CREATE OR REPLACE VIEW v_remainder_pending AS
+SELECT * FROM v_suggestions
+WHERE status = 'pending' AND detector_key = 'detector:remainder';
 
 CREATE OR REPLACE VIEW v_audit AS
-SELECT log.ts,
-       coalesce(log.actor, 'reviewer') AS actor,
-       coalesce(log.kind, 'decision') AS action,
-       log.status,
-       log.suggestion_id,
-       coalesce(log.case_id, doc.case_id) AS case_id,
-       log.document_id,
-       -- prefer text; fall back to id (NULL stays NULL — templates render empty)
-       coalesce(log.text, log.suggestion_id) AS target,
-       log.reason,
-       log.batch_id,
-       log.batch_label,
-       log.undoes_batch_id,
-       sug.band,
-       sug.kind AS pii_kind,
-       sug.judge_panel
+SELECT log.ts, log.actor, log.kind AS action, log.status, log.suggestion_id,
+       log.case_id, log.document_id, log.text AS target, log.reason,
+       log.batch_id, log.batch_label, log.undoes_batch_id,
+       strftime(log.ts, '%H:%M') AS ts_short,
+       strftime(log.ts, '%Y-%m-%d %H:%M:%S') AS ts_full,
+       sug.band, sug.kind AS pii_kind, sug.judge_panel
 FROM v_src_decisions log
-LEFT JOIN documents doc ON doc.id = log.document_id
 LEFT JOIN v_suggestions sug ON sug.id = log.suggestion_id;
 
--- Export gate: store the id list; len(list) is free (not bool_or / count*).
-CREATE OR REPLACE VIEW v_case_flagged_pending AS
-SELECT doc.case_id,
-       list(sug.id ORDER BY sug.id) AS flagged_pending_ids
-FROM documents doc
-JOIN v_suggestions sug ON sug.document_id = doc.id
-WHERE sug.band = 'flagged' AND sug.status = 'pending'
-GROUP BY doc.case_id;
-
-CREATE OR REPLACE VIEW v_export_blocked AS
-SELECT cas.id AS case_id,
-       coalesce(fp.flagged_pending_ids, []) AS flagged_pending_ids,
-       len(coalesce(fp.flagged_pending_ids, [])) > 0 AS export_blocked
-FROM cases cas
-LEFT JOIN v_case_flagged_pending fp ON fp.case_id = cas.id;
-
 CREATE OR REPLACE VIEW v_nav AS
-SELECT case_id, '/documents/' || id AS href, filename AS text
-FROM documents
+SELECT case_id, '/documents/' || id AS href, filename AS text FROM documents
 UNION ALL BY NAME
-SELECT id AS case_id, '/cases/' || id AS href, 'Library' AS text FROM cases
-UNION ALL BY NAME
-SELECT id AS case_id, '/cases/' || id || '/stream' AS href, 'Entity stream' AS text FROM cases
-UNION ALL BY NAME
-SELECT id AS case_id, '/cases/' || id || '/flagged' AS href, 'Flagged triage' AS text FROM cases
-UNION ALL BY NAME
-SELECT id AS case_id, '/cases/' || id || '/remainder' AS href, 'FN remainder' AS text FROM cases
-UNION ALL BY NAME
-SELECT id AS case_id, '/cases/' || id || '/audit' AS href, 'Audit' AS text FROM cases;
+SELECT DISTINCT cas.id AS case_id,
+       replace(lnk.href, '{{ case.id }}', cas.id) AS href,
+       trim(lnk.link_text, '← ') AS text
+FROM template_links lnk
+JOIN cases cas ON contains(lnk.href, '{{ case.id }}');
 
 CREATE OR REPLACE VIEW v_history_events AS
 SELECT kind, suggestion_id, status, actor, reason, ts AS event_ts,
        document_id, case_id, text, batch_id, batch_label, undoes_batch_id
-FROM v_src_decisions
-WHERE batch_id IS NOT NULL;
+FROM v_src_decisions WHERE batch_id IS NOT NULL;
 
--- Batches: array_agg everything that matters; ts / is_undo / counts = list ops free.
 CREATE OR REPLACE VIEW v_decision_batches AS
-WITH batches_from_history_events AS (
+WITH g AS (
     SELECT batch_id,
+           arg_min(case_id, event_ts) AS case_id,
+           min(event_ts) AS ts,
+           max(event_ts) AS ts_end,
+           strftime(min(event_ts), '%Y-%m-%d %H:%M') AS ts_short,
+           arg_min(actor, event_ts) AS actor,
+           arg_min(batch_label, event_ts) AS label,
            list(suggestion_id ORDER BY event_ts) AS suggestion_ids,
-           list(event_ts ORDER BY event_ts) AS event_timestamps,
-           list(actor ORDER BY event_ts) AS actors,
-           list(batch_label ORDER BY event_ts) AS labels,
-           list(undoes_batch_id ORDER BY event_ts) AS undoes_batch_ids,
-           list(case_id ORDER BY event_ts) AS case_ids
+           array_to_string(list(suggestion_id ORDER BY event_ts), ', ') AS members,
+           max(undoes_batch_id) AS undoes_batch_id
     FROM v_history_events
     GROUP BY batch_id
 ),
-batches_with_list_ops AS (
-    SELECT batch_id,
-           suggestion_ids,
-           event_timestamps,
-           actors,
-           labels,
-           undoes_batch_ids,
-           case_ids,
-           event_timestamps[1] AS ts,
-           event_timestamps[len(event_timestamps)] AS ts_end,
-           actors[1] AS actor,
-           labels[1] AS label,
-           case_ids[1] AS case_id,
-           list_filter(undoes_batch_ids, x -> x IS NOT NULL) AS undoes_nonnull
-    FROM batches_from_history_events
-)
-SELECT bat.batch_id,
-       bat.suggestion_ids,
-       bat.event_timestamps,
-       bat.ts,
-       bat.ts_end,
-       strftime(bat.ts, '%Y-%m-%d %H:%M') AS ts_short,  -- display pins here → list(row) rollup
-       bat.actor,
-       bat.label,
-       array_to_string(bat.suggestion_ids, ', ') AS members,
-       len(bat.suggestion_ids) AS n_members,
-       bat.case_id,
-       bat.undoes_nonnull[1] AS undoes_batch_id,
-       len(bat.undoes_nonnull) > 0 AS is_undo,
-       und.batch_id IS NOT NULL AS undone
-FROM batches_with_list_ops bat
-LEFT JOIN (
+undone AS (
     SELECT undoes_batch_id AS batch_id
     FROM v_history_events
     WHERE undoes_batch_id IS NOT NULL
     GROUP BY undoes_batch_id
-) und ON und.batch_id = bat.batch_id;
+)
+SELECT g.*,
+       g.undoes_batch_id IS NOT NULL AS is_undo,
+       u.batch_id IS NOT NULL AS undone
+FROM g
+LEFT JOIN undone u ON u.batch_id = g.batch_id;
 
 CREATE OR REPLACE VIEW v_export_plans AS
-WITH redaction_boxes_from_accepted AS (
+WITH boxes AS (
     SELECT sug.document_id,
-           list(struct_insert(bbox_to_redact(sug.bbox, pag.height_pt), page := sug.page_no::INTEGER)
-                ORDER BY sug.page_no, sug.id) AS boxes
+           list(struct_insert(
+               (sug.bbox.x0, pag.height_pt - sug.bbox.y1,
+                sug.bbox.x1 - sug.bbox.x0, sug.bbox.y1 - sug.bbox.y0)::redact_box,
+               page := sug.page_no::INTEGER) ORDER BY sug.page_no, sug.id) AS boxes
     FROM v_suggestions sug
-    JOIN pages pag
-      ON pag.document_id = sug.document_id AND pag.page_no = sug.page_no
+    JOIN pages pag ON pag.document_id = sug.document_id AND pag.page_no = sug.page_no
     WHERE sug.status = 'accepted'
     GROUP BY sug.document_id
-)
-SELECT blk.case_id,
-       blk.flagged_pending_ids,
-       len(blk.flagged_pending_ids) > 0 AS blocked,
-       doc.id AS document_id, doc.filename, doc.source_path,
-       'exports/' || replace(replace(doc.filename, '/', '_'), chr(92), '_') || '_redacted.pdf' AS out_path,
-       coalesce(box.boxes, []) AS boxes
-FROM v_export_blocked blk
-JOIN documents doc ON doc.case_id = blk.case_id
-LEFT JOIN redaction_boxes_from_accepted box ON box.document_id = doc.id;
-
--- ── list packs (multi-consumer → surface) ──────────────────────────────────
-
-CREATE OR REPLACE VIEW v_case_documents AS
-SELECT case_id, list(doc ORDER BY filename) AS documents
-FROM documents doc
-GROUP BY case_id;
-
--- Entity work: one pending scan; n_* = len(list) on packed lists (no re-list).
-CREATE OR REPLACE VIEW v_entity_work AS
-WITH work AS (
-    SELECT sug.entity_id, sug.id, sug.document_id, sug.page_no, doc.filename,
-           sug.band = 'flagged' AS is_flagged
-    FROM v_suggestions sug
-    JOIN documents doc ON doc.id = sug.document_id
-    WHERE sug.entity_id IS NOT NULL AND sug.status = 'pending'
 ),
-packed AS (
-    SELECT ent.id, ent.id AS entity_id, ent.case_id, ent.canonical_text,
-           ent.kind, ent.kind_label, ent.mono,
-           coalesce(list(w.id ORDER BY w.document_id, w.page_no) FILTER (NOT w.is_flagged), []) AS pending_ids,
-           coalesce(list(DISTINCT w.document_id) FILTER (NOT w.is_flagged), []) AS pending_doc_ids,
-           coalesce(list(DISTINCT w.filename) FILTER (NOT w.is_flagged), []) AS pending_filenames,
-           coalesce(list(w.id ORDER BY w.id) FILTER (w.is_flagged), []) AS flagged_ids
-    FROM entities ent
-    LEFT JOIN work w ON w.entity_id = ent.id
-    GROUP BY ent.id, ent.case_id, ent.canonical_text, ent.kind, ent.kind_label, ent.mono
+blocked AS (
+    SELECT DISTINCT case_id FROM v_flagged_pending
 )
-SELECT *, len(pending_ids) AS n_pending, len(pending_doc_ids) AS n_docs,
-       len(flagged_ids) AS n_flagged
-FROM packed;
-
--- Rollup = list(row); the row already carries id / n_* the template reads.
-CREATE OR REPLACE VIEW v_case_entities AS
-SELECT case_id, list(ew ORDER BY ew.kind, ew.canonical_text) AS entities
-FROM v_entity_work ew
-GROUP BY case_id;
-
-CREATE OR REPLACE VIEW v_case_audit_recent AS
-SELECT case_id,
-       list(struct_pack(
-           ts_short := strftime(ts, '%H:%M'), action := action, actor := actor,
-           target := target, reason := reason
-       ) ORDER BY ts DESC) AS audit
-FROM v_audit
-GROUP BY case_id;
-
-CREATE OR REPLACE VIEW v_case_batches AS
-SELECT case_id, list(db ORDER BY db.ts DESC) AS batches
-FROM v_decision_batches db
-GROUP BY case_id;
-
-CREATE OR REPLACE VIEW v_case_events AS
-SELECT case_id,
-       list(struct_pack(
-           ts_short := strftime(ts, '%Y-%m-%d %H:%M:%S'),
-           action := action,
-           status := status,
-           actor := actor,
-           target := target,
-           reason := reason,
-           band := band,
-           batch_label := batch_label,
-           is_undo := undoes_batch_id IS NOT NULL
-       ) ORDER BY ts DESC) AS events
-FROM v_audit
-GROUP BY case_id;
-
-CREATE OR REPLACE VIEW v_page_mark_lists AS
-SELECT document_id, page_no, list(mrk) AS marks
-FROM v_page_marks mrk
-GROUP BY document_id, page_no;
-
--- ── product surfaces (named spines) ────────────────────────────────────────
-
-CREATE OR REPLACE VIEW v_case_surface AS
-SELECT cas.id AS case_id,
-       cas.case_no,
-       cas.title,
-       struct_pack(id := cas.id, case_no := cas.case_no, title := cas.title) AS case_row,
-       coalesce(docs.documents, []) AS documents,
-       coalesce(ents.entities, []) AS entities,
-       coalesce(blk.flagged_pending_ids, []) AS flagged_pending_ids,
-       len(coalesce(blk.flagged_pending_ids, [])) AS n_flagged_pending,
-       len(coalesce(blk.flagged_pending_ids, [])) > 0 AS export_blocked
-FROM cases cas
-LEFT JOIN v_case_documents docs ON docs.case_id = cas.id
-LEFT JOIN v_case_entities ents ON ents.case_id = cas.id
-LEFT JOIN v_export_blocked blk ON blk.case_id = cas.id;
-
--- Flagged triage grain: judge votes as workflow help (not ML scores).
-CREATE OR REPLACE VIEW v_flagged_pending AS
-SELECT sug.id, sug.document_id, doc.filename, doc.case_id, sug.page_no,
-       sug.text, sug.kind, sug.confidence, sug.status, sug.band,
-       sug.entity_id, sug.entity_text, sug.detector_key,
-       sug.judge_panel, sug.judge_reason, sug.reason,
-       sug.judge_agreement, sug.judge_votes,
-       sug.flag_tag
-FROM v_suggestions sug
-JOIN documents doc ON doc.id = sug.document_id
-WHERE sug.band = 'flagged' AND sug.status = 'pending';
-
--- Flat list (API) + document-grouped list (triage UI multi-doc).
-CREATE OR REPLACE VIEW v_case_flagged_rows AS
-SELECT case_id, list(fp ORDER BY fp.filename, fp.page_no, fp.id) AS flagged
-FROM v_flagged_pending fp
-GROUP BY case_id;
-
-CREATE OR REPLACE VIEW v_case_flagged_by_doc AS
-SELECT case_id, list(bd ORDER BY bd.filename) AS by_doc
-FROM (
-    SELECT case_id, document_id, filename,
-           list(fp.id ORDER BY fp.page_no, fp.id) AS ids,
-           len(list(fp.id)) AS n,  -- template reads .n; carry it as a column
-           list(fp ORDER BY fp.page_no, fp.id) AS rows
-    FROM v_flagged_pending fp
-    GROUP BY case_id, document_id, filename
-) bd
-GROUP BY case_id;
-
--- FN remainder queue: detector said miss; human accepts (redact) or rejects (noise).
-CREATE OR REPLACE VIEW v_remainder_pending AS
-SELECT sug.id, sug.document_id, doc.filename, doc.case_id, sug.page_no,
-       sug.text, sug.kind, sug.confidence, sug.status, sug.band,
-       sug.detector_key, sug.reason, sug.judge_panel, sug.judge_reason
-FROM v_suggestions sug
-JOIN documents doc ON doc.id = sug.document_id
-WHERE sug.status = 'pending'
-  AND sug.detector_key = 'detector:remainder';
-
-CREATE OR REPLACE VIEW v_case_remainder_rows AS
-SELECT case_id, list(rp ORDER BY rp.filename, rp.page_no, rp.id) AS remainder
-FROM v_remainder_pending rp
-GROUP BY case_id;
-
--- Doc-scoped id lists for review header (len free; no correlated re-scan).
-CREATE OR REPLACE VIEW v_document_flagged_ids AS
-SELECT document_id, list(id ORDER BY id) AS flagged_pending_ids
-FROM v_flagged_pending
-GROUP BY document_id;
-
-CREATE OR REPLACE VIEW v_document_remainder_ids AS
-SELECT document_id, list(id ORDER BY id) AS remainder_ids
-FROM v_remainder_pending
-GROUP BY document_id;
-
-CREATE OR REPLACE VIEW v_document_page_surface AS
-SELECT doc.id AS document_id,
-       doc.case_id,
-       doc.filename,
-       doc.page_count,
-       pag.page_no,
-       pag.scale,
-       pag.display_w,
-       pag.display_h,
-       pag.width_pt,
-       pag.height_pt,
-       cas.case_no,
-       cas.title AS case_title,
-       struct_pack(id := cas.id, case_no := cas.case_no, title := cas.title) AS case_row,
-       struct_pack(id := doc.id, filename := doc.filename, page_count := doc.page_count) AS doc_row,
-       struct_pack(
-           page_no := pag.page_no,
-           prev := greatest(pag.page_no - 1, 1),
-           next := least(pag.page_no + 1, doc.page_count),
-           width_pt := pag.width_pt,
-           height_pt := pag.height_pt,
-           scale := round(pag.scale, 4),
-           display_w := pag.display_w,
-           display_h := pag.display_h,
-           png_href := '/pages/' || doc.filename || '/p' || pag.page_no || '.png'
-       ) AS page_row,
-       coalesce(ml.marks, []) AS marks,
-       coalesce(sl.suggestions, []) AS suggestions
+SELECT doc.case_id, doc.id AS document_id, doc.filename, doc.source_path,
+       'exports/' || doc.filename || '_redacted.pdf' AS out_path,
+       boxes.boxes,
+       blk.case_id IS NOT NULL AS blocked
 FROM documents doc
-JOIN cases cas ON cas.id = doc.case_id
-JOIN pages pag ON pag.document_id = doc.id
-LEFT JOIN v_page_mark_lists ml
-  ON ml.document_id = doc.id AND ml.page_no = pag.page_no
--- Rail = this page only (not every pending on the doc — that blew SSR to 12MB+).
-LEFT JOIN LATERAL (
-    SELECT list(sug ORDER BY (sug.status = 'pending') DESC, sug.id) AS suggestions
-    FROM v_suggestions sug
-    WHERE sug.document_id = doc.id AND sug.page_no = pag.page_no
-) sl ON true;
+LEFT JOIN boxes ON boxes.document_id = doc.id
+LEFT JOIN blocked blk ON blk.case_id = doc.case_id;
 
--- ── tera edge: ONE render relation, not a ctx+html view per page ────────────
--- Each page is a row (path, template, ctx json); tera_render runs once over the
--- union. ctx = json_object of already-joined surface columns — no logic here.
--- Add a page = one UNION arm. Route bodies match on path.
+CREATE OR REPLACE VIEW v_flagged_by_doc AS
+SELECT case_id, document_id, filename,
+       list(fp ORDER BY page_no, id) AS rows
+FROM v_flagged_pending fp
+GROUP BY case_id, document_id, filename;
+
+CREATE OR REPLACE VIEW v_case_shell AS
+SELECT cas.*,
+       blk.case_id IS NOT NULL AS export_blocked
+FROM cases cas
+LEFT JOIN (SELECT DISTINCT case_id FROM v_flagged_pending) blk ON blk.case_id = cas.id;
+
+-- Page row + nav fields (product shape for review).
+CREATE OR REPLACE VIEW v_page_nav AS
+SELECT pag.document_id, pag.page_no, pag.width_pt, pag.height_pt, pag.scale,
+       pag.display_w, pag.display_h,
+       greatest(pag.page_no - 1, 1) AS prev,
+       least(pag.page_no + 1, doc.page_count) AS next,
+       -- setup_pages writes pages/<stem>/pN.png (stem = parse_filename without .pdf)
+       '/pages/' || parse_filename(doc.filename, true) || '/p' || pag.page_no || '.png' AS png_href
+FROM pages pag
+JOIN documents doc ON doc.id = pag.document_id;
+
+-- Child-only lists: missing join → null → template {% if %}. Never ifnull(list, []).
 CREATE OR REPLACE VIEW v_pages AS
+WITH
+docs AS (SELECT case_id, list(d ORDER BY filename) AS documents FROM documents d GROUP BY case_id),
+ents AS (SELECT case_id, list(e ORDER BY kind, canonical_text) AS entities FROM entities e GROUP BY case_id),
+-- Library "Recent audit" is a short slice; full trail lives on /audit.
+aud  AS (SELECT case_id, list_slice(list(a ORDER BY ts DESC), 1, 12) AS audit FROM v_audit a GROUP BY case_id),
+evts AS (SELECT case_id, list(a ORDER BY ts DESC) AS events FROM v_audit a GROUP BY case_id),
+bats AS (SELECT case_id, list(b ORDER BY ts DESC) AS batches FROM v_decision_batches b GROUP BY case_id),
+flags AS (SELECT case_id, list(bd ORDER BY filename) AS by_doc FROM v_flagged_by_doc bd GROUP BY case_id),
+rems AS (SELECT case_id, list(r ORDER BY filename, page_no, id) AS remainder FROM v_remainder_pending r GROUP BY case_id)
 SELECT path, tera_render(template, ctx, template_path := 'server/templates/**/*.html') AS html
 FROM (
-    SELECT '/cases/' || sfc.case_id AS path, 'case.html' AS template,
-           json_object('case', sfc.case_row, 'documents', sfc.documents,
-               'entities', sfc.entities, 'audit', coalesce(aud.audit, []),
-               'export_blocked', sfc.export_blocked, 'n_flagged_pending', sfc.n_flagged_pending) AS ctx
-    FROM v_case_surface sfc LEFT JOIN v_case_audit_recent aud ON aud.case_id = sfc.case_id
+    SELECT '/cases/' || s.id AS path, 'case.html' AS template,
+           json_object('case', s, 'documents', docs.documents, 'entities', ents.entities,
+                       'audit', aud.audit, 'export_blocked', s.export_blocked) AS ctx
+    FROM v_case_shell s
+    LEFT JOIN docs ON docs.case_id = s.id
+    LEFT JOIN ents ON ents.case_id = s.id
+    LEFT JOIN aud ON aud.case_id = s.id
     UNION ALL
-    SELECT '/cases/' || sfc.case_id || '/stream', 'stream.html',
-           json_object('case', sfc.case_row, 'entities', sfc.entities,
-               'export_blocked', sfc.export_blocked, 'n_flagged_pending', sfc.n_flagged_pending)
-    FROM v_case_surface sfc
+    SELECT '/cases/' || s.id || '/stream', 'stream.html',
+           json_object('case', s, 'entities', ents.entities, 'export_blocked', s.export_blocked)
+    FROM v_case_shell s
+    LEFT JOIN ents ON ents.case_id = s.id
     UNION ALL
-    SELECT '/cases/' || sfc.case_id || '/flagged', 'flagged.html',
-           json_object('case', sfc.case_row, 'export_blocked', sfc.export_blocked,
-               'n_flagged_pending', sfc.n_flagged_pending,
-               'flagged', coalesce(flg.flagged, []), 'by_doc', coalesce(bd.by_doc, []))
-    FROM v_case_surface sfc
-    LEFT JOIN v_case_flagged_rows flg ON flg.case_id = sfc.case_id
-    LEFT JOIN v_case_flagged_by_doc bd ON bd.case_id = sfc.case_id
+    SELECT '/cases/' || s.id || '/flagged', 'flagged.html',
+           json_object('case', s, 'export_blocked', s.export_blocked, 'by_doc', flags.by_doc)
+    FROM v_case_shell s
+    LEFT JOIN flags ON flags.case_id = s.id
     UNION ALL
-    SELECT '/cases/' || sfc.case_id || '/remainder', 'remainder.html',
-           json_object('case', sfc.case_row, 'export_blocked', sfc.export_blocked,
-               'remainder', coalesce(rem.remainder, []), 'n_remainder', len(coalesce(rem.remainder, [])))
-    FROM v_case_surface sfc LEFT JOIN v_case_remainder_rows rem ON rem.case_id = sfc.case_id
+    SELECT '/cases/' || s.id || '/remainder', 'remainder.html',
+           json_object('case', s, 'export_blocked', s.export_blocked, 'remainder', rems.remainder)
+    FROM v_case_shell s
+    LEFT JOIN rems ON rems.case_id = s.id
     UNION ALL
-    SELECT '/cases/' || sfc.case_id || '/audit', 'audit.html',
-           json_object('case', sfc.case_row, 'export_blocked', sfc.export_blocked,
-               'n_flagged_pending', sfc.n_flagged_pending,
-               'batches', coalesce(bat.batches, []), 'events', coalesce(evt.events, []))
-    FROM v_case_surface sfc
-    LEFT JOIN v_case_batches bat ON bat.case_id = sfc.case_id
-    LEFT JOIN v_case_events evt ON evt.case_id = sfc.case_id
+    SELECT '/cases/' || s.id || '/audit', 'audit.html',
+           json_object('case', s, 'export_blocked', s.export_blocked,
+                       'batches', bats.batches, 'events', evts.events)
+    FROM v_case_shell s
+    LEFT JOIN bats ON bats.case_id = s.id
+    LEFT JOIN evts ON evts.case_id = s.id
 );
 
--- Review is document/page grain (its own view); same render shape + canvas ctx.
 CREATE OR REPLACE VIEW v_review_page AS
-SELECT sfc.document_id, sfc.page_no,
-       '/documents/' || sfc.document_id
-           || if(sfc.page_no = 1, '', '/pages/' || sfc.page_no::VARCHAR) AS path,
+WITH page_sugs AS (
+    SELECT document_id, page_no,
+           list(sug ORDER BY (status = 'pending') DESC, id) AS suggestions
+    FROM v_suggestions sug
+    GROUP BY document_id, page_no
+)
+SELECT doc.id AS document_id, nav.page_no,
+       CASE WHEN nav.page_no = 1 THEN '/documents/' || doc.id
+            ELSE '/documents/' || doc.id || '/pages/' || nav.page_no::VARCHAR END AS path,
        tera_render('review.html',
-           json_object('case', sfc.case_row, 'doc', sfc.doc_row, 'page', sfc.page_row,
-               'marks', sfc.marks, 'suggestions', sfc.suggestions,
-               'n_doc_flagged', len(coalesce(flg.flagged_pending_ids, [])),
-               'n_doc_remainder', len(coalesce(rem.remainder_ids, []))),
+           json_object('case', cas, 'doc', doc, 'page', nav, 'suggestions', ps.suggestions),
            template_path := 'server/templates/**/*.html') AS html
-FROM v_document_page_surface sfc
-LEFT JOIN v_document_flagged_ids flg ON flg.document_id = sfc.document_id
-LEFT JOIN v_document_remainder_ids rem ON rem.document_id = sfc.document_id;
+FROM documents doc
+JOIN cases cas ON cas.id = doc.case_id
+JOIN v_page_nav nav ON nav.document_id = doc.id
+LEFT JOIN page_sugs ps ON ps.document_id = doc.id AND ps.page_no = nav.page_no;

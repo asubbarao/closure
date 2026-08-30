@@ -27,18 +27,33 @@ test.describe("bulk · multi-doc · keyboard", () => {
     expect((await docHrefs(page)).length).toBeGreaterThanOrEqual(2);
   });
 
-  test("accept-HIGH case-wide: high→0, flagged unchanged", async ({
+  test("accept-HIGH case-wide: conf≥90 non-flagged→0, flagged unchanged", async ({
     request,
   }) => {
+    // Product accept-high filters confidence ≥ threshold + non-flagged — not band='high'.
     const before = await suggestionsViaApi(request, caseId);
     const inCase = (r: { document_id: string }) => docSet.has(r.document_id);
-    const high0 = nPending(before, (r) => inCase(r) && r.band === "high");
+    const highEligible = nPending(
+      before,
+      (r) =>
+        inCase(r) &&
+        r.band !== "flagged" &&
+        (r.confidence ?? 0) >= 90
+    );
     const flag0 = nPending(before, (r) => inCase(r) && r.band === "flagged");
-    expect(high0, "need pending HIGH").toBeGreaterThan(0);
+    expect(highEligible, "need pending conf≥90 non-flagged").toBeGreaterThan(0);
 
     await postDecision(request, api.acceptHigh(caseId));
     const after = await suggestionsViaApi(request, caseId);
-    expect(nPending(after, (r) => inCase(r) && r.band === "high")).toBe(0);
+    expect(
+      nPending(
+        after,
+        (r) =>
+          inCase(r) &&
+          r.band !== "flagged" &&
+          (r.confidence ?? 0) >= 90
+      )
+    ).toBe(0);
     expect(nPending(after, (r) => inCase(r) && r.band === "flagged")).toBe(flag0);
   });
 
@@ -73,25 +88,35 @@ test.describe("bulk · multi-doc · keyboard", () => {
     ).toBe(flag0);
   });
 
-  test("entity work API exposes multi-doc pending lists", async ({
+  test("entities API + suggestions grain cover multi-doc work", async ({
     request,
   }) => {
-    const res = await request.get(api.entityWork(caseId));
-    expect(res.ok()).toBeTruthy();
-    const work = (await res.json()) as Array<{
-      entity_id: string;
-      n_pending: number;
-      n_docs: number;
-      pending_doc_ids: string[];
-      pending_filenames: string[];
-    }>;
-    expect(work.length).toBeGreaterThan(0);
-    const multi = work.find((e) => e.n_docs >= 2 && e.n_pending > 0);
-    // Corpus usually has multi-doc entities; if not, single-doc still valid lists
-    const sample = multi ?? work.find((e) => e.n_pending > 0);
+    // Product surface is entities + v_suggestions — no KPI entity-work board.
+    const entRes = await request.get(api.entities(caseId));
+    expect(entRes.ok()).toBeTruthy();
+    const entities = (await entRes.json()) as Array<{ id: string }>;
+    expect(entities.length).toBeGreaterThan(0);
+
+    const rows = await suggestionsViaApi(request, caseId);
+    const pendingLinked = rows.filter(
+      (r) =>
+        r.status === "pending" &&
+        r.band !== "flagged" &&
+        r.entity_id &&
+        docSet.has(r.document_id)
+    );
+    expect(pendingLinked.length, "need entity-linked pending").toBeGreaterThan(0);
+
+    const byE = new Map<string, Set<string>>();
+    for (const r of pendingLinked) {
+      if (!byE.has(r.entity_id!)) byE.set(r.entity_id!, new Set());
+      byE.get(r.entity_id!)!.add(r.document_id);
+    }
+    const multi = [...byE.entries()].find(([, docs]) => docs.size >= 2);
+    const sample = multi ?? [...byE.entries()][0];
     expect(sample).toBeTruthy();
-    expect(sample!.pending_doc_ids.length).toBe(sample!.n_docs);
-    expect(sample!.pending_filenames.length).toBeGreaterThan(0);
+    expect(sample![1].size).toBeGreaterThan(0);
+    expect(entities.some((e) => e.id === sample![0])).toBeTruthy();
   });
 
   test("entity bulk clears non-flagged (multi-doc when present)", async ({
@@ -299,19 +324,23 @@ test.describe("bulk · multi-doc · keyboard", () => {
       ).length
     ).toBe(0);
 
-    // Audit trail: one batch with many members
+    // Audit trail: one batch with many members (label = status + scope)
     const batRes = await request.get(api.batches(caseId));
     expect(batRes.ok()).toBeTruthy();
     const batches = (await batRes.json()) as Array<{
       label: string;
-      n_members: number;
+      suggestion_ids: string[];
       is_undo: boolean;
     }>;
     const fpBatch = batches.find(
-      (b) => b.label && b.label.includes("FP") && !b.is_undo
+      (b) =>
+        b.label &&
+        b.label.includes("flagged") &&
+        b.label.includes("rejected") &&
+        !b.is_undo
     );
-    expect(fpBatch, "audit has flagged→FP batch").toBeTruthy();
-    expect(fpBatch!.n_members).toBeGreaterThanOrEqual(flagged.length);
+    expect(fpBatch, "audit has rejected case flagged batch").toBeTruthy();
+    expect(fpBatch!.suggestion_ids.length).toBeGreaterThanOrEqual(flagged.length);
 
     await page.goto(`/cases/${caseId}`);
     await expect(page.locator("#export-btn, [data-action='export']")).toBeEnabled({
@@ -326,8 +355,9 @@ test.describe("bulk · multi-doc · keyboard", () => {
     await page.goto(`/cases/${caseId}/flagged`);
     await expect(page.locator("body[data-surface='flagged']")).toBeVisible();
     await expect(page.getByText("Flagged triage")).toBeVisible();
+    // Header case_actions + page body both expose flagged-bulk.
     await expect(
-      page.locator("[data-action='flagged-bulk'][data-status='rejected']")
+      page.locator("[data-action='flagged-bulk'][data-status='rejected']").first()
     ).toBeVisible();
 
     const res = await request.get(`/api/cases/${caseId}/flagged`);
@@ -362,9 +392,12 @@ test.describe("bulk · multi-doc · keyboard", () => {
     expect(after.length).toBe(0);
 
     const batRes = await request.get(api.batches(caseId));
-    const batches = (await batRes.json()) as Array<{ label: string; n_members: number }>;
+    const batches = (await batRes.json()) as Array<{
+      label: string;
+      suggestion_ids: string[];
+    }>;
     const remBatch = batches.find((b) => b.label && b.label.includes("remainder"));
     expect(remBatch, "remainder bulk is one audit batch").toBeTruthy();
-    expect(remBatch!.n_members).toBeGreaterThanOrEqual(before);
+    expect(remBatch!.suggestion_ids.length).toBeGreaterThanOrEqual(before);
   });
 });

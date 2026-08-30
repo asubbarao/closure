@@ -8,7 +8,7 @@
 {% block body %}
 <header class="appbar">
   <a class="btn" href="/cases/{{ case.id }}">← Library</a>
-  <span class="mono">{{ doc.filename }}.pdf · p.{{ page.page_no }}/{{ doc.page_count }}</span>
+  <span class="mono">{{ doc.filename }} · p.{{ page.page_no }}/{{ doc.page_count }}</span>
   <span class="sp"></span>
   {% if page.page_no > 1 %}<a class="btn" href="/documents/{{ doc.id }}/pages/{{ page.prev }}">Prev</a>{% endif %}
   {% if page.page_no < doc.page_count %}<a class="btn" href="/documents/{{ doc.id }}/pages/{{ page.next }}">Next</a>{% endif %}
@@ -16,10 +16,8 @@
   <button type="button" class="btn" data-action="accept-high" data-case-id="{{ case.id }}" title="H">HIGH case</button>
   <button type="button" class="btn" data-action="band" data-doc-id="{{ doc.id }}" data-band="high" data-status="accepted" title="Shift+A">HIGH doc</button>
   <button type="button" class="btn" data-action="band" data-doc-id="{{ doc.id }}" data-band="review" data-status="rejected" title="Shift+R">Reject REVIEW</button>
-  {% if n_doc_flagged and n_doc_flagged > 0 %}
   <button type="button" class="btn danger" data-action="doc-flagged-bulk" data-doc-id="{{ doc.id }}"
-          data-status="rejected" title="Doc FP clear">Doc FP · {{ n_doc_flagged }}</button>
-  {% endif %}
+          data-status="rejected" title="Doc FP clear">Doc FP</button>
   <a class="btn" href="/cases/{{ case.id }}/flagged">Case FP</a>
   <a class="btn" href="/cases/{{ case.id }}/remainder">FN</a>
 </header>
@@ -27,12 +25,16 @@
   <div class="review-canvas">
     <div class="pdf-page" style="height:{{ page.display_h }}px">
       <img src="{{ page.png_href }}" alt="page {{ page.page_no }}" width="{{ page.display_w }}" height="{{ page.display_h }}">
-      {% for m in marks %}{% include "fragments/mark.html" %}{% endfor %}
+      {% if suggestions %}
+      {% for m in suggestions %}{% include "fragments/mark.html" %}{% endfor %}
+      {% endif %}
     </div>
   </div>
   <aside class="review-rail queue">
     <h3>j/k a/r · A/R bands · H high · e entity · n add FN · u undo · [/]</h3>
+    {% if suggestions %}
     {% for s in suggestions %}{% include "fragments/sugg_row.html" %}{% endfor %}
+    {% endif %}
   </aside>
 </div>
 {% endblock %}

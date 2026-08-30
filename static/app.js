@@ -147,12 +147,27 @@
   }
 
   if (body && body.dataset.surface === "review") {
+    function focusById(id) {
+      if (!id) return;
+      var m = q(".mark[data-id='" + id + "']");
+      if (!m) return;
+      var marks = pendingMarks();
+      var i = marks.indexOf(m);
+      focusIdx = i >= 0 ? i : 0;
+      setCurrent(m);
+      var s = q(".sugg[data-id='" + id + "']");
+      if (s && s.scrollIntoView) s.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
     qa(".mark").forEach(function (m) {
       m.addEventListener("click", function () {
-        var marks = pendingMarks();
-        var i = marks.indexOf(m);
-        focusIdx = i >= 0 ? i : 0;
-        setCurrent(m);
+        focusById(m.getAttribute("data-id"));
+      });
+    });
+    // Rail row click → same focus as canvas (not only A/R buttons).
+    qa(".sugg").forEach(function (s) {
+      s.addEventListener("click", function (ev) {
+        if (ev.target.closest("[data-action]")) return;
+        focusById(s.getAttribute("data-id"));
       });
     });
     document.addEventListener("keydown", function (e) {

@@ -15,8 +15,7 @@ Platform thesis: [`PLATFORM.md`](PLATFORM.md). Data: [`DATA_MODEL.md`](DATA_MODE
 | Models / services | `store` → `core` (tables) → `views` (ctx + html) |
 | Jinja | `tera_render(template, ctx, template_path := 'server/templates/**/*.html')` |
 | Templates | Pages + `fragments/*`; CSS/JS in `static/` (not inlined in SQL) |
-| pathlib / shell | **hostfs** / **scalarfs** / **shellfs** / **zipfs** |
-| Postgres | Optional `ATTACH` (`CLOSURE_POSTGRES`) |
+| pathlib / shell | **hostfs** / **scalarfs** / **shellfs** · **zipfs** for `zip://` |
 | Contract checks | `tests/check.sql` (dqtest) · Playwright e2e |
 
 **Do not** wrap page HTML in `parse_html` — webbed voids `<script src>` and kills `app.js`.
@@ -25,12 +24,10 @@ Platform thesis: [`PLATFORM.md`](PLATFORM.md). Data: [`DATA_MODEL.md`](DATA_MODE
 
 ```
 build.sql:
-  config → extensions (httpfs → curl_httpfs → cache_httpfs → …)
-  → auth → hostfs → scalarfs pins → [postgres]
+  config → extensions → auth → hostfs pins
   → model (store · hostfs · shellfs · http_cache · core · views)
 app.sql:
-  build.sql → routes (v_route_get → install GET DDL · POST writes)
-  → quackapi_serve(http_client := 'auto')
+  build.sql → routes → quackapi_serve
 ```
 
 Invariants run out of band: `make check` reads the same `build.sql` model and
@@ -72,7 +69,7 @@ make setup && make run    # http://127.0.0.1:8117/  and  /docs
 | GET | `/api/cases/:id/entities` | Entity grain |
 | GET | `/api/cases/:id/flagged` | Flagged pending + judge votes |
 | GET | `/api/cases/:id/batches` | Decision batches (ids list, n_members) |
-| GET | `/api/suggestions/:id/context` | ±3 lines (read_lines) |
+| GET | `/api/suggestions/:id/context` | ±3 lines (`read_pdf_lines` → join) |
 | POST | `/api/suggestions/:id/decision` | Decide one · **201** |
 | POST | `/api/entities/:id/decision` | Entity bulk (skip flagged) · **201** |
 | POST | `/api/documents/:id/bands/:band/decision` | Band bulk · **201** |

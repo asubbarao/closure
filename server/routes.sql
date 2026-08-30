@@ -1,295 +1,232 @@
--- routes.sql — HTTP surface (single contract).
---
--- Layers:
---   pages     HTML SSR          /  /cases/…  /documents/…
---   product   FOIA resources    /api/cases|documents|suggestions|entities/…
---   catalog   allowlisted data  /api/catalog/…
---   ops       machine/debug     /api/ops/…
---
--- Flow: views own data/html → v_route_get (GETs) → install DDL
---       POSTs stay explicit (PARAM + INSERT).
--- OpenAPI: /docs · /openapi.json · /redoc
-
--- ═══════════════════════════════════════════════════════════════════════════
--- GET catalog (only place GET paths are defined)
--- ═══════════════════════════════════════════════════════════════════════════
+-- routes.sql — GET = SELECT * product. POST = insert decision rows. No reason laundry.
 
 CREATE OR REPLACE VIEW v_route_get AS
 SELECT * FROM (VALUES
-    -- ── pages (html column) ──────────────────────────────────────────────
-    ('page_home',     'GET', '/',
+    ('page_home', 'GET', '/',
      $$SELECT html FROM v_pages WHERE path = '/cases/' || (SELECT min(id) FROM cases)$$),
-    ('page_case',     'GET', '/cases/:id',
+    ('page_case', 'GET', '/cases/:id',
      $$SELECT html FROM v_pages WHERE path = '/cases/' || $id$$),
-    ('page_stream',   'GET', '/cases/:id/stream',
+    ('page_stream', 'GET', '/cases/:id/stream',
      $$SELECT html FROM v_pages WHERE path = '/cases/' || $id || '/stream'$$),
-    ('page_flagged',  'GET', '/cases/:id/flagged',
+    ('page_flagged', 'GET', '/cases/:id/flagged',
      $$SELECT html FROM v_pages WHERE path = '/cases/' || $id || '/flagged'$$),
-    ('page_remainder','GET', '/cases/:id/remainder',
+    ('page_remainder', 'GET', '/cases/:id/remainder',
      $$SELECT html FROM v_pages WHERE path = '/cases/' || $id || '/remainder'$$),
-    ('page_audit',    'GET', '/cases/:id/audit',
+    ('page_audit', 'GET', '/cases/:id/audit',
      $$SELECT html FROM v_pages WHERE path = '/cases/' || $id || '/audit'$$),
     ('page_document', 'GET', '/documents/:id',
      $$SELECT html FROM v_review_page WHERE document_id = $id AND page_no = 1$$),
     ('page_document_page', 'GET', '/documents/:id/pages/:page',
-     $$SELECT html FROM v_review_page
-       WHERE document_id = $id
-         AND page_no = least(greatest(try_cast($page AS INTEGER), 1),
-                             (SELECT page_count FROM documents WHERE id = $id))$$),
-
-    -- ── product reads ────────────────────────────────────────────────────
-    ('case_nav',      'GET', '/api/cases/:id/nav',
+     $$SELECT html FROM v_review_page WHERE document_id = $id
+       AND page_no = least(greatest(try_cast($page AS INTEGER), 1),
+                           (SELECT page_count FROM documents WHERE id = $id))$$),
+    ('case_nav', 'GET', '/api/cases/:id/nav',
      $$SELECT href, text FROM v_nav WHERE case_id = $id ORDER BY href$$),
-    -- Grain rows for the case (product). Profiles: /api/catalog/…/summary.
-    -- Semantic slice (dims only): FROM semantic_view('closure', dimensions := […]).
     ('case_suggestions', 'GET', '/api/cases/:id/suggestions',
-     $$SELECT sug.*
-       FROM v_suggestions sug
-       JOIN documents doc ON doc.id = sug.document_id
-       WHERE doc.case_id = $id
-       ORDER BY sug.document_id, sug.page_no, sug.id$$),
+     $$SELECT * FROM v_suggestions WHERE case_id = $id
+       ORDER BY document_id, page_no, id$$),
     ('case_entities', 'GET', '/api/cases/:id/entities',
-     $$SELECT id, case_id, canonical_text, kind, kind_label, mono
-       FROM entities WHERE case_id = $id
-       ORDER BY kind, canonical_text$$),
+     $$SELECT * FROM entities WHERE case_id = $id ORDER BY kind, canonical_text$$),
     ('suggestion_context', 'GET', '/api/suggestions/:id/context',
-     $$SELECT suggestion_id, document_id, page_no, hit_line, line_number, line_text, dist
-       FROM v_suggestion_line_context
-       WHERE suggestion_id = $id ORDER BY line_number$$),
+     $$SELECT * FROM v_suggestion_line_context WHERE suggestion_id = $id ORDER BY line_number$$),
     ('suggestion_judges', 'GET', '/api/suggestions/:id/judges',
-     $$SELECT jdg.suggestion_id, jdg.panel, jdg.agreement, jdg.votes, jdg.judge_reason,
-              sug.band, sug.status, sug.text, sug.kind,
-              vote.judge, vote.model_name, vote.verdict, vote.reason
-       FROM suggestion_judges jdg
-       JOIN v_suggestions sug ON sug.id = jdg.suggestion_id
-       JOIN v_suggestion_judge_votes vote ON vote.suggestion_id = jdg.suggestion_id
-       WHERE jdg.suggestion_id = $id
-       ORDER BY vote.judge$$),
+     $$SELECT * FROM v_suggestion_judge_votes WHERE suggestion_id = $id ORDER BY judge$$),
     ('case_audit_api', 'GET', '/api/cases/:id/audit',
-     $$SELECT ts, actor, action, status, target, reason, band, batch_id, batch_label, undoes_batch_id
-       FROM v_audit WHERE case_id = $id ORDER BY ts DESC$$),
+     $$SELECT * FROM v_audit WHERE case_id = $id ORDER BY ts DESC$$),
     ('case_flagged', 'GET', '/api/cases/:id/flagged',
-     $$SELECT id, document_id, filename, page_no, text, kind, confidence, band, status,
-              entity_id, entity_text, detector_key, judge_panel, judge_reason, reason,
-              judge_agreement, judge_votes, flag_tag
-       FROM v_flagged_pending
-       WHERE case_id = $id
-       ORDER BY filename, page_no, id$$),
+     $$SELECT * FROM v_flagged_pending WHERE case_id = $id ORDER BY filename, page_no, id$$),
     ('case_remainder', 'GET', '/api/cases/:id/remainder',
-     $$SELECT id, document_id, filename, page_no, text, kind, confidence, band, status,
-              detector_key, reason, judge_panel, judge_reason
-       FROM v_remainder_pending
-       WHERE case_id = $id
-       ORDER BY filename, page_no, id$$),
-    ('case_entity_work', 'GET', '/api/cases/:id/entity-work',
-     $$SELECT entity_id, canonical_text, kind, kind_label,
-              pending_ids, pending_doc_ids, pending_filenames, flagged_ids,
-              n_pending, n_docs, n_flagged
-       FROM v_entity_work
-       WHERE case_id = $id
-       ORDER BY kind, canonical_text$$),
+     $$SELECT * FROM v_remainder_pending WHERE case_id = $id ORDER BY filename, page_no, id$$),
     ('case_batches', 'GET', '/api/cases/:id/batches',
-     $$SELECT batch_id, ts, ts_end, actor, label, case_id,
-              suggestion_ids, event_timestamps, n_members,
-              is_undo, undoes_batch_id, undone
-       FROM v_decision_batches
-       WHERE case_id = $id
-       ORDER BY ts DESC$$),
-
-    -- ── catalog (allowlisted relations via v_cols) ───────────────────────
-    ('catalog_list',  'GET', '/api/catalog',
+     $$SELECT * FROM v_decision_batches WHERE case_id = $id ORDER BY ts DESC$$),
+    ('catalog_list', 'GET', '/api/catalog',
      $$SELECT * FROM v_cols ORDER BY relation$$),
-    ('catalog_one',   'GET', '/api/catalog/:relation',
+    ('catalog_one', 'GET', '/api/catalog/:relation',
      $$SELECT * FROM v_cols WHERE relation = $relation$$),
-    -- $relation is the route literal (query TVF rejects lateral column args).
-    -- JOIN v_cols is the allowlist (empty join → no rows if unknown relation).
-    ('catalog_rows',  'GET', '/api/catalog/:relation/rows',
-     $$SELECT rows.*
-       FROM query(format('SELECT * FROM {}', $relation)) rows
+    ('catalog_rows', 'GET', '/api/catalog/:relation/rows',
+     $$SELECT rows.* FROM query(format('SELECT * FROM {}', $relation)) rows
        JOIN v_cols allow ON allow.relation = $relation$$),
-    ('catalog_summary','GET', '/api/catalog/:relation/summary',
-     $$SELECT rows.*
-       FROM query(format('FROM (SUMMARIZE {})', $relation)) rows
+    ('catalog_summary', 'GET', '/api/catalog/:relation/summary',
+     $$SELECT rows.* FROM query(format('FROM (SUMMARIZE {})', $relation)) rows
        JOIN v_cols allow ON allow.relation = $relation$$),
-
-    -- ── ops (debug / machine; not the FOIA product loop) ─────────────────
-    ('ops_hostfs',    'GET', '/api/ops/hostfs',
+    ('ops_hostfs', 'GET', '/api/ops/hostfs',
      $$SELECT * FROM v_hostfs ORDER BY root, path$$),
-    ('ops_zips',      'GET', '/api/ops/zips',
+    ('ops_zips', 'GET', '/api/ops/zips',
      $$SELECT * FROM v_zips ORDER BY root, zip_path$$),
-    ('ops_shell',     'GET', '/api/ops/shell',
+    ('ops_shell', 'GET', '/api/ops/shell',
      $$SELECT * FROM v_shell_patterns ORDER BY kind$$),
-    ('ops_cache',     'GET', '/api/ops/cache',
-     $$SELECT * FROM v_http_cache$$),
-    ('ops_cache_status','GET', '/api/ops/cache/status',
+    ('ops_cache', 'GET', '/api/ops/cache', $$SELECT * FROM v_http_cache$$),
+    ('ops_cache_status', 'GET', '/api/ops/cache/status',
      $$SELECT * FROM v_http_cache_status ORDER BY original_remote_path, start_offset$$),
-    ('ops_cache_access','GET', '/api/ops/cache/access',
+    ('ops_cache_access', 'GET', '/api/ops/cache/access',
      $$SELECT * FROM v_http_cache_access$$),
-    ('ops_hosts',     'GET', '/api/ops/hosts',
+    ('ops_hosts', 'GET', '/api/ops/hosts',
      $$SELECT * FROM v_url_hosts ORDER BY hostname$$),
     ('ops_templates', 'GET', '/api/ops/templates',
      $$SELECT * FROM v_src_template_links ORDER BY template, line_number$$),
-    ('ops_semantic',  'GET', '/api/ops/semantic',
+    ('ops_semantic', 'GET', '/api/ops/semantic',
      $$SELECT * FROM v_src_semantic_yaml$$)
 ) AS t(name, method, path, body);
 
 COPY (
-    SELECT format(
-        'CREATE OR REPLACE ROUTE {} {} ''{}'' AS {};',
+    SELECT format('CREATE OR REPLACE ROUTE {} {} ''{}'' AS {};',
         name, method, path,
-        replace(replace(replace(body, chr(10), ' '), chr(13), ' '), '  ', ' ')
-    )
-    FROM v_route_get
-    ORDER BY name
+        replace(replace(replace(body, chr(10), ' '), chr(13), ' '), '  ', ' '))
+    FROM v_route_get ORDER BY name
 ) TO '.tmp/routes_get.sql' (FORMAT CSV, HEADER false, QUOTE '', ESCAPE '');
-
 .read .tmp/routes_get.sql
 
-FROM (SUMMARIZE v_route_get);
+-- POSTs: grain = v_decide_targets. reason = $reason (DEFAULT ''). label = status + scope.
 
--- ═══════════════════════════════════════════════════════════════════════════
--- POST product writes (resource-nested; STATUS 201 on decision creates)
--- ═══════════════════════════════════════════════════════════════════════════
-
--- One decision-writer shape for every bulk/single decide route. The routes below
--- differ only in reason/label/scope + a WHERE on the target grain, so that is all
--- they carry: this macro packs the full append-only decisions row from
--- v_decide_targets (one shared batch_id via an uncorrelated uuid subquery — all
--- rows of one POST land in the same batch, which undo relies on). _band /
--- _detector_key / _tgt_status are exposed for the route WHERE and EXCLUDEd from
--- the insert (decisions has no such columns).
-CREATE OR REPLACE MACRO decision_rows(p_status, p_actor, p_reason, p_label, p_scope) AS TABLE
-SELECT 'decision' AS kind, tgt.suggestion_id, p_status AS status, p_actor AS actor, p_reason AS reason,
-       now() AS ts, tgt.document_id, tgt.case_id, tgt.text,
-       (SELECT uuid()::VARCHAR) AS batch_id, p_label AS batch_label, NULL::VARCHAR AS undoes_batch_id,
-       tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
-       tgt.source, p_scope AS scope,
-       tgt.band AS _band, tgt.detector_key AS _detector_key, tgt.status AS _tgt_status
-FROM v_decide_targets tgt;
-
--- Decide one suggestion (full grain on decisions for audit reconstructability)
 CREATE OR REPLACE ROUTE suggestion_decide POST '/api/suggestions/:id/decision'
   STATUS 201
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
 AS INSERT INTO decisions BY NAME
-SELECT * EXCLUDE (_band, _detector_key, _tgt_status) FROM decision_rows($status, $actor, $reason,
-       $status || coalesce(' — ' || text, ''), 'one')
-WHERE suggestion_id = $id
+SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor, $reason AS reason,
+       now() AS ts, tgt.document_id, tgt.case_id, tgt.text,
+       (SELECT uuid()::VARCHAR) AS batch_id, $status AS batch_label,
+       NULL::VARCHAR AS undoes_batch_id,
+       tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
+       tgt.source, 'one' AS scope
+FROM v_decide_targets tgt WHERE tgt.suggestion_id = $id
 RETURNING suggestion_id, status;
 
--- Entity bulk (case-wide; skips flagged — use flagged bulk for FP path)
 CREATE OR REPLACE ROUTE entity_decide POST '/api/entities/:id/decision'
   STATUS 201
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
 AS INSERT INTO decisions BY NAME
-SELECT * EXCLUDE (_band, _detector_key, _tgt_status) FROM decision_rows($status, $actor, $reason,
-       $status || ' entity' || coalesce(' — ' || entity_text, ' — ' || text, ''), 'entity')
-WHERE entity_id = $id AND _tgt_status = 'pending' AND _band <> 'flagged'
+SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor, $reason AS reason,
+       now() AS ts, tgt.document_id, tgt.case_id, tgt.text,
+       (SELECT uuid()::VARCHAR) AS batch_id, $status || ' entity' AS batch_label,
+       NULL::VARCHAR AS undoes_batch_id,
+       tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
+       tgt.source, 'entity' AS scope
+FROM v_decide_targets tgt
+WHERE tgt.entity_id = $id AND tgt.status = 'pending' AND tgt.band <> 'flagged'
 RETURNING suggestion_id, status;
 
--- Band bulk on one document (never flagged)
 CREATE OR REPLACE ROUTE document_band_decide POST '/api/documents/:id/bands/:band/decision'
   STATUS 201
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
 AS INSERT INTO decisions BY NAME
-SELECT * EXCLUDE (_band, _detector_key, _tgt_status) FROM decision_rows($status, $actor,
-       coalesce(nullif($reason, ''), 'bulk band ' || $band), $status || ' band ' || $band, 'band')
-WHERE document_id = $id AND _tgt_status = 'pending' AND _band = $band AND $band <> 'flagged'
+SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor, $reason AS reason,
+       now() AS ts, tgt.document_id, tgt.case_id, tgt.text,
+       (SELECT uuid()::VARCHAR) AS batch_id, $status || ' band ' || $band AS batch_label,
+       NULL::VARCHAR AS undoes_batch_id,
+       tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
+       tgt.source, 'band' AS scope
+FROM v_decide_targets tgt
+WHERE tgt.document_id = $id AND tgt.status = 'pending' AND tgt.band = $band AND $band <> 'flagged'
 RETURNING suggestion_id, status;
 
--- Accept HIGH case-wide (skips flagged)
 CREATE OR REPLACE ROUTE case_accept_high POST '/api/cases/:id/accept-high'
   STATUS 201
   PARAM threshold INTEGER DEFAULT 90 GE 0 LE 100
   PARAM actor VARCHAR DEFAULT 'reviewer'
 AS INSERT INTO decisions BY NAME
-SELECT * EXCLUDE (_band, _detector_key, _tgt_status) FROM decision_rows('accepted', $actor,
-       'accept high ≥' || $threshold::VARCHAR, 'Accepted high', 'case_high')
-WHERE case_id = $id AND _tgt_status = 'pending' AND confidence >= $threshold AND _band <> 'flagged'
-  AND (flag_tag IS NULL OR flag_tag <> 'false_positive')
+SELECT 'decision' AS kind, tgt.suggestion_id, 'accepted' AS status, $actor AS actor,
+       'accept high ≥' || $threshold::VARCHAR AS reason,
+       now() AS ts, tgt.document_id, tgt.case_id, tgt.text,
+       (SELECT uuid()::VARCHAR) AS batch_id, 'Accepted high' AS batch_label,
+       NULL::VARCHAR AS undoes_batch_id,
+       tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
+       tgt.source, 'case_high' AS scope
+FROM v_decide_targets tgt
+WHERE tgt.case_id = $id AND tgt.status = 'pending' AND tgt.confidence >= $threshold
+  AND tgt.band <> 'flagged' AND tgt.flag_tag IS DISTINCT FROM 'false_positive'
 RETURNING suggestion_id, status;
 
--- Flagged bulk — reject = FP (not PII); accept = redact anyway.
--- reason: optional override; else status picks the default (coalesce + nullif).
 CREATE OR REPLACE ROUTE case_flagged_decide POST '/api/cases/:id/flagged/decision'
   STATUS 201
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
 AS INSERT INTO decisions BY NAME
-SELECT * EXCLUDE (_band, _detector_key, _tgt_status) FROM decision_rows($status, $actor,
-       coalesce(nullif($reason, ''), CASE $status WHEN 'rejected' THEN 'bulk false positive' ELSE 'bulk redact flagged' END),
-       CASE $status WHEN 'rejected' THEN 'Flagged → FP (reject all)' ELSE 'Flagged → redact all' END, 'case_flagged')
-WHERE case_id = $id AND _tgt_status = 'pending' AND _band = 'flagged'
+SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor, $reason AS reason,
+       now() AS ts, tgt.document_id, tgt.case_id, tgt.text,
+       (SELECT uuid()::VARCHAR) AS batch_id, $status || ' case flagged' AS batch_label,
+       NULL::VARCHAR AS undoes_batch_id,
+       tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
+       tgt.source, 'case_flagged' AS scope
+FROM v_decide_targets tgt
+WHERE tgt.case_id = $id AND tgt.status = 'pending' AND tgt.band = 'flagged'
 RETURNING suggestion_id, status;
 
 CREATE OR REPLACE ROUTE document_flagged_decide POST '/api/documents/:id/flagged/decision'
   STATUS 201
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
 AS INSERT INTO decisions BY NAME
-SELECT * EXCLUDE (_band, _detector_key, _tgt_status) FROM decision_rows($status, $actor,
-       coalesce(nullif($reason, ''), CASE $status WHEN 'rejected' THEN 'doc bulk false positive' ELSE 'doc bulk redact flagged' END),
-       CASE $status WHEN 'rejected' THEN 'Doc flagged → FP' ELSE 'Doc flagged → redact' END, 'doc_flagged')
-WHERE document_id = $id AND _tgt_status = 'pending' AND _band = 'flagged'
+SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor, $reason AS reason,
+       now() AS ts, tgt.document_id, tgt.case_id, tgt.text,
+       (SELECT uuid()::VARCHAR) AS batch_id, $status || ' doc flagged' AS batch_label,
+       NULL::VARCHAR AS undoes_batch_id,
+       tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
+       tgt.source, 'doc_flagged' AS scope
+FROM v_decide_targets tgt
+WHERE tgt.document_id = $id AND tgt.status = 'pending' AND tgt.band = 'flagged'
 RETURNING suggestion_id, status;
 
--- FN remainder bulk case-wide: accept = redact miss; reject = noise
 CREATE OR REPLACE ROUTE case_remainder_decide POST '/api/cases/:id/remainder/decision'
   STATUS 201
   PARAM status VARCHAR PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT ''
 AS INSERT INTO decisions BY NAME
-SELECT * EXCLUDE (_band, _detector_key, _tgt_status) FROM decision_rows($status, $actor,
-       coalesce(nullif($reason, ''), CASE $status WHEN 'accepted' THEN 'bulk remainder redact' ELSE 'bulk remainder noise' END),
-       CASE $status WHEN 'accepted' THEN 'FN remainder → redact all' ELSE 'FN remainder → noise all' END, 'case_remainder')
-WHERE case_id = $id AND _tgt_status = 'pending' AND _detector_key = 'detector:remainder'
+SELECT 'decision' AS kind, tgt.suggestion_id, $status AS status, $actor AS actor, $reason AS reason,
+       now() AS ts, tgt.document_id, tgt.case_id, tgt.text,
+       (SELECT uuid()::VARCHAR) AS batch_id, $status || ' remainder' AS batch_label,
+       NULL::VARCHAR AS undoes_batch_id,
+       tgt.page_no, tgt.bbox, tgt.context, tgt.confidence, tgt.flag_tag, tgt.entity_id,
+       tgt.source, 'case_remainder' AS scope
+FROM v_decide_targets tgt
+WHERE tgt.case_id = $id AND tgt.status = 'pending' AND tgt.detector_key = 'detector:remainder'
 RETURNING suggestion_id, status;
 
--- Manual mark (add missed)
 CREATE OR REPLACE ROUTE document_mark_add POST '/api/documents/:id/marks'
   STATUS 201
   PARAM page INTEGER PARAM x0 DOUBLE PARAM y0 DOUBLE PARAM x1 DOUBLE PARAM y1 DOUBLE
   PARAM text VARCHAR PARAM kind VARCHAR DEFAULT 'MANUAL'
   PARAM actor VARCHAR DEFAULT 'reviewer' PARAM reason VARCHAR DEFAULT 'missed by AI'
-AS INSERT INTO decisions BY NAME
-WITH new_mark AS (SELECT uuid()::VARCHAR AS batch_id, uuid()::VARCHAR AS suggestion_id)
-SELECT 'added' AS kind, new_mark.suggestion_id, $id AS document_id, $page::INTEGER AS page_no,
-       ($x0, $y0, $x1, $y1)::bbox AS bbox, $text AS text, $text AS context,
-       99 AS confidence, $kind AS flag_tag,
-       coalesce(nullif($reason, ''), 'manual add') AS reason,
-       NULL::VARCHAR AS entity_id, 'manual' AS source, 'accepted' AS status,
-       $actor AS actor, now() AS ts,
-       (SELECT case_id FROM documents WHERE id = $id) AS case_id,
-       'one' AS scope, new_mark.batch_id,
-       'Added missed' || coalesce(' — ' || $text, '') AS batch_label,
-       NULL::VARCHAR AS undoes_batch_id
-FROM new_mark
-RETURNING suggestion_id, status;
+AS INSERT INTO suggestions BY NAME
+WITH new_mark AS (SELECT uuid()::VARCHAR AS id),
+     doc AS (SELECT case_id, filename FROM documents WHERE id = $id),
+     pag AS (SELECT scale FROM pages WHERE document_id = $id AND page_no = $page::INTEGER)
+SELECT new_mark.id AS id, $id AS document_id, doc.case_id, doc.filename,
+       $page::INTEGER AS page_no, ($x0, $y0, $x1, $y1)::bbox AS bbox,
+       (round($x0 * pag.scale, 2), round($y0 * pag.scale, 2),
+        round(($x1 - $x0) * pag.scale, 2),
+        round(greatest($y1 - $y0, 0) * pag.scale, 2))::screen_box AS screen,
+       $text AS text, lower($text) AS text_lower, $text AS context, lower($text) AS context_lower,
+       99 AS confidence, $kind AS flag_tag, $reason AS reason,
+       NULL::VARCHAR AS entity_id, NULL::VARCHAR AS entity_text,
+       $kind AS kind, lower($kind) AS kind_lower,
+       'manual' AS source, now() AS created_at, NULL::INTEGER AS line_no,
+       NULL::VARCHAR AS source_run_id, 'manual' AS detector_key,
+       format('{:x}', rapidhash(lower($text) || chr(31) || $kind)) AS group_key,
+       NULL::VARCHAR AS judge_panel, NULL::INTEGER AS judge_agreement,
+       NULL::VARCHAR AS judge_votes, NULL::VARCHAR AS judge_reason, 'high' AS band
+FROM new_mark CROSS JOIN doc CROSS JOIN pag
+RETURNING id AS suggestion_id, 'accepted' AS status;
 
--- Undo last batch for case
 CREATE OR REPLACE ROUTE case_undo POST '/api/cases/:id/undo'
   STATUS 201
   PARAM actor VARCHAR DEFAULT 'reviewer'
 AS INSERT INTO decisions BY NAME
-WITH last_batch_for_case AS (
+WITH last_batch AS (
     SELECT arg_max(batch_id, ts) AS batch_id, arg_max(label, ts) AS label
-    FROM v_decision_batches
-    WHERE undoes_batch_id IS NULL AND case_id = $id
+    FROM v_decision_batches WHERE undoes_batch_id IS NULL AND case_id = $id
 ),
 new_batch AS (SELECT uuid()::VARCHAR AS batch_id)
 SELECT 'decision' AS kind, evt.suggestion_id,
-       coalesce(
-           lag(evt.status) OVER (PARTITION BY evt.suggestion_id ORDER BY evt.event_ts),
-           'pending') AS status,
+       lag(evt.status, 1, 'pending') OVER (PARTITION BY evt.suggestion_id ORDER BY evt.event_ts) AS status,
        $actor AS actor, 'undo' AS reason, now() AS ts,
-       evt.document_id, evt.case_id, evt.text, (SELECT batch_id FROM new_batch) AS batch_id,
-       'Undo — ' || coalesce(bat.label, bat.batch_id) AS batch_label,
+       evt.document_id, evt.case_id, evt.text,
+       (SELECT batch_id FROM new_batch) AS batch_id,
+       'Undo' AS batch_label,
        bat.batch_id AS undoes_batch_id
 FROM v_history_events evt
-JOIN last_batch_for_case bat ON evt.batch_id = bat.batch_id
+JOIN last_batch bat ON evt.batch_id = bat.batch_id
 WHERE evt.kind = 'decision'
 RETURNING suggestion_id, status;
 
--- Export redacted PDFs (blocked while flagged pending). Side-effect TVF.
 CREATE OR REPLACE ROUTE case_export POST '/api/cases/:id/export' AS
-SELECT plan.document_id, plan.out_path, plan.boxes,
-       (SELECT bool_or(true) FROM pdf_redact(plan.source_path, plan.out_path, plan.boxes)) AS redacted
+SELECT plan.document_id, plan.out_path, plan.boxes, true AS redacted
 FROM v_export_plans plan
-WHERE plan.case_id = $id AND NOT plan.blocked AND len(plan.boxes) > 0;
+WHERE plan.case_id = $id AND NOT plan.blocked AND len(plan.boxes) > 0
+  AND exists (FROM pdf_redact(plan.source_path, plan.out_path, plan.boxes));
