@@ -11,7 +11,7 @@ INSTALL splink_udfs FROM community; LOAD splink_udfs;
 
 -- Address canon → /api/cases/:id/address-canon + address entity groups.
 CREATE OR REPLACE TABLE entity_address_canon AS
-SELECT cast(e.id AS VARCHAR) AS entity_id, e.case_id, e.canonical_text AS raw_text, e.kind,
+SELECT e.id::VARCHAR AS entity_id, e.case_id, e.canonical_text AS raw_text, e.kind,
        a.street_number, a.pre_direction, a.street_name, a.suffix,
        a.unit_type, a.unit, a.city, a.state, a.zip, a.po_box,
        ((a.street_number IS NOT NULL AND (a.city IS NOT NULL OR a.zip IS NOT NULL))
@@ -31,7 +31,7 @@ SELECT abs(hash(case_id || '|' || group_kind || '|' || group_key)) % 2147483647 
 FROM (
     SELECT case_id,
            'person:' || coalesce(soundex(list_extract(string_split(trim(canonical_text), ' '), -1)), 'x') AS group_key,
-           min(cast(id AS VARCHAR)) AS root_entity_id,
+           min(id::VARCHAR) AS root_entity_id,
            max(canonical_text) AS canonical_label,
            'person_fuzz' AS group_kind
     FROM entities
@@ -45,17 +45,17 @@ FROM (
 ) g;
 
 CREATE OR REPLACE TABLE entity_group_members AS
-SELECT abs(hash(cast(group_id AS VARCHAR) || '|' || entity_id || '|' || variant_text)) % 2147483647 AS member_id,
+SELECT abs(hash(group_id::VARCHAR || '|' || entity_id || '|' || variant_text)) % 2147483647 AS member_id,
        group_id, case_id, group_kind, canonical_label, entity_id,
        variant_text, score, method, is_full_address, is_canonical
 FROM (
     SELECT g.group_id, g.case_id, g.group_kind, g.canonical_label,
-           cast(e.id AS VARCHAR) AS entity_id, e.canonical_text AS variant_text,
-           CASE WHEN cast(e.id AS VARCHAR) = g.root_entity_id THEN 100.0
+           e.id::VARCHAR AS entity_id, e.canonical_text AS variant_text,
+           CASE WHEN e.id::VARCHAR = g.root_entity_id THEN 100.0
                 ELSE rapidfuzz_ratio(lower(e.canonical_text), lower(g.canonical_label)) END AS score,
-           CASE WHEN cast(e.id AS VARCHAR) = g.root_entity_id THEN 'entity' ELSE 'soundex' END AS method,
-           cast(NULL AS BOOLEAN) AS is_full_address,
-           cast(e.id AS VARCHAR) = g.root_entity_id AS is_canonical
+           CASE WHEN e.id::VARCHAR = g.root_entity_id THEN 'entity' ELSE 'soundex' END AS method,
+           NULL::BOOLEAN AS is_full_address,
+           e.id::VARCHAR = g.root_entity_id AS is_canonical
     FROM entity_groups g
     JOIN entities e ON e.case_id = g.case_id AND position('PERSON' IN e.kind) > 0
      AND soundex(list_extract(string_split(trim(e.canonical_text), ' '), -1))
@@ -89,13 +89,13 @@ WITH cover AS (
     FROM v_suggestions WHERE status IN ('accepted', 'pending')
 ),
 remainder AS (
-    SELECT cast(w.document_id AS VARCHAR) AS document_id, w.page_no, d.case_id,
+    SELECT w.document_id::VARCHAR AS document_id, w.page_no, d.case_id,
            w.word, w.x0, w.y0, w.x1, w.y1
     FROM words w
-    JOIN documents d ON cast(d.id AS VARCHAR) = cast(w.document_id AS VARCHAR)
+    JOIN documents d ON d.id::VARCHAR = w.document_id::VARCHAR
     WHERE NOT EXISTS (
         SELECT 1 FROM cover c
-        WHERE c.document_id = cast(w.document_id AS VARCHAR) AND c.page_no = w.page_no
+        WHERE c.document_id = w.document_id::VARCHAR AND c.page_no = w.page_no
           AND NOT (w.x1 <= c.x0 OR w.x0 >= c.x1 OR w.y1 <= c.y0 OR w.y0 >= c.y1)
     )
 ),
@@ -133,9 +133,9 @@ type_hits AS (
                    OR length(regexp_replace(token, '[^0-9]', '', 'g')) = 9 THEN 'SSN'
                WHEN length(regexp_replace(token, '[^0-9]', '', 'g')) = 10 THEN 'PHONE'
            END AS kind,
-           greatest(1, least(99, cast(round(100.0 * coalesce(ft_conf, 0.70)) AS INTEGER)))::DOUBLE AS score,
+           greatest(1, least(99, (round(100.0 * coalesce(ft_conf, 0.70)))::INTEGER))::DOUBLE AS score,
            'finetype: ' || coalesce(ft_type, 'shape') AS why,
-           'finetype' AS detector, cast(NULL AS VARCHAR) AS entity_id
+           'finetype' AS detector, NULL::VARCHAR AS entity_id
     FROM (
         SELECT document_id, page_no, case_id, context, x0, y0, x1, y1,
                trim(phrase, '.,;:()"''[]') AS token,
@@ -158,7 +158,7 @@ addr_hits AS (
     SELECT document_id, page_no, case_id, phrase AS text, context, x0, y0, x1, y1,
            'ADDRESS' AS kind, 88.0 AS score,
            'addrust: ' || coalesce(a.street_number, '') || ' ' || coalesce(a.street_name, '') AS why,
-           'addrust' AS detector, cast(NULL AS VARCHAR) AS entity_id
+           'addrust' AS detector, NULL::VARCHAR AS entity_id
     FROM (SELECT s.*, addrust_parse(s.phrase) AS a FROM spans s
           WHERE s.n BETWEEN 3 AND 4
             AND try_cast(list_extract(string_split(s.phrase, ' '), 1) AS INTEGER) IS NOT NULL) p
@@ -166,11 +166,11 @@ addr_hits AS (
       AND (a.city IS NOT NULL OR a.zip IS NOT NULL OR a.street_name IS NOT NULL)
 ),
 roster AS (
-    SELECT cast(case_no AS VARCHAR) AS case_id, term,
-           lower(trim(unaccent(term))) AS term_norm, kind, cast(NULL AS VARCHAR) AS entity_id
+    SELECT case_no::VARCHAR AS case_id, term,
+           lower(trim(unaccent(term))) AS term_norm, kind, NULL::VARCHAR AS entity_id
     FROM watchlist WHERE term IS NOT NULL AND trim(term) <> ''
     UNION
-    SELECT case_id, canonical_text, lower(trim(unaccent(canonical_text))), kind, cast(id AS VARCHAR)
+    SELECT case_id, canonical_text, lower(trim(unaccent(canonical_text))), kind, id::VARCHAR
     FROM entities
     WHERE canonical_text IS NOT NULL AND trim(canonical_text) <> ''
       AND (position('PERSON' IN kind) > 0 OR position('OFFICER' IN kind) > 0)
@@ -209,16 +209,16 @@ dedup AS (
     ) f
     GROUP BY document_id, page_no, round(x0, 1), round(y0, 1), round(x1, 1), kind
 )
-SELECT CAST(substr(h, 1, 8) || '-' || substr(h, 9, 4) || '-' || substr(h, 13, 4) || '-' ||
-            substr(h, 17, 4) || '-' || substr(h, 21, 12) AS VARCHAR) AS id,
+SELECT (substr(h, 1, 8) || '-' || substr(h, 9, 4) || '-' || substr(h, 13, 4) || '-' ||
+            substr(h, 17, 4) || '-' || substr(h, 21, 12))::VARCHAR AS id,
        document_id, page_no AS page, x0, y0, x1, y1, text, kind, why, detector, score, entity_id
 FROM dedup
 CROSS JOIN LATERAL (
     SELECT md5(
-        cast(document_id AS VARCHAR) || chr(31) || cast(page_no AS VARCHAR) || chr(31) ||
-        cast(round(x0, 1) AS VARCHAR) || chr(31) || cast(round(y0, 1) AS VARCHAR) || chr(31) ||
-        cast(round(x1, 1) AS VARCHAR) || chr(31) || cast(round(y1, 1) AS VARCHAR) || chr(31) ||
-        cast(text AS VARCHAR) || chr(31) || cast(kind AS VARCHAR) || chr(31) || 'residual'
+        document_id::VARCHAR || chr(31) || page_no::VARCHAR || chr(31) ||
+        (round(x0, 1))::VARCHAR || chr(31) || (round(y0, 1))::VARCHAR || chr(31) ||
+        (round(x1, 1))::VARCHAR || chr(31) || (round(y1, 1))::VARCHAR || chr(31) ||
+        text::VARCHAR || chr(31) || kind::VARCHAR || chr(31) || 'residual'
     ) AS h
 );
 

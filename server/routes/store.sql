@@ -8,14 +8,14 @@ SELECT
     decision_batch, accepted_count, pages_redacted, size_bytes,
     revision_count, created_ts, actor, mutability, note
 FROM v_pdf_store
-WHERE document_id = cast($id AS VARCHAR)
+WHERE document_id = $id::VARCHAR
 ORDER BY CASE stage WHEN 'source' THEN 0 WHEN 'working' THEN 1 WHEN 'export' THEN 2 ELSE 3 END,
          coalesce(gen, 0), created_ts;
 
 CREATE OR REPLACE ROUTE api_doc_working_plan GET '/api/documents/:id/working/plan' AS
 SELECT document_id, gen, path, decision_batch, working_sql
 FROM v_working_plans
-WHERE document_id = cast($id AS VARCHAR);
+WHERE document_id = $id::VARCHAR;
 
 -- Body/query: sql, gen, path, decision_batch, accepted_count, actor.
 -- POST body: sql=<working_plan.working_sql>. Guard keeps $sql to a single
@@ -34,11 +34,11 @@ SELECT
     'working' AS stage,
     $path AS path,
     $gen AS gen,
-    cast(NULL AS VARCHAR) AS fingerprint,
+    NULL::VARCHAR AS fingerprint,
     coalesce($decision_batch, '') AS decision_batch,
     coalesce($accepted_count, 0) AS accepted_count,
     r.pages AS pages_redacted,
-    cast(NULL AS BIGINT) AS size_bytes,
+    NULL::BIGINT AS size_bytes,
     1 AS revision_count,
     now() AS created_ts,
     coalesce($actor, 'reviewer') AS actor,

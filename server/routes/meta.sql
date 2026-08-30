@@ -7,8 +7,8 @@ SELECT
     r.pattern,
     r.status,
     r.require_auth,
-    cast(NULL AS VARCHAR) AS source_file,
-    cast(NULL AS VARCHAR) AS description
+    NULL::VARCHAR AS source_file,
+    NULL::VARCHAR AS description
 FROM quackapi_routes() r;
 
 CREATE OR REPLACE ROUTE api_routes GET '/api/routes' AS

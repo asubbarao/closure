@@ -40,15 +40,15 @@ SELECT * FROM (VALUES
 
 CREATE OR REPLACE TABLE judge_votes AS
 WITH entity_docs AS (
-    SELECT cast(entity_id AS VARCHAR) AS entity_id,
+    SELECT entity_id::VARCHAR AS entity_id,
            count(DISTINCT document_id)::INTEGER AS doc_count
     FROM suggestions WHERE entity_id IS NOT NULL GROUP BY 1
 ),
 feat AS (
-    SELECT cast(s.id AS VARCHAR) AS suggestion_id, s.text, s.context, s.flag_tag,
+    SELECT s.id::VARCHAR AS suggestion_id, s.text, s.context, s.flag_tag,
            coalesce(e.kind, s.kind, '') AS kind,
            coalesce(ed.doc_count, 1)::INTEGER AS docs,
-           (abs(hash(cast(s.id AS VARCHAR))) % 5)::INTEGER AS jitter,
+           (abs(hash(s.id::VARCHAR)) % 5)::INTEGER AS jitter,
            finetype([s.text]) AS ft,
            regexp_matches(coalesce(s.context, ''), '(?i)\sv\.\s|u\.s\.') AS ctx_cite,
            regexp_matches(coalesce(s.context, ''), '(?i)\bsubject\b|\bwitness\b|\bvictim\b|\bsuspect\b') AS ctx_subj,
@@ -56,8 +56,8 @@ feat AS (
            regexp_matches(coalesce(s.text, ''), '(?i)street|avenue|ave\b|blvd|road|drive|lane') AS txt_st,
            regexp_matches(coalesce(s.context, ''), '(?i)\bssn\b|social security|\bdob\b|\bborn\b|\bphone\b|\bcalled\b|\bcontact\b') AS ctx_id
     FROM suggestions s
-    LEFT JOIN entities e ON cast(e.id AS VARCHAR) = cast(s.entity_id AS VARCHAR)
-    LEFT JOIN entity_docs ed ON ed.entity_id = cast(s.entity_id AS VARCHAR)
+    LEFT JOIN entities e ON e.id::VARCHAR = s.entity_id::VARCHAR
+    LEFT JOIN entity_docs ed ON ed.entity_id = s.entity_id::VARCHAR
 ),
 buck AS (
     SELECT *, CASE

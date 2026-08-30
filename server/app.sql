@@ -7,6 +7,7 @@
 SET max_temp_directory_size = '8GB';
 
 INSTALL pdf FROM community; LOAD pdf;
+INSTALL hostfs FROM community; LOAD hostfs;
 INSTALL tera FROM community; LOAD tera;
 INSTALL rapidfuzz FROM community; LOAD rapidfuzz;
 INSTALL crypto FROM community; LOAD crypto;

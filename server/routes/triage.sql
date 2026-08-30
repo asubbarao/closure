@@ -22,7 +22,7 @@ marked AS (
                ELSE 'done'
            END AS funnel
     FROM v_suggestions s
-    JOIN documents d ON cast(d.id AS VARCHAR) = s.document_id
+    JOIN documents d ON d.id::VARCHAR = s.document_id
     WHERE d.case_id = $id
 ),
 counts AS (
@@ -63,7 +63,7 @@ WITH residual AS (
            s.group_key,
            coalesce(nullif(s.entity_text, ''), s.text, '(unknown)') AS group_label
     FROM v_suggestions s
-    JOIN documents d ON cast(d.id AS VARCHAR) = s.document_id
+    JOIN documents d ON d.id::VARCHAR = s.document_id
     WHERE d.case_id = $id AND s.status = 'pending'
       AND NOT (s.confidence >= greatest(0, least(100, coalesce($threshold::INTEGER, 90)))
                AND s.band <> 'flagged' AND coalesce(s.flag_tag, '') <> 'false_positive')
@@ -104,13 +104,13 @@ COPY (
     WITH targets AS (
         SELECT s.id AS suggestion_id, s.document_id, d.case_id, s.text
         FROM v_suggestions s
-        JOIN documents d ON cast(d.id AS VARCHAR) = s.document_id
+        JOIN documents d ON d.id::VARCHAR = s.document_id
         WHERE d.case_id = $id AND s.status = 'pending'
           AND s.confidence >= greatest(0, least(100, coalesce($threshold::INTEGER, 90)))
           AND s.band <> 'flagged' AND coalesce(s.flag_tag, '') <> 'false_positive'
     ),
     meta AS (
-        SELECT cast(uuid() AS VARCHAR) AS batch_id, now() AS ts,
+        SELECT (uuid())::VARCHAR AS batch_id, now() AS ts,
                coalesce($actor::VARCHAR, 'reviewer') AS actor,
                coalesce($reason::VARCHAR, 'triage high-confidence auto-pass') AS reason,
                greatest(0, least(100, coalesce($threshold::INTEGER, 90))) AS threshold,
@@ -118,8 +118,8 @@ COPY (
     )
     SELECT 'decision' AS kind, t.suggestion_id, 'accepted' AS status,
            m.actor, m.reason, m.ts, t.document_id, t.case_id, t.text, m.batch_id,
-           'Accepted all high-confidence ≥' || cast(m.threshold AS VARCHAR) ||
-               ' ×' || cast(m.n AS VARCHAR) AS batch_label,
+           'Accepted all high-confidence ≥' || m.threshold::VARCHAR ||
+               ' ×' || m.n::VARCHAR AS batch_label,
            NULL::VARCHAR AS undoes_batch_id
     FROM targets t JOIN meta m ON true
 ) TO 'exports/decisions'
@@ -142,7 +142,7 @@ COPY (
     targets AS (
         SELECT s.id AS suggestion_id, s.document_id, d.case_id, s.text, s.entity_text
         FROM v_suggestions s
-        JOIN documents d ON cast(d.id AS VARCHAR) = s.document_id
+        JOIN documents d ON d.id::VARCHAR = s.document_id
         WHERE d.case_id = $id AND s.status = 'pending'
           AND NOT (s.confidence >= greatest(0, least(100, coalesce($threshold::INTEGER, 90)))
                    AND s.band <> 'flagged' AND coalesce(s.flag_tag, '') <> 'false_positive')
@@ -151,7 +151,7 @@ COPY (
           AND lower(trim(coalesce($status::VARCHAR, ''))) IN ('accepted', 'rejected', 'pending')
     ),
     meta AS (
-        SELECT cast(uuid() AS VARCHAR) AS batch_id, now() AS ts,
+        SELECT (uuid())::VARCHAR AS batch_id, now() AS ts,
                lower(trim(coalesce($status::VARCHAR, ''))) AS status,
                coalesce($actor::VARCHAR, 'reviewer') AS actor,
                coalesce($reason::VARCHAR, '') AS reason,
@@ -162,12 +162,12 @@ COPY (
     SELECT 'decision' AS kind, t.suggestion_id, m.status, m.actor, m.reason, m.ts,
            t.document_id, t.case_id, t.text, m.batch_id,
            CASE m.status
-               WHEN 'accepted' THEN 'Accepted group ×' || cast(m.n AS VARCHAR) || ' — ' ||
+               WHEN 'accepted' THEN 'Accepted group ×' || m.n::VARCHAR || ' — ' ||
                                     coalesce(m.sample_text, m.group_key)
-               WHEN 'rejected' THEN 'Rejected group ×' || cast(m.n AS VARCHAR) || ' — ' ||
+               WHEN 'rejected' THEN 'Rejected group ×' || m.n::VARCHAR || ' — ' ||
                                     coalesce(m.sample_text, m.group_key)
-               WHEN 'pending'  THEN 'Restored group ×' || cast(m.n AS VARCHAR) || ' to pending'
-               ELSE 'Updated group ×' || cast(m.n AS VARCHAR)
+               WHEN 'pending'  THEN 'Restored group ×' || m.n::VARCHAR || ' to pending'
+               ELSE 'Updated group ×' || m.n::VARCHAR
            END AS batch_label,
            NULL::VARCHAR AS undoes_batch_id
     FROM targets t JOIN meta m ON true
