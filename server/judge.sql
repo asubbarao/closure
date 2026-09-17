@@ -41,7 +41,7 @@ SELECT jdg.judge, spn.kind, spn.text, spn.context
 FROM judge_spans spn CROSS JOIN judges jdg
 ANTI JOIN judge_log log
    ON log.judge = jdg.judge AND log.kind = spn.kind AND log.text = spn.text
-  AND regexp_matches(lower(log.response), (SELECT string_agg(lower(verdict), '|') FROM judge_rubric))
+  AND EXISTS (SELECT 1 FROM judge_rubric rub WHERE contains(lower(log.response), lower(rub.verdict)))
   AND getenv('CLOSURE_JUDGE_RERUN') = '';
 
 COPY judge_pending TO '.tmp/judge/pending.json' (FORMAT json, ARRAY true);
